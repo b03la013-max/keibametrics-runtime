@@ -39,6 +39,12 @@ on:
         default: loop
         type: choice
         options: [loop, tick]
+      runner:
+        description: "mac = Owner's Mac (self-hosted, default, no Actions minutes) / github = GitHub-hosted fallback"
+        required: false
+        default: mac
+        type: choice
+        options: [mac, github]
 
 concurrency:
   group: km-local-race-day-autopilot
@@ -46,7 +52,9 @@ concurrency:
 
 jobs:
   autopilot:
-    runs-on: ubuntu-latest
+    # Owner decision 2026-11-18: run on the Owner's Mac (self-hosted runner, no billed minutes).
+    # Fallback: dispatch with -f runner=github.
+    runs-on: ${{ (inputs.runner || 'mac') == 'github' && 'ubuntu-latest' || 'self-hosted' }}
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +91,9 @@ jobs:
             /mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json
             /mapping/local_full_numerical_mapping_v1.0_production_20261008.json
             /research/local_bvi/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/checkout@v4
         with:
           ref: local-autopilot-data
@@ -93,6 +104,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           KM_LOCAL_DELIVERY_ISSUE: "424"
           RACE_DATE: ${{ inputs.race_date }}
+          RUNNER_CHOICE: ${{ inputs.runner || 'mac' }}
           MODE: ${{ inputs.mode || 'loop' }}
         run: |
           set -uo pipefail
@@ -121,7 +133,7 @@ jobs:
             if python -m runtime.local_autopilot.run --date "$D" --pending; then PENDING=1; else PENDING=0; fi
             if [ "$PENDING" = 0 ] && [ "$HM" -ge 2100 ] && [ -z "$RACE_DATE" ]; then
               # Pre-build tomorrow's 朝版 tonight (cards are published the day before).
-              T=$(TZ=Asia/Tokyo date -d tomorrow +%F)
+              T=$(python -c "import datetime as d; print((d.datetime.now(d.timezone(d.timedelta(hours=9))) + d.timedelta(days=1)).date())")
               if python -m runtime.local_autopilot.run --date "$T" --pending; then
                 python -m runtime.local_autopilot.run --date "$T" --budget 420 || echo "prebuild exit $?"
                 publish
@@ -132,7 +144,10 @@ jobs:
             # firing (0 scheduled runs on 13 Nov), so continuity must not
             # depend on it. Hand off to a fresh run before the 6 h job limit.
             if [ $(( $(date +%s) - START )) -gt 19500 ]; then
-              gh workflow run km-local-race-day-autopilot.yml --ref main -f mode=loop && echo "HANDOFF"
+              # curl instead of gh (the Mac runner has no gh CLI); keeps the same runner choice
+              curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/km-local-race-day-autopilot.yml/dispatches" \
+                -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"runner\":\"$RUNNER_CHOICE\"}}" && echo "HANDOFF"
               break
             fi
             if [ "$PENDING" = 1 ]; then sleep 15; else sleep 120; fi
