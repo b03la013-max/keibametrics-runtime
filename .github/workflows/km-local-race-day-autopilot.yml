@@ -92,6 +92,8 @@ jobs:
             /mapping/local_full_numerical_mapping_v1.0_production_20261008.json
             /research/local_bvi/
       - uses: actions/setup-python@v5
+        env:
+          AGENT_TOOLSDIRECTORY: ${{ runner.tool_cache }}   # self-hosted macOS: default /Users/runner is not writable
         with:
           python-version: '3.12'
       - uses: actions/checkout@v4
