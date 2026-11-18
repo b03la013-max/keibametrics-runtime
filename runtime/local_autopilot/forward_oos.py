@@ -151,6 +151,17 @@ def evaluate(root, prereg_path=PREREG):
         for cid, name in (('C13-FORMAL-MIX-P2BOX20', 'MIX_P2BOX20'), ('C14-FORMAL-P2BOX20-ONLY', 'P2BOX20_ONLY'),
                           ('C15-FORMAL-MIX-WAXIS-TRIO', 'MIX_WAXIS_TRIO')):
             out['candidates'][cid] = {'races': n, 'stage': _stage(n, p5['stages']), 'candidate': v.get(name), 'champion': v.get('R54_60')}
+    pre6 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261119_R6.json')
+    if pre6.exists():
+        from runtime.local_autopilot import role_shadow
+        p6 = json.loads(pre6.read_text())
+        start6 = datetime.fromisoformat(p6['first_eligible_post'])
+        rs = role_shadow.evaluate(root, since_day=p6['first_eligible_post'][:10])
+        rows = [r for r in rs['rows'] if (_post(root, r['day'], r['race']) or start6.replace(year=1900)) >= start6]
+        ev = role_shadow.summarize(rows)
+        for cid, k in (('C16-W-INDEX-CONSENSUS', 'C16'), ('C17-P2-ZAI-PLACE', 'C17'), ('C18-W-PLUS-FAVORITE', 'C18'),
+                       ('C19-W-PLUS-TOP2-POP', 'C19'), ('C20-P2-PLUS-TOP3-POP', 'C20')):
+            out['candidates'][cid] = dict(ev[k], stage=_stage(len(rows), p6['stages']))
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -231,6 +242,14 @@ def md(o):
            f"- C12 荒れ予測 AKI 対 1番人気オッズ（AUC）：{c['C12-AKI-VS-MARKET-ROUGHNESS']['stage']}／"
            f"{c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_aki']} 対 {c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_market']}"]
           if 'C11-FIXED-2-4-8-VS-AKI-FORM' in c else []),
+        *([f"- C18 W＋1番人気：{c['C18-W-PLUS-FAVORITE']['stage']}／勝ち馬捕捉 {c['C18-W-PLUS-FAVORITE'].get('win_in_W_cand')}% 対 "
+           f"{c['C18-W-PLUS-FAVORITE'].get('win_in_W')}%／同点数馬単 {c['C18-W-PLUS-FAVORITE'].get('exacta_pfs_cand')}% 対 "
+           f"{c['C18-W-PLUS-FAVORITE'].get('exacta_pfs_signed')}%",
+           f"- C19 W＋人気上位2：{c['C19-W-PLUS-TOP2-POP']['stage']}／勝ち馬捕捉 {c['C19-W-PLUS-TOP2-POP'].get('win_in_W_cand')}%"
+           f"／同点数馬単 {c['C19-W-PLUS-TOP2-POP'].get('exacta_pfs_cand')}%",
+           f"- C20 P2＋人気上位3：{c['C20-P2-PLUS-TOP3-POP']['stage']}／2着捕捉（勝ち馬W内）"
+           f"{c['C20-P2-PLUS-TOP3-POP'].get('second_in_P2_cand_given_W')}% 対 {c['C20-P2-PLUS-TOP3-POP'].get('second_in_P2_given_W')}%"]
+          if 'C18-W-PLUS-FAVORITE' in c else []),
         *([f"- {cid} 正式役割の三連複経路：{c[cid]['stage']}／回収率 {(c[cid]['candidate'] or {}).get('pfs')}% 対 正式60点 "
            f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
            f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',

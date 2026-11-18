@@ -1,0 +1,26 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261119-R6",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-19T00:53:26+09:00 (before the first 11/19 post)",
+ "first_eligible_post": "2026-11-19T00:53:26+09:00",
+ "extends": "R1-R5 unchanged",
+ "source": "11/18 external review (ChatGPT) P1 order: W conversion first, then winner-conditional P2; reproduced on Claude's side",
+ "learning_races": "2026-11-16..18 formal SIGNED_FINAL effective revisions, 75-77R (role_shadow) - in-sample only",
+ "in_sample": {
+  "C16_index_consensus": {"win_in_W": 56.0, "win_in_W_plus": 57.1, "rescued": 2},
+  "C17_P2_by_ZAI_PLACE_top6": {"second_in_P2": 71.4, "second_in_cand": 71.4},
+  "C18_W_plus_favorite": {"win_in_W": 66.7, "added_per_race": 0.36, "same_budget_exacta_pfs": 48.8, "signed_exacta_pfs": 42.7, "hits": "33 vs 30"},
+  "C19_W_plus_top2_pop": {"win_in_W": 74.7, "added_per_race": 0.77, "same_budget_exacta_pfs": 50.1, "hits": "34 vs 30"},
+  "C20_P2_plus_top3_pop": {"second_in_P2_given_W": "83.3 vs 71.4", "added_per_race": 0.57}
+ },
+ "production_change": "NONE. Signed W/P2/P3, MEC, cap 60, KRS, capital unchanged; the market is not added to Full29.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {"id": "C16-W-INDEX-CONSENSUS", "hypothesis": "control: index consensus adds little", "primary_metric": "winner in W+ minus winner in W", "reject_if": "n/a (control)"},
+  {"id": "C17-P2-ZAI-PLACE", "hypothesis": "control: ZAI-PLACE top 6 does not beat the signed P2", "primary_metric": "2nd in P2' minus 2nd in P2 given winner in W", "reject_if": "n/a (control)"},
+  {"id": "C18-W-PLUS-FAVORITE", "hypothesis": "Adding the market favourite to W raises winner capture by >= 7 points and the same-budget 馬単 PFS is not lower than the signed 馬単", "primary_metric": "winner capture difference; same-budget 馬単 PFS difference; added heads per race", "reject_if": "at 100 races capture gain < 7 points or same-budget 馬単 PFS lower", "promote_if": "report to the Owner (changing W needs approval)"},
+  {"id": "C19-W-PLUS-TOP2-POP", "hypothesis": "As C18 with the two shortest-odds horses (capture gain >= 12 points)", "primary_metric": "as C18", "reject_if": "at 100 races capture gain < 12 points or same-budget 馬単 PFS lower", "promote_if": "report to the Owner"},
+  {"id": "C20-P2-PLUS-TOP3-POP", "hypothesis": "Adding the three shortest-odds horses to P2 raises 2nd-place capture (given winner in W) by >= 8 points", "primary_metric": "2nd capture difference given winner in W; added seconds per race", "reject_if": "at 100 races gain < 8 points", "promote_if": "report to the Owner"}
+ ]
+}
