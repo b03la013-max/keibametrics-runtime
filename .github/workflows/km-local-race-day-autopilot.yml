@@ -150,6 +150,14 @@ jobs:
                 PENDING=1
               fi
             fi
+            # Historical result backfill (Owner approval 2026-11-19; learning data, not Forward OOS): only when no
+            # race work is due within 12 min and at night; same Rakuten client / 61 s spacing as the race worker.
+            BF=0
+            if [ "$PENDING" = 0 ] && [ -z "$RACE_DATE" ]; then
+              if [ "$RUNNER_CHOICE" = "mac" ] && [ -d "$HOME/Downloads" ]; then export KM_BACKFILL_PROBE_DIR="$HOME/Downloads/km_probe"; fi
+              if python -m runtime.local_autopilot.backfill --budget 420 | tee /dev/stderr | grep -q '^BACKFILL '; then BF=1; fi
+              publish
+            fi
             # Self-chaining worker: GitHub cron for this workflow has not been
             # firing (0 scheduled runs on 13 Nov), so continuity must not
             # depend on it. Hand off to a fresh run before the 6 h job limit.
@@ -160,5 +168,5 @@ jobs:
                 -d "{\"ref\":\"main\",\"inputs\":{\"mode\":\"loop\",\"runner\":\"$RUNNER_CHOICE\"}}" && echo "HANDOFF"
               break
             fi
-            if [ "$PENDING" = 1 ]; then sleep 15; else sleep 120; fi
+            if [ "$PENDING" = 1 ] || [ "$BF" = 1 ]; then sleep 15; else sleep 120; fi
           done
