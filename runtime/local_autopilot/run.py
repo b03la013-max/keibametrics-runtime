@@ -332,6 +332,11 @@ def predict(reader, r, today, edition, out, cards):
         slim['kametani'] = bloodline_kametani.race_evidence(race, runners)
     except Exception as exc:
         slim['kametani'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    try:  # 南関東 class-move labels (YouTube claims, unvalidated): evidence only, no numeric consumer
+        from runtime.local_autopilot import class_move
+        slim['class_move'] = class_move.race_evidence(race, runners)
+    except Exception as exc:
+        slim['class_move'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     if edition == '直前版':   # current-state evidence at the T-45 edition (evidence only, no numeric consumer)
         try:
             from runtime.local_autopilot import weather, day_trend
