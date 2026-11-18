@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-19（21:33時点）
+# 地方版 配送台帳 2026-11-19（21:41時点）
 
 - 管理Race 36／発走済み 0
-- PAPER：凍結 20・Push検証 12・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 28・Push検証 20・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -17,16 +17,16 @@
 | KSM_04 | 11:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_05 | 12:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_06 | 13:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KSM_07 | 13:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_08 | 14:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_09 | 14:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_10 | 15:10 | DISCOVERED |  | … | - | - | - |  |
-| KSM_11 | 15:45 | DISCOVERED |  | … | - | - | - |  |
-| KSM_12 | 16:20 | DISCOVERED |  | … | - | - | - |  |
-| OHI_01 | 14:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_02 | 15:02 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_03 | 15:35 | DISCOVERED |  | … | - | - | - |  |
-| OHI_04 | 16:07 | DISCOVERED |  | … | - | - | - |  |
+| KSM_07 | 13:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_08 | 14:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_09 | 14:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_10 | 15:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KSM_11 | 15:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KSM_12 | 16:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| OHI_01 | 14:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_02 | 15:02 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_03 | 15:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| OHI_04 | 16:07 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | OHI_05 | 16:40 | DISCOVERED |  | … | - | - | - |  |
 | OHI_06 | 17:12 | DISCOVERED |  | … | - | - | - |  |
 | OHI_07 | 17:45 | DISCOVERED |  | … | - | - | - |  |
@@ -41,11 +41,11 @@
 | SON_04 | 12:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_05 | 12:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_06 | 13:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SON_07 | 13:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_08 | 14:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_09 | 14:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_10 | 15:20 | DISCOVERED |  | … | - | - | - |  |
-| SON_11 | 15:55 | DISCOVERED |  | … | - | - | - |  |
-| SON_12 | 16:30 | DISCOVERED |  | … | - | - | - |  |
+| SON_07 | 13:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_08 | 14:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_09 | 14:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_10 | 15:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_11 | 15:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_12 | 16:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
