@@ -1,0 +1,18 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R5",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-18T14:20:30+09:00",
+ "first_eligible_post": "2026-11-18T14:20:30+09:00",
+ "note": "races whose post is before the freeze (11/18 morning/afternoon) are learning races, not OOS",
+ "extends": "R1-R4 unchanged",
+ "learning_races": "2026-11-16..18 formal SIGNED_FINAL 47R (formal_mix, replay of the delivered 60 tickets matches the settled formal result on 47/47)",
+ "in_sample": {"R54_60": {"pfs": 42.1, "hit_races": 20, "top1_share": 38.7}, "MIX_P2BOX20": {"pfs": 38.2, "hit_races": 25, "top1_share": 20.2}, "P2BOX20_ONLY": {"pfs": 60.9, "hit_races": 13, "points": 19.8}, "MIX_WAXIS_TRIO": {"pfs": 37.5, "hit_races": 24}},
+ "production_change": "NONE. Delivered formal tickets, MEC, cap 60, KRS, roles, capital unchanged.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {"id": "C13-FORMAL-MIX-P2BOX20", "hypothesis": "Replacing the last 20 of the 60 formal tickets with a 三連複 box of the P2 set gives more hit races and a PFS not lower than the delivered 60 tickets.", "primary_metric": "hit races, PFS difference, top-1 race share", "reject_if": "at 100 races PFS is lower than R54_60 by >5 points, or hit races are not higher", "promote_if": "report to the Owner (MEC / ticket policy change needs approval)"},
+  {"id": "C14-FORMAL-P2BOX20-ONLY", "hypothesis": "The 三連複 P2 box alone (<=20 points) reaches a higher PFS than the delivered 60 formal tickets.", "primary_metric": "PFS difference with 95% CI, top-1 race share", "reject_if": "at 100 races PFS <= R54_60 PFS", "promote_if": "report to the Owner"},
+  {"id": "C15-FORMAL-MIX-WAXIS-TRIO", "hypothesis": "As C13 with 三連複 sets restricted to those containing a W horse.", "primary_metric": "as C13", "reject_if": "as C13", "promote_if": "report only"}
+ ]
+}

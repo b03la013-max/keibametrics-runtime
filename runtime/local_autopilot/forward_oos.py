@@ -141,6 +141,16 @@ def evaluate(root, prereg_path=PREREG):
             'races': n, 'stage': _stage(n, p4['stages']),
             'auc_aki': (au.get('AKI_total') or {}).get('fav_out_of_top3'),
             'auc_market': (au.get('MARKET_fav_odds') or {}).get('fav_out_of_top3')}
+    pre5 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261118_R5.json')
+    if pre5.exists():
+        from runtime.local_autopilot import formal_mix
+        p5 = json.loads(pre5.read_text())
+        ev = formal_mix.evaluate(root, since=datetime.fromisoformat(p5['first_eligible_post']))
+        v = ev['variants']
+        n = ev['races']
+        for cid, name in (('C13-FORMAL-MIX-P2BOX20', 'MIX_P2BOX20'), ('C14-FORMAL-P2BOX20-ONLY', 'P2BOX20_ONLY'),
+                          ('C15-FORMAL-MIX-WAXIS-TRIO', 'MIX_WAXIS_TRIO')):
+            out['candidates'][cid] = {'races': n, 'stage': _stage(n, p5['stages']), 'candidate': v.get(name), 'champion': v.get('R54_60')}
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -218,6 +228,10 @@ def md(o):
            f"- C12 荒れ予測 AKI 対 1番人気オッズ（AUC）：{c['C12-AKI-VS-MARKET-ROUGHNESS']['stage']}／"
            f"{c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_aki']} 対 {c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_market']}"]
           if 'C11-FIXED-2-4-8-VS-AKI-FORM' in c else []),
+        *([f"- {cid} 正式役割の三連複経路：{c[cid]['stage']}／回収率 {(c[cid]['candidate'] or {}).get('pfs')}% 対 正式60点 "
+           f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
+           f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',
+                                                              'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
         '', f"<sub>{o['production_change']}</sub>", ''])
 
 
