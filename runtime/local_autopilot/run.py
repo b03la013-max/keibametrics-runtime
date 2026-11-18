@@ -23,8 +23,8 @@ Outputs (KM_LOCAL_AUTOPILOT_OUT, default runtime/local_autopilot/output):
   <date>/<VENUE>_<RR>.shadow29.json  official 29-index arithmetic (shadow)
   <date>/<VENUE>_<RR>.result.json    official result + PAPER settlement
   <date>/metrics.jsonl, autopilot_log.txt
-PAPER only: no purchase, no Formal claim. The only outbound message is the
-Owner-approved pre-start comment on issue #424 (deliver()); 水分ボンバー VMI-L
+PAPER only: no purchase, no Formal claim. External Issue-comment delivery is disabled under the private-use/no-external-send
+restriction; GitHub PUSH is not Owner delivery. 水分ボンバー VMI-L
 is an external auxiliary at a fixed prior weight (engine.VMI_WEIGHT).
 """
 from __future__ import annotations
@@ -479,42 +479,15 @@ def delivery_body(q, r, e, out):
 
 
 def deliver(q, out, now):
-    """Pre-start Owner delivery: one comment per race on the LOCAL delivery issue
-    (Owner decision 2026-11-15), posted only before cutoff and only for a
-    revision whose push was verified. Sent + read-back are recorded; whether the
-    Owner actually saw it is not observable here (USER_REACHED UNVERIFIABLE)."""
-    issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
-    if not issue or not (os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')):
-        return False
-    changed = False
-    for key, r in q['races'].items():
-        if r.get('delivered_rev') or now >= cutoff(r) or r.get('delivery_attempts', 0) >= MAX_ATTEMPTS:
-            continue
-        pv = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED')]
-        if not pv:
-            continue
-        e = pv[-1]
-        mins = (datetime.fromisoformat(r['post_current']) - now).total_seconds() / 60
-        if e['edition'] != '直前版' and mins > DELIVERY_FALLBACK_MIN:
-            continue
-        d = e['delivery']
-        r['delivery_attempts'] = r.get('delivery_attempts', 0) + 1
-        try:
-            body = delivery_body(q, r, e, out)
-            c = _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': body})
-            back = _gh('GET', f"/repos/{DELIVERY_REPO}/issues/comments/{c['id']}")
-            sha = hashlib.sha256(body.encode()).hexdigest()
-            d.update({'USER_DELIVERY_SENT': c['created_at'], 'delivery_comment_url': c['html_url'],
-                      'delivery_body_sha256': sha,
-                      'DELIVERY_READBACK_VERIFIED': hashlib.sha256((back.get('body') or '').encode()).hexdigest() == sha,
-                      'USER_REACHED': 'UNVERIFIABLE_GITHUB_NOTIFICATION', 'USER_ACK_VERIFIED': 'NOT_REQUIRED'})
-            r['delivered_rev'] = e['rev']
-            log('DELIVERED', key, e['rev'], c['html_url'])
-        except Exception as exc:
-            d['delivery_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
-            log('DELIVERY_FAIL', key, d['delivery_error'])
-        changed = True
-    return changed
+    """Do not send private LOCAL predictions to GitHub Issue comments.
+
+    The repository is public, so Issue comments are publicly readable, not
+    Owner-only delivery. The owner's private-use/no-external-contact restriction
+    also excludes automated outbound Issue comments. Preserve the queue and
+    delivery receipt fields unchanged; a GitHub push is not USER_REACHED.
+    Existing private ChatGPT chat/Task delivery is separate from this worker.
+    """
+    return False
 
 
 FORMAL_KIND = {'WIN': '単勝', 'PLACE': '複勝', 'WIDE': 'ワイド', 'QUINELLA': '馬連', 'EXACTA': '馬単',

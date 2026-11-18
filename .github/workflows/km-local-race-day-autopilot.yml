@@ -14,14 +14,12 @@ run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || 
 #    13 Nov). It only contacts the provider when work is due: today's editions
 #    and results, tomorrow's 朝版 pre-build from 21:00, venue re-check from 06:00.
 #    Scheduled runs below are restarts only (queued behind a live worker).
-# PAPER only: no purchase, no Formal/Production claim. The only outbound message is the
-# Owner-approved pre-start comment on this repository's issue #424.
-# (former line) no external notification, no Formal/Production
-# claim; formal Owner/consumers/Runner/Signer/Private Store are not touched.
+# PAPER only: no purchase, no Formal/Production claim. PRIVATE prediction
+# delivery uses an existing user ChatGPT chat/Task, never a public Issue comment.
+# Formal Owner/consumers/Runner/Signer/Private Store are not touched.
 permissions:
   contents: write
   actions: write
-  issues: write   # pre-start Owner delivery comments on issue #424 (Owner decision 2026-11-15)
 
 on:
   schedule:
@@ -99,7 +97,6 @@ jobs:
       - name: Run autopilot worker
         env:
           GH_TOKEN: ${{ github.token }}
-          KM_LOCAL_DELIVERY_ISSUE: "424"
           RACE_DATE: ${{ inputs.race_date }}
           RUNNER_CHOICE: ${{ inputs.runner || 'mac' }}
           MODE: ${{ inputs.mode || 'loop' }}
