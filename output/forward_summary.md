@@ -106,5 +106,5 @@
 | 2026-11-18 | KSM_12 | `6a8b0714ffa8f26e` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-18 | SON_12 | `e0ebae4282642871` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
 | 2026-11-18 | OHI_05 | `0088ed4ee8c21809` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
-| 2026-11-18 | OHI_06 | `e8a0c07db9bd983d` | 待 | – | – | – | – |
+| 2026-11-18 | OHI_06 | `538a197f1f353cb5` | 待 | – | – | – | – |
 | 2026-11-18 | OHI_07 | `70fe8bc9b30eaca6` | 待 | – | – | – | – |
