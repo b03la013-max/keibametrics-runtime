@@ -126,6 +126,11 @@ def class_move_labels(pred, race_name=None):
     return {}
 
 
+def frame_band(frame):
+    """枠 1-2 = INNER / 3-6 = MID / 7-8 = OUTER (YouTube 競馬場シリーズ claims: 川崎・浦和1300m 内、船橋短距離・園田・姫路 外)."""
+    return 'INNER' if frame <= 2 else 'OUTER' if frame >= 7 else 'MID'
+
+
 def _rolesum(xs):
     xs = [x for x in xs if x]
     if not xs:
@@ -215,6 +220,7 @@ def measure(root, days=None):
     kg = defaultdict(list)          # 亀谷 sire rules: group -> [role]
     cm = defaultdict(list)          # 南関東 class move: group -> [role]
     gr = defaultdict(list)          # going x distance rotation x early position: group -> [role]
+    fb = defaultdict(list)          # frame band by venue (x distance): group -> [role]
     gp = defaultdict(lambda: defaultdict(list))   # odds 断層: group -> role -> [...]
     bq, hv_ll = [], defaultdict(float)
     for x in rows:
@@ -279,6 +285,13 @@ def measure(root, days=None):
                 continue
             for g in (label, ('NANKAN:' if x['key'].split('_')[0] in class_move.NANKAN else 'OTHER:') + label):
                 cm[g].append(_role(res, int(no)))
+        for r in ranking:
+            if r['no'] in ns or not isinstance(r.get('frame'), int):
+                continue
+            b = frame_band(r['frame'])
+            v = x['key'].split('_')[0]
+            for g in (f'{v}:{b}', f"{v}:{x.get('distance') or '?'}m:{b}"):
+                fb[g].append(_role(res, r['no']))
         if x.get('going') and pred.get('prior_runs'):
             ev = going_rotation.race_labels(x['going'], x.get('distance'), pred['prior_runs'])
             for no, d in ev['by_horse'].items():
@@ -334,6 +347,7 @@ def measure(root, days=None):
                            for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17',
            'kametani_sire_rules': {g: _rolesum(v) for g, v in sorted(kg.items())} or 'NOT_PERSISTED_BEFORE_2026-11-18',
            'class_move': {g: _rolesum(v) for g, v in sorted(cm.items())} or 'NOT_PERSISTED_BEFORE_2026-11-17',
+           'frame_band': {g: _rolesum(v) for g, v in sorted(fb.items())} or 'NOT_PERSISTED_BEFORE_2026-11-17',
            'going_rotation': {g: _rolesum(v) for g, v in sorted(gr.items())} or 'NO_GOING_OR_PRIOR_RUNS',
            'odds_gap': {g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(gp.items())},
            'benter_information_test': benter(bq),
@@ -396,6 +410,14 @@ def md(o):
                 L.append(f"| {g} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
     else:
         L.append(f"- {o.get('class_move')}")
+    L += ['', '## 枠帯（1-2内／3-6中／7-8外）×競馬場×距離（YouTube競馬場シリーズ主張・未検証）', '']
+    if isinstance(o.get('frame_band'), dict):
+        L += ['| 区分 | 頭数 | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|']
+        for g, v in o['frame_band'].items():
+            if v:
+                L.append(f"| {g} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
+    else:
+        L.append(f"- {o.get('frame_band')}")
     L += ['', '## 馬場×距離ローテ×前走位置（Drive「複勝軸選定と穴馬激走パターン」主張・未検証）', '']
     if isinstance(o.get('going_rotation'), dict):
         L += ['| 区分 | 頭数 | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|']
