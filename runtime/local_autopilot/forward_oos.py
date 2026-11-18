@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from runtime.local_autopilot import shadow_measure as sm
+from runtime.local_autopilot import strata
 
 REPO = Path(__file__).resolve().parents[2]
 PREREG = REPO / 'profiles' / 'KM_LOCAL_FORWARD_OOS_PREREG_20261117_R1.json'
@@ -46,6 +47,7 @@ def evaluate(root, prereg_path=PREREG):
     start = datetime.fromisoformat(pre['first_eligible_post'])
     rows = [x for x in sm.load(root) if (_post(root, x['day'], x['key']) or start.replace(year=1900)) >= start]
     c1, c2a, c2n, c3f, c3h = [], [], [], [], []
+    c1_strata = []
     for x in rows:
         res, pred = x['res'], x['pred']
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
@@ -57,6 +59,7 @@ def evaluate(root, prereg_path=PREREG):
         fav = min(odds, key=odds.get)
         cand = sm.settle(sm.strategies(rank, fav)['TRIO_1番人気軸_PAPER上位4流し'], res['payouts'], ns)
         c1.append((cand[0], cand[1], res.get('effective_invest') or 0, res.get('payout') or 0, x['key'], x['day']))
+        c1_strata.append(strata.keys(x['key'].split('_')[0], strata.cond(Path(root) / x['day'], x['key'])))
         dfv = pred.get('danger_fav') or {}
         if dfv.get('status') == 'OK' and dfv.get('favorite_no') == fav:
             (c2a if dfv['danger_rank'] == 'A' else c2n if dfv['danger_rank'] == 'NONE' else []).append(sm._role(res, fav))
@@ -72,8 +75,12 @@ def evaluate(root, prereg_path=PREREG):
         byv1.setdefault(row[4].split('_')[0], []).append(row)
     pf4 = lambda xs, a, b: round(100 * sum(x[b] for x in xs) / sum(x[a] for x in xs), 1) if xs and sum(x[a] for x in xs) else None
     out['venue_rule'] = ('Owner 2026-11-19: venues differ in shape and class; promotion also requires the same direction '
-                         'in at least 2 venues with >= 12 races each (no pooled-only decision)')
+                         'in at least 2 venues with >= 12 races each (no pooled-only decision); venue x distance and venue x going '
+                         'cells are reported with counts and must not contradict the pooled direction in any cell with >= 12 races')
+    sr = [{'strata': k, 'x': row} for k, row in zip(c1_strata, c1)]
+    m1 = lambda rs_: {'candidate_pfs': pf4([r['x'] for r in rs_], 0, 1), 'champion_pfs': pf4([r['x'] for r in rs_], 2, 3)}
     out['candidates']['C1-FAV-AXIS-TRIO'] = {
+        'strata': strata.split(sr, m1),
         'by_venue': {v: {'races': len(xs), 'candidate_pfs': pf4(xs, 0, 1), 'champion_pfs': pf4(xs, 2, 3)} for v, xs in sorted(byv1.items())},
         'races': len(c1), 'stage': _stage(len(c1), pre['stages']),
         'candidate': {'invest': ia, 'payout': pa, 'pfs': round(100 * pa / ia, 1) if ia else None},
@@ -165,13 +172,16 @@ def evaluate(root, prereg_path=PREREG):
         start6 = datetime.fromisoformat(p6['first_eligible_post'])
         rs = role_shadow.evaluate(root, since_day=p6['first_eligible_post'][:10])
         rows = [r for r in rs['rows'] if (_post(root, r['day'], r['race']) or start6.replace(year=1900)) >= start6]
+        for r in rows:
+            r['strata'] = strata.keys(r['race'].split('_')[0], strata.cond(Path(root) / r['day'], r['race']))
         ev = role_shadow.summarize(rows)
         venues = sorted({r['race'].split('_')[0] for r in rows})
         byv = {v: role_shadow.summarize([r for r in rows if r['race'].startswith(v + '_')]) for v in venues}
         for cid, k in (('C16-W-INDEX-CONSENSUS', 'C16'), ('C17-P2-ZAI-PLACE', 'C17'), ('C18-W-PLUS-FAVORITE', 'C18'),
                        ('C19-W-PLUS-TOP2-POP', 'C19'), ('C20-P2-PLUS-TOP3-POP', 'C20')):
             out['candidates'][cid] = dict(ev[k], stage=_stage(len(rows), p6['stages']),
-                                          by_venue={v: dict(byv[v][k], races=byv[v]['races']) for v in venues})
+                                          by_venue={v: dict(byv[v][k], races=byv[v]['races']) for v in venues},
+                                          strata=strata.split(rows, lambda rs_, k=k: role_shadow.summarize(rs_)[k]))
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -270,6 +280,9 @@ def md(o):
         *[f"- C18 {v}：{x.get('races')}R／勝ち馬捕捉 {x.get('win_in_W_cand')}% 対 {x.get('win_in_W')}%／同点数馬単 "
           f"{x.get('exacta_pfs_cand')}% 対 {x.get('exacta_pfs_signed')}%"
           for v, x in ((c.get('C18-W-PLUS-FAVORITE') or {}).get('by_venue') or {}).items()],
+        '', '### 距離別・馬場別（C1。区分のレース数が12未満は参考表示のみ）', '',
+        *[f"- {cell}：{x['races']}R／候補 {x['candidate_pfs']}% 対 現行 {x['champion_pfs']}%{'' if x['decides'] else '（参考）'}"
+          for lvl in ('venue_distance', 'venue_going') for cell, x in ((c1.get('strata') or {}).get(lvl) or {}).items()],
         '', f"<sub>{o.get('venue_rule', '')}</sub>",
         '', f"<sub>{o['production_change']}</sub>", ''])
 
