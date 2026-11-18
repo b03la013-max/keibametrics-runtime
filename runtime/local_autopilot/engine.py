@@ -55,7 +55,9 @@ SIRES = {
     'URW': {'ヘニーヒューズ', 'ホッコータルマエ', 'シニスターミニスター', 'パイロ', 'サウスヴィグラス'},
     'FNB': {'ホッコータルマエ', 'パイロ', 'ヘニーヒューズ', 'キングカメハメハ', 'ルーラーシップ'},
 }
-# EVI weight on early position vs late speed, by venue (§23-§26).
+# EVI weight on early position vs late speed, by venue (§23-§26). Only URW/KAW/FNB/OHI/SON/KOC/KSM/NGY/SAG/MOR/MON
+# trace to a venue clause; KNZ and MIZ have no clause in the Owner library (2026-11-19 check): their 0.75 is an
+# UNVALIDATED default (never copied from another venue) pending each venue's own settled results.
 FRONT_WEIGHT = {'URW': 0.85, 'KAW': 0.75, 'FNB': 0.55, 'OHI': 0.55, 'KOC': 0.85, 'SON': 0.8, 'HMJ': 0.75,
                 'NGY': 0.8, 'KSM': 0.8, 'KNZ': 0.75, 'SAG': 0.8, 'MOR': 0.6, 'MIZ': 0.75, 'MON': 0.65}
 CLASS_LEVEL = {'A1': 8, 'A2': 7, 'B1': 6, 'B2': 5, 'B3': 4, 'C1': 3, 'C2': 2, 'C3': 1}

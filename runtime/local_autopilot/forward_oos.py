@@ -67,7 +67,14 @@ def evaluate(root, prereg_path=PREREG):
            'eligible_races': len(c1), 'candidates': {}}
     ia, pa, ib, pb = (sum(x[i] for x in c1) for i in range(4))
     top = max((x[1] for x in c1), default=0)
+    byv1 = {}
+    for row in c1:
+        byv1.setdefault(row[4].split('_')[0], []).append(row)
+    pf4 = lambda xs, a, b: round(100 * sum(x[b] for x in xs) / sum(x[a] for x in xs), 1) if xs and sum(x[a] for x in xs) else None
+    out['venue_rule'] = ('Owner 2026-11-19: venues differ in shape and class; promotion also requires the same direction '
+                         'in at least 2 venues with >= 12 races each (no pooled-only decision)')
     out['candidates']['C1-FAV-AXIS-TRIO'] = {
+        'by_venue': {v: {'races': len(xs), 'candidate_pfs': pf4(xs, 0, 1), 'champion_pfs': pf4(xs, 2, 3)} for v, xs in sorted(byv1.items())},
         'races': len(c1), 'stage': _stage(len(c1), pre['stages']),
         'candidate': {'invest': ia, 'payout': pa, 'pfs': round(100 * pa / ia, 1) if ia else None},
         'champion': {'invest': ib, 'payout': pb, 'pfs': round(100 * pb / ib, 1) if ib else None},
@@ -159,9 +166,12 @@ def evaluate(root, prereg_path=PREREG):
         rs = role_shadow.evaluate(root, since_day=p6['first_eligible_post'][:10])
         rows = [r for r in rs['rows'] if (_post(root, r['day'], r['race']) or start6.replace(year=1900)) >= start6]
         ev = role_shadow.summarize(rows)
+        venues = sorted({r['race'].split('_')[0] for r in rows})
+        byv = {v: role_shadow.summarize([r for r in rows if r['race'].startswith(v + '_')]) for v in venues}
         for cid, k in (('C16-W-INDEX-CONSENSUS', 'C16'), ('C17-P2-ZAI-PLACE', 'C17'), ('C18-W-PLUS-FAVORITE', 'C18'),
                        ('C19-W-PLUS-TOP2-POP', 'C19'), ('C20-P2-PLUS-TOP3-POP', 'C20')):
-            out['candidates'][cid] = dict(ev[k], stage=_stage(len(rows), p6['stages']))
+            out['candidates'][cid] = dict(ev[k], stage=_stage(len(rows), p6['stages']),
+                                          by_venue={v: dict(byv[v][k], races=byv[v]['races']) for v in venues})
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -254,6 +264,13 @@ def md(o):
            f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
            f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',
                                                               'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
+        '', '### 競馬場別（Owner 2026-11-19：場ごとに形状・レベルが違うため、合算だけで判断しない）', '',
+        *[f"- C1 {v}：{x['races']}R／候補 {x['candidate_pfs']}% 対 現行 {x['champion_pfs']}%"
+          for v, x in (c1.get('by_venue') or {}).items()],
+        *[f"- C18 {v}：{x.get('races')}R／勝ち馬捕捉 {x.get('win_in_W_cand')}% 対 {x.get('win_in_W')}%／同点数馬単 "
+          f"{x.get('exacta_pfs_cand')}% 対 {x.get('exacta_pfs_signed')}%"
+          for v, x in ((c.get('C18-W-PLUS-FAVORITE') or {}).get('by_venue') or {}).items()],
+        '', f"<sub>{o.get('venue_rule', '')}</sub>",
         '', f"<sub>{o['production_change']}</sub>", ''])
 
 
