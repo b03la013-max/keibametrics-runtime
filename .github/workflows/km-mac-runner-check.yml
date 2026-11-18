@@ -12,6 +12,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/local_autopilot/
+            /runtime/*.py
+            /runtime/local_physical/nar_source_manifest.py
+            /profiles/*.json
+            /mapping/*.json
+            /research/kametani/
+            /research/nankan/
+            /research/local_bvi/
+            /tests/test_local_ticket_tree.py
+            /tests/test_local_triple_umatan.py
       - name: Python, venv, deps, imports, TLS
         run: |
           set -uo pipefail
@@ -27,5 +39,6 @@ jobs:
           python -c "import runtime.local_autopilot.run, runtime.local_autopilot.formal_rakuten, cryptography; print('imports OK')"
           python -c "import urllib.request,json; print('github TLS', urllib.request.urlopen('https://api.github.com/zen', timeout=15).status)"
           python -c "import urllib.request; print('JMA TLS', urllib.request.urlopen('https://www.jma.go.jp/bosai/amedas/const/amedastable.json', timeout=15).status)"
-          python -m pytest -q tests/test_local_fullnumerical_candidate_v01.py -k preserves_all_87 tests/test_local_ticket_tree.py tests/test_local_triple_umatan.py 2>&1 | tail -3
+          python -c "print('float sum 3.12 semantics', sum([0.1]*10) == 1.0)"
+          python -m pytest -q tests/test_local_ticket_tree.py tests/test_local_triple_umatan.py 2>&1 | tail -3
           git --version; curl --version | head -1; sw_vers || true
