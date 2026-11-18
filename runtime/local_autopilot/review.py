@@ -83,6 +83,26 @@ def _paper_tickets(pred):
     return out
 
 
+def delivered_failure(roles, tickets, order, settle_row):
+    """First material failure of the DELIVERED ticket set (sequential, no double counting):
+    W miss → P2 miss → no live path in the tickets → hit but loss → NONE."""
+    if settle_row.get('no_bet_reason') or not tickets:
+        return 'NO_BET'
+    w, s2 = (int(order[0]), int(order[1])) if len(order) >= 2 else (None, None)
+    if w is None:
+        return 'UNKNOWN'
+    if 'W' not in (roles.get(w) or []):
+        return 'PREDICTION_ROLE_W'
+    if 'P2' not in (roles.get(s2) or []):
+        return 'PREDICTION_ROLE_P2'
+    eff, pay = settle_row.get('effective_invest') or 0, settle_row.get('payout') or 0
+    if pay == 0:
+        return 'TICKET_SELECTION'
+    if pay < eff:
+        return 'CAPITAL_EFFICIENCY'
+    return 'NONE'
+
+
 def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
     """Common evaluation of one decision track (PAPER or FORMAL) against the official order."""
     pos = {h: i + 1 for i, h in enumerate(order)}
@@ -199,7 +219,15 @@ def build(day_dir, key, r):
                           'signed_final_ticket_count': sm.get('signed_final_ticket_count'),
                           'signed_final_total_investment': sm.get('signed_final_total_investment'),
                           'signed_final_settlement': fr.get('signed_final_settlement')}
-        formal['first_material_failure'] = ((auto or {}).get('failure_localization') or {}).get('first_material_failure')
+        # P0-1 (2026-11-19): the Runtime review judges the signed FULL MEC; the delivered recommendation is the
+        # capped subset. Classify the delivered tickets locally and keep the Runtime label under its own name.
+        formal['first_material_failure_runtime_full_mec'] = ((auto or {}).get('failure_localization') or {}).get('first_material_failure')
+        formal['first_material_failure'] = delivered_failure(froles, ft, order, fr)
+        formal['refs'].update(
+            effective_revision='REVISION_2' if fdir.name == 'rev2' else 'REVISION_1',
+            source_at=(sm.get('stages') or {}).get('SOURCE'), signed_final_at=(sm.get('stages') or {}).get('SIGNED_FINAL'),
+            delivered_ticket_sha256=hashlib.sha256(json.dumps(ft, separators=(',', ':')).encode()).hexdigest(),
+            settled_ticket_sha256=fr.get('ticket_sha256'))
     full29 = _load(fdir / f'{key}.full29.json') if sm else None
     idx_ev = _index_evidence(full29, order)
 

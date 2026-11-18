@@ -72,10 +72,10 @@ def parse_result(html):
         ptxt = text(pos[1])
         if re.fullmatch(r'\d{1,2}', ptxt):
             order.append((int(ptxt), int(num[1])))
-        elif any(k in ptxt for k in ('取消', '除外')):
+        elif any(k in ptxt for k in ('取消', '除外', '取', '除')):
             non_starters.append(int(num[1]))
         elif ptxt:
-            did_not_finish.append(int(num[1]))
+            did_not_finish.append(int(num[1]))      # 中止・失格 etc. (a horse that started)
     order = [h for _, h in sorted(order)]
     j = html.find('summary="払戻金"')
     seg = html[j:html.find('</table>', j)] if j >= 0 else ''
@@ -110,6 +110,12 @@ def settle_parsed(res, pred, prediction_ref, settled_at=None):
     gone = set(res.get('non_starters') or [])
     inferred = []
     frozen_runners = {x['no'] for x in pred.get('runners') or []}
+    # P0-2 (2026-11-19): a horse already excluded before the freeze (取消 on the card) cannot be a 競走中止.
+    # Rakuten's result row for such a horse is not always labelled 取消, so re-file it as a pre-freeze non-starter.
+    pre = sorted(set(res.get('did_not_finish') or []) - frozen_runners) if frozen_runners else []
+    if pre:
+        res = dict(res, did_not_finish=[h for h in res['did_not_finish'] if h not in pre],
+                   non_starters_pre_freeze=pre)
     if frozen_runners and len(order) >= 0.6 * len(frozen_runners):  # in the frozen field but on no result row -> did not start
         inferred = sorted(frozen_runners - set(order) - set(res.get('did_not_finish') or []) - gone)
         gone |= set(inferred)
@@ -141,6 +147,7 @@ def settle_parsed(res, pred, prediction_ref, settled_at=None):
             'ticket_sha256': pred.get('ticket_sha256'), 'prediction_saved_at': pred.get('saved_at'),
             'settled_at': settled_at, 'order': order,
             'non_starters': sorted(gone), 'non_starters_inferred': inferred, 'did_not_finish': res.get('did_not_finish', []),
+            'non_starters_pre_freeze': res.get('non_starters_pre_freeze', []),
             'payouts': {k: {'-'.join(map(str, c)): v for c, v in d.items()} for k, d in res['payouts'].items()},
             'winner_hit': rank[0] == order[0], 'win_hit': int(rank[0] == order[0]),
             'top_in3': int(rank[0] in top3), 'top3_capture': len(top3 & set(rank[:3])),
