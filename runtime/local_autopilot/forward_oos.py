@@ -182,6 +182,22 @@ def evaluate(root, prereg_path=PREREG):
             out['candidates'][cid] = dict(ev[k], stage=_stage(len(rows), p6['stages']),
                                           by_venue={v: dict(byv[v][k], races=byv[v]['races']) for v in venues},
                                           strata=strata.split(rows, lambda rs_, k=k: role_shadow.summarize(rs_)[k]))
+    pre7 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261119_R7.json')
+    if pre7.exists():
+        p7 = json.loads(pre7.read_text())
+        start7 = datetime.fromisoformat(p7['first_eligible_post'])
+        bv = []
+        for x in sm.load(root):
+            if (_post(root, x['day'], x['key']) or start7.replace(year=1900)) < start7:
+                continue
+            ns = set(x['res'].get('non_starters') or []) | set(x['res'].get('non_starters_inferred') or [])
+            for no, ev in (((x['pred'].get('bvi_r2') or {}).get('by_horse')) or {}).items():
+                if ev.get('observed_weight') and int(no) not in ns:
+                    bv.append((x['key'].split('_')[0], ev['bvi_l_r2'], sm._role(x['res'], int(no))))
+        t = sm._tertiles(bv) if bv else {}
+        g = lambda k: ((t.get('ALL') or {}).get(k) or {}).get('top3_rate') if isinstance(t, dict) else None
+        out['candidates']['C21-BVI-L-R2-TERTILE'] = {'runners': len(bv), 'stage': _stage(len(bv), p7['stages']),
+                                                     'top3_high': g('high'), 'top3_low': g('low'), 'tertiles': t}
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -274,6 +290,8 @@ def md(o):
            f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
            f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',
                                                               'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
+        *([f"- C21 自前集計の血統指数BVI-L-R2：{c['C21-BVI-L-R2-TERTILE']['stage']}／3着内率 上位1/3 "
+           f"{c['C21-BVI-L-R2-TERTILE']['top3_high']}% 対 下位1/3 {c['C21-BVI-L-R2-TERTILE']['top3_low']}%"] if 'C21-BVI-L-R2-TERTILE' in c else []),
         '', '### 競馬場別（Owner 2026-11-19：場ごとに形状・レベルが違うため、合算だけで判断しない）', '',
         *[f"- C1 {v}：{x['races']}R／候補 {x['candidate_pfs']}% 対 現行 {x['champion_pfs']}%"
           for v, x in (c1.get('by_venue') or {}).items()],

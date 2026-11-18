@@ -333,6 +333,11 @@ def predict(reader, r, today, edition, out, cards):
         slim['kametani'] = bloodline_kametani.race_evidence(race, runners)
     except Exception as exc:
         slim['kametani'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    try:  # research BVI-L-R2 from our own pooled past starts (days before the race only): evidence only
+        from runtime.local_autopilot import sire_stats
+        slim['bvi_r2'] = sire_stats.race_evidence(race, runners, sire_stats.load(ROOT, str(r['race_date'])))
+    except Exception as exc:
+        slim['bvi_r2'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     try:  # 南関東 class-move labels (YouTube claims, unvalidated): evidence only, no numeric consumer
         from runtime.local_autopilot import class_move
         slim['class_move'] = class_move.race_evidence(race, runners)
@@ -1134,6 +1139,8 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     forward_oos.write(ROOT)               # pre-registered candidates, post-freeze races only
                     from runtime.local_autopilot import aki_audit
                     aki_audit.write(ROOT)                 # AKI roughness vs outcome, formation PFS (cumulative)
+                    from runtime.local_autopilot import sire_stats
+                    sire_stats.write(ROOT, (date.fromisoformat(out.name) + timedelta(days=1)).isoformat())  # stats incl. today
                 except Exception as exc:
                     log('SHADOW_MEASURE_FAIL', type(exc).__name__, str(exc)[:120])
             try:

@@ -142,6 +142,21 @@ def _rolesum(xs):
             'win_pfs_95ci': boot_ci([(100, x[2]) for x in xs]), 'place_pfs_95ci': boot_ci([(100, x[3]) for x in xs])}
 
 
+def _tertiles(bv):
+    """BVI-L-R2 (own pooled sire stats) low/mid/high third vs outcome; pooled and per venue."""
+    if not bv:
+        return 'NOT_PERSISTED_BEFORE_2026-11-19'
+    def cut(xs):
+        xs = sorted(xs, key=lambda t: t[1])
+        n = len(xs) // 3
+        return {'low': _rolesum([t[2] for t in xs[:n]]), 'mid': _rolesum([t[2] for t in xs[n:len(xs) - n]]),
+                'high': _rolesum([t[2] for t in xs[len(xs) - n:]])} if n else {}
+    out = {'ALL': cut(bv)}
+    for v in sorted({t[0] for t in bv}):
+        out[v] = cut([t for t in bv if t[0] == v])
+    return out
+
+
 GAP = 2.0        # 馬券購入法: adjacent popularity odds ratio >= 2.0 is an オッズの断層
 
 
@@ -218,6 +233,7 @@ def measure(root, days=None):
     market = defaultdict(int)
     bw = defaultdict(list)
     kg = defaultdict(list)          # 亀谷 sire rules: group -> [role]
+    bv = []                         # (race, horse, bvi_l_r2, role) for BVI-L-R2 tertiles
     cm = defaultdict(list)          # 南関東 class move: group -> [role]
     gr = defaultdict(list)          # going x distance rotation x early position: group -> [role]
     fb = defaultdict(list)          # frame band by venue (x distance): group -> [role]
@@ -299,6 +315,9 @@ def measure(root, days=None):
                     continue
                 for g in (d['label'], 'claim:' + d['claim']):
                     gr[g].append(_role(res, int(no)))
+        for no, ev in (((pred.get('bvi_r2') or {}).get('by_horse')) or {}).items():
+            if ev.get('observed_weight') and int(no) not in ns:
+                bv.append((x['key'].split('_')[0], ev['bvi_l_r2'], _role(res, int(no))))
         if odds:
             k, r12 = odds_gap(odds)
             pops = sorted(odds, key=odds.get)
@@ -345,6 +364,7 @@ def measure(root, days=None):
                                or 'NOT_PERSISTED_BEFORE_2026-11-17'),
            'body_weight': {k: {'n': len(v), 'mean_abs_change_kg': round(sum(v) / len(v), 2) if v else None}
                            for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17',
+           'bvi_l_r2_tertiles': _tertiles(bv),
            'kametani_sire_rules': {g: _rolesum(v) for g, v in sorted(kg.items())} or 'NOT_PERSISTED_BEFORE_2026-11-18',
            'class_move': {g: _rolesum(v) for g, v in sorted(cm.items())} or 'NOT_PERSISTED_BEFORE_2026-11-17',
            'frame_band': {g: _rolesum(v) for g, v in sorted(fb.items())} or 'NOT_PERSISTED_BEFORE_2026-11-17',
