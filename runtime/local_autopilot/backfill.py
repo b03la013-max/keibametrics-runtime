@@ -199,6 +199,12 @@ class Backfill:
         except rk.SourceStop as e:
             self.st['last_stop'] = str(e)
         self.save()
+        try:                                       # refresh the statistical tables (learning data, evidence only)
+            from runtime.local_autopilot import hist_stats
+            hs = hist_stats.write(self.dir.parent)
+            self.st['hist_stats'] = {'races': hs['races'], 'starts': hs['starts']} if hs else None
+        except Exception as e:                     # never let the tables break the backfill
+            self.st['hist_stats'] = f'FAIL:{type(e).__name__}:{e}'
         c = Counter(v['status'] for v in self.st['races'].values())
         print('BACKFILL', json.dumps({'fetched': self.fetched, 'days': len(self.st['days']), 'races': dict(c),
                                       'discovery': self.st.get('discovery'), 'stop': self.st.get('last_stop')},
