@@ -1,0 +1,12 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R3-AMENDMENT-A1",
+ "amends": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R3 (file unchanged)",
+ "recorded_at": "2026-11-18T18:41:53+09:00",
+ "candidate": "C7-KAMETANI-BUY-MATCH",
+ "defect": "v1 matcher split each 買い条件 at '／' and treated ANY piece as a match (e.g. フィレンツェファイア: a mare at ダート1200m matched 「ダート1200m以下／母が米国型／牡馬」). Reported by an external review on 2026-11-18 and reproduced.",
+ "v1_records_on_2026-11-18": {"covered_runners": 115, "v1_buy_match": 29, "v1_caution_match": 33, "damsire_class_known": 17},
+ "fix": "v2 matcher (research/kametani/sire_rules_v2.json, hand-structured: alternatives OR, conditions AND; unknown never counts as match; JRA-only scenes NOT_LOCAL).",
+ "evaluation_rule": "C7 counts only predictions whose kametani profile is KM-LOCAL-KAMETANI-PEDIGREE-EVIDENCE-v2*; all v1 records are excluded, not re-labelled. Stages and decision rule of C7 unchanged; its race count restarts from the first v2 prediction.",
+ "known_limit": "damsire class is known for only ~15% of runners (only damsires with their own dictionary entry), so most damsire-conditioned scenes stay UNKNOWN.",
+ "production_change": "NONE"
+}

@@ -167,7 +167,10 @@ def evaluate_r3(root, p3):
         res, pred = x['res'], x['pred']
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
         ranking = pred.get('ranking') or []
-        for no, ev in ((pred.get('kametani') or {}).get('by_horse') or {}).items():
+        kg = pred.get('kametani') or {}
+        if not str(kg.get('profile', '')).startswith('KM-LOCAL-KAMETANI-PEDIGREE-EVIDENCE-v2'):
+            kg = {}                  # v1 (split at '／', OR) mis-classified scenes: excluded from C7 (amendment A1)
+        for no, ev in (kg.get('by_horse') or {}).items():
             if int(no) in ns:
                 continue
             if ev['buy_match'] and not ev['caution_match']:

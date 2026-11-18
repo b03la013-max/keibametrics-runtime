@@ -244,7 +244,9 @@ def measure(root, days=None):
                 dz[g]['1番人気'].append(_role(res, fav))
                 dz[g]['2番人気'].append(_role(res, dfv.get('second_no')))
                 dz[g]['◎'].append(_role(res, rank[0]))
-        for no, ev in ((pred.get('kametani') or {}).get('by_horse') or {}).items():
+        _kg = pred.get('kametani') or {}
+        for no, ev in ((_kg.get('by_horse') or {}) if str(_kg.get('profile', '')).startswith(
+                'KM-LOCAL-KAMETANI-PEDIGREE-EVIDENCE-v2') else {}).items():
             if int(no) in ns:
                 continue
             g = 'buy_match' if ev['buy_match'] and not ev['caution_match'] else 'caution_match' if ev['caution_match'] and not ev['buy_match'] \

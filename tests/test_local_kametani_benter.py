@@ -5,23 +5,36 @@ from runtime.local_autopilot import shadow_measure as sm
 
 
 def _ctx(**k):
-    base = {'surface': 'DIRT', 'distance': 1200, 'sex': '牡', 'age': 4, 'damsire_type': None, 'last_finish': 5,
-            'front': True, 'pop': 2, 'newcomer': False, 'going': '良'}
+    base = {'surface': 'DIRT', 'distance': 1200, 'going': '良', 'sex': '牝', 'age': 4, 'damsire_type': None,
+            'starts': [{'finish': 5, 'distance': 1400, 'surface': 'DIRT', 'ride_body_weight': 470}], 'newcomer': False,
+            'front': True, 'pop': 2, 'frame': 3}
     base.update(k)
     return base
 
 
-def test_clause_distance_surface_and_unknown_damsire():
-    assert bk._clause('ダート1700m以上', _ctx()) == 'NO'
-    assert bk._clause('ダート1700m以上', _ctx(distance=1800)) == 'MATCH'
-    assert bk._clause('ダート1700m以上で母父が米国型', _ctx(distance=1800)) == 'UNKNOWN'
-    assert bk._clause('ダート1700m以上で母父が米国型', _ctx(distance=1800, damsire_type={'country': '米国型', 'sunday': False})) == 'MATCH'
+US = {'country': '米国型', 'sunday': False, 'kingmambo': False}
 
 
-def test_jra_course_and_going_clauses():
-    assert bk._clause('東京・阪神の湿ったダート', _ctx()) == 'NOT_LOCAL'
-    assert bk._clause('湿ったダート', _ctx()) == 'NO'
-    assert bk._clause('湿ったダート', _ctx(going='重')) == 'MATCH'
+def test_all_conditions_of_a_scene_are_required():
+    # 001 フィレンツェファイア: ダート1200m以下 AND 母米国型 AND 牡馬 (ChatGPT-reported v1 false match)
+    alt = {'S': 'D', 'd': [0, 1200], 'ds': 'US', 'sex': 'M'}
+    assert bk.check(alt, _ctx())[0] == 'NO'                                  # mare: sex fails
+    assert bk.check(alt, _ctx(sex='牡'))[0] == 'UNKNOWN'                     # damsire class unknown
+    assert bk.check(alt, _ctx(sex='牡', damsire_type=US))[0] == 'MATCH'
+    assert bk.check(alt, _ctx(sex='牡', damsire_type=US, distance=1400))[0] == 'NO'
+
+
+def test_unreadable_and_jra_scenes_never_match():
+    assert bk.check({'S': 'D', 'x': ['直線の長いダート']}, _ctx())[0] == 'UNKNOWN'
+    assert bk.check({'jra': 1}, _ctx())[0] == 'NOT_LOCAL'
+    assert bk.check({'S': 'D', 'wet': 1}, _ctx(going='重'))[0] == 'MATCH'
+    assert bk.check({'S': 'D', 'chg': 'short'}, _ctx())[0] == 'MATCH'      # 1400 -> 1200
+
+
+def test_v1_false_match_is_gone():
+    r = {'horse_no': 1, 'sire': 'フィレンツェファイア', 'damsire': 'X', 'sex_age': '牝3', 'age': 3, 'starts': [], 'popularity': 5}
+    ev = bk.evaluate(r, {'surface': 'DIRT', 'distance': 1200})
+    assert ev['buy_match'] is False
 
 
 def test_rules_table_loads_nar_sires():
