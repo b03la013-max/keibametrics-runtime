@@ -18,7 +18,7 @@ from collections import defaultdict
 from itertools import combinations
 from pathlib import Path
 
-from runtime.local_autopilot import class_move
+from runtime.local_autopilot import class_move, going_rotation
 
 PROFILE = 'KM-LOCAL-SHADOW-MEASURE-v1.0-20261117'
 UNIT = 100
@@ -79,10 +79,12 @@ def load(root):
         revp = day / 'rev' / f"{res.get('revision')}.json"
         pred = json.loads(revp.read_text()) if revp.exists() else json.loads((day / f'{key}.json').read_text())
         try:
-            race_name = json.loads((day / f'{key}.json').read_text())['race'].get('race_name')
-        except (OSError, ValueError, KeyError, TypeError):
-            race_name = None
-        rows.append({'day': day.name, 'key': key, 'res': res, 'pred': pred.get('prediction') or {}, 'race_name': race_name})
+            race = json.loads((day / f'{key}.json').read_text())['race']
+            race_name, going, distance = race.get('race_name'), race.get('going'), race.get('distance')
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            race_name = going = distance = None
+        rows.append({'day': day.name, 'key': key, 'res': res, 'pred': pred.get('prediction') or {}, 'race_name': race_name,
+                     'going': going, 'distance': distance})
     return rows
 
 
@@ -212,6 +214,7 @@ def measure(root, days=None):
     bw = defaultdict(list)
     kg = defaultdict(list)          # 亀谷 sire rules: group -> [role]
     cm = defaultdict(list)          # 南関東 class move: group -> [role]
+    gr = defaultdict(list)          # going x distance rotation x early position: group -> [role]
     gp = defaultdict(lambda: defaultdict(list))   # odds 断層: group -> role -> [...]
     bq, hv_ll = [], defaultdict(float)
     for x in rows:
@@ -276,6 +279,13 @@ def measure(root, days=None):
                 continue
             for g in (label, ('NANKAN:' if x['key'].split('_')[0] in class_move.NANKAN else 'OTHER:') + label):
                 cm[g].append(_role(res, int(no)))
+        if x.get('going') and pred.get('prior_runs'):
+            ev = going_rotation.race_labels(x['going'], x.get('distance'), pred['prior_runs'])
+            for no, d in ev['by_horse'].items():
+                if int(no) in ns:
+                    continue
+                for g in (d['label'], 'claim:' + d['claim']):
+                    gr[g].append(_role(res, int(no)))
         if odds:
             k, r12 = odds_gap(odds)
             pops = sorted(odds, key=odds.get)
@@ -324,6 +334,7 @@ def measure(root, days=None):
                            for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17',
            'kametani_sire_rules': {g: _rolesum(v) for g, v in sorted(kg.items())} or 'NOT_PERSISTED_BEFORE_2026-11-18',
            'class_move': {g: _rolesum(v) for g, v in sorted(cm.items())} or 'NOT_PERSISTED_BEFORE_2026-11-17',
+           'going_rotation': {g: _rolesum(v) for g, v in sorted(gr.items())} or 'NO_GOING_OR_PRIOR_RUNS',
            'odds_gap': {g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(gp.items())},
            'benter_information_test': benter(bq),
            'place_order_model': {k.rsplit(':', 1)[0] if k.endswith(':n') else k:
@@ -385,6 +396,14 @@ def md(o):
                 L.append(f"| {g} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
     else:
         L.append(f"- {o.get('class_move')}")
+    L += ['', '## 馬場×距離ローテ×前走位置（Drive「複勝軸選定と穴馬激走パターン」主張・未検証）', '']
+    if isinstance(o.get('going_rotation'), dict):
+        L += ['| 区分 | 頭数 | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|']
+        for g, v in o['going_rotation'].items():
+            if v:
+                L.append(f"| {g} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
+    else:
+        L.append(f"- {o.get('going_rotation')}")
     L += ['', '## オッズの断層（隣接人気の単勝オッズ比 ≥ 2.0）', '',
           '| 区分 | 対象 | Race | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|---|']
     for g, d in (o.get('odds_gap') or {}).items():
