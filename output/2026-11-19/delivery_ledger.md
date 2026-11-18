@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-19（21:07時点）
+# 地方版 配送台帳 2026-11-19（21:25時点）
 
 - 管理Race 36／発走済み 0
-- PAPER：凍結 6・Push検証 0・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 12・Push検証 6・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -11,12 +11,12 @@
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
-| KSM_01 | 10:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_02 | 10:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_03 | 11:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_04 | 11:55 | DISCOVERED |  | … | - | - | - |  |
-| KSM_05 | 12:25 | DISCOVERED |  | … | - | - | - |  |
-| KSM_06 | 13:00 | DISCOVERED |  | … | - | - | - |  |
+| KSM_01 | 10:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_02 | 10:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_03 | 11:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_04 | 11:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KSM_05 | 12:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KSM_06 | 13:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KSM_07 | 13:30 | DISCOVERED |  | … | - | - | - |  |
 | KSM_08 | 14:05 | DISCOVERED |  | … | - | - | - |  |
 | KSM_09 | 14:35 | DISCOVERED |  | … | - | - | - |  |
@@ -35,12 +35,12 @@
 | OHI_10 | 19:30 | DISCOVERED |  | … | - | - | - |  |
 | OHI_11 | 20:10 | DISCOVERED |  | … | - | - | - |  |
 | OHI_12 | 20:50 | DISCOVERED |  | … | - | - | - |  |
-| SON_01 | 10:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_02 | 11:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_03 | 11:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_04 | 12:10 | DISCOVERED |  | … | - | - | - |  |
-| SON_05 | 12:40 | DISCOVERED |  | … | - | - | - |  |
-| SON_06 | 13:10 | DISCOVERED |  | … | - | - | - |  |
+| SON_01 | 10:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_02 | 11:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_03 | 11:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_04 | 12:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_05 | 12:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_06 | 13:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SON_07 | 13:40 | DISCOVERED |  | … | - | - | - |  |
 | SON_08 | 14:10 | DISCOVERED |  | … | - | - | - |  |
 | SON_09 | 14:45 | DISCOVERED |  | … | - | - | - |  |
