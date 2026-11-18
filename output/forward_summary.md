@@ -110,4 +110,4 @@
 | 2026-11-18 | OHI_07 | `795529a81d2d425f` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-18 | OHI_08 | `546df00271c2d96b` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-18 | OHI_09 | `fdb18fde9280b2ab` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
-| 2026-11-18 | OHI_10 | `50f9fb46cd205a96` | 待 | – | – | – | – |
+| 2026-11-18 | OHI_10 | `d1a3d87c051a8d1c` | 待 | – | – | – | – |
