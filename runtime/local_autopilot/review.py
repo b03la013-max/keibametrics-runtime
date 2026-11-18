@@ -122,6 +122,9 @@ def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
         'pair_conditioned_third': ((w, s, t) in tri or frozenset((w, s, t)) in trio) if (w, s) in pairs or
         frozenset((w, s, t)) in trio else None,
         'trio_set_covered': frozenset((w, s, t)) in trio or (w, s, t) in tri,
+        # Coverage is reported with set size (Charter R1 §11 Coverage ≠ Discrimination; v5.0-SHADOW §10 role set)
+        'role_set_size': {r: sum(1 for h in ranking if r in roles.get(h, [])) for r in ('W', 'P2', 'P3')},
+        'field_size': len(ranking),
     }
     st = settle_row or {}
     eff = st.get('effective_invest', st.get('invest'))
@@ -398,6 +401,27 @@ ACC_KEYS = ('winner_pre_rank_1', 'winner_in_top3', 'winner_in_W', 'second_in_P2'
             'winner_is_ticket_head', 'trio_set_covered')
 
 
+ROLE_HIT = {'W': 'winner_in_W', 'P2': 'second_in_P2', 'P3': 'third_in_P3'}
+
+
+def role_set_coverage(ev):
+    """Role-set coverage next to its size and the size-matched random baseline (|set| / field), so a wider set
+    is not read as better prediction (Charter R1 §11, v5.0-SHADOW §10). Descriptive evidence only: roles,
+    tickets, MEC, the 60-point cap and KRS are unchanged; this is not a calibrated conformal set."""
+    ev = [e for e in ev if isinstance(e.get('role_set_size'), dict) and e.get('field_size')]
+    if not ev:
+        return None
+    out = {}
+    for r, k in ROLE_HIT.items():
+        n = len(ev)
+        cov = 100 * sum(1 for e in ev if e.get(k) is True) / n
+        base = 100 * sum(e['role_set_size'][r] / e['field_size'] for e in ev) / n
+        out[r] = {'races': n, 'mean_size': round(sum(e['role_set_size'][r] for e in ev) / n, 2),
+                  'coverage': round(cov, 1), 'random_baseline': round(base, 1), 'lift': round(cov - base, 1),
+                  'empty_set_races': sum(1 for e in ev if e['role_set_size'][r] == 0)}
+    return out
+
+
 def _accuracy(reviews):
     """Accuracy measured separately from PFS (vision: 精度・回収・規格を別々に測る). Rates in %, per track,
     overall and per venue. Evidence only: never consumed by ranking, tickets or capital."""
@@ -413,6 +437,9 @@ def _accuracy(reviews):
             f = flag.get(k, lambda e, k=k: e.get(k) is True)
             out[k] = round(100 * sum(1 for e in ev if f(e)) / len(ev), 1)
         out['mean_top3_capture'] = round(sum(e.get('top3_capture') or 0 for e in ev) / len(ev), 2)
+        rs = role_set_coverage(ev)
+        if rs:
+            out['role_set'] = rs
         return out
     venues = sorted({b['venue'] for b in reviews})
     return {track: {'all': one(reviews, track),
@@ -541,6 +568,12 @@ def _summary_md(title, s):
         a = (acc.get(track) or {}).get('all')
         if a:
             L.append(f"| {label} | {a['races']} | " + ' | '.join(f"{a[k]}%" for k in ACC_KEYS) + f" | {a['mean_top3_capture']} |")
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        rs = ((acc.get(track) or {}).get('all') or {}).get('role_set')
+        if rs:
+            L.append(f"- {label} 役割の頭数と的中（無作為＝頭数÷出走頭数）：" + '／'.join(
+                f"{r} 平均{v['mean_size']}頭 的中{v['coverage']}%（無作為{v['random_baseline']}%、差{v['lift']:+}）"
+                for r, v in rs.items()))
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")

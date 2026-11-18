@@ -16,3 +16,20 @@ def test_accuracy_rates_separate_from_pfs():
     assert p['winner_is_ticket_head'] == 33.3
     assert a['paper']['by_venue']['OHI']['races'] == 2
     assert a['formal_recommendation']['all'] is None
+
+
+def test_role_set_coverage_reports_size_and_random_baseline():
+    def e(win_w, size_w, field):
+        return {'winner_in_W': win_w, 'second_in_P2': False, 'third_in_P3': True,
+                'role_set_size': {'W': size_w, 'P2': 2, 'P3': 0}, 'field_size': field}
+    rs = review.role_set_coverage([e(True, 2, 10), e(False, 4, 10)])
+    assert rs['W'] == {'races': 2, 'mean_size': 3.0, 'coverage': 50.0, 'random_baseline': 30.0, 'lift': 20.0,
+                       'empty_set_races': 0}
+    assert rs['P3']['empty_set_races'] == 2 and rs['P3']['random_baseline'] == 0.0
+    assert review.role_set_coverage([{'winner_in_W': True}]) is None
+
+
+def test_track_carries_role_set_size():
+    t = review._track('paper', [3, 1, 2, 4], {3: ['W'], 1: ['W', 'P2'], 2: ['P3']}, [], [1, 3, 2], {})
+    assert t['evaluation']['role_set_size'] == {'W': 2, 'P2': 1, 'P3': 1}
+    assert t['evaluation']['field_size'] == 4
