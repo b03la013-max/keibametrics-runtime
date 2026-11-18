@@ -2,7 +2,7 @@
  "profile": "KM-LOCAL-POSTRESULT-DETAILED-REVIEW-v1.0-20261116-DAILY",
  "race_date": "2026-11-18",
  "complete_day": false,
- "races": 1,
+ "races": 2,
  "by_venue": {
   "KSM": {
    "races": 1,
@@ -15,20 +15,32 @@
    "first_failure": {
     "PREDICTION_ROLE_W": 1
    }
+  },
+  "SON": {
+   "races": 1,
+   "paper_pfs": 0.0,
+   "formal_pfs": 0.0,
+   "paper_effective_invest": 700,
+   "paper_payout": 0,
+   "formal_effective_invest": 6000,
+   "formal_payout": 0,
+   "first_failure": {
+    "PREDICTION_ROLE_W": 1
+   }
   }
  },
  "accuracy": {
   "paper": {
    "all": {
-    "races": 1,
+    "races": 2,
     "winner_pre_rank_1": 0.0,
-    "winner_in_top3": 100.0,
+    "winner_in_top3": 50.0,
     "winner_in_W": 0.0,
     "second_in_P2": 0.0,
     "third_in_P3": 0.0,
     "winner_is_ticket_head": 0.0,
-    "trio_set_covered": 100.0,
-    "mean_top3_capture": 2.0
+    "trio_set_covered": 50.0,
+    "mean_top3_capture": 1.5
    },
    "by_venue": {
     "KSM": {
@@ -41,16 +53,27 @@
      "winner_is_ticket_head": 0.0,
      "trio_set_covered": 100.0,
      "mean_top3_capture": 2.0
+    },
+    "SON": {
+     "races": 1,
+     "winner_pre_rank_1": 0.0,
+     "winner_in_top3": 0.0,
+     "winner_in_W": 0.0,
+     "second_in_P2": 0.0,
+     "third_in_P3": 0.0,
+     "winner_is_ticket_head": 0.0,
+     "trio_set_covered": 0.0,
+     "mean_top3_capture": 1.0
     }
    }
   },
   "formal_recommendation": {
    "all": {
-    "races": 1,
+    "races": 2,
     "winner_pre_rank_1": 0.0,
     "winner_in_top3": 0.0,
     "winner_in_W": 0.0,
-    "second_in_P2": 100.0,
+    "second_in_P2": 50.0,
     "third_in_P3": 100.0,
     "winner_is_ticket_head": 0.0,
     "trio_set_covered": 0.0,
@@ -67,36 +90,47 @@
      "winner_is_ticket_head": 0.0,
      "trio_set_covered": 0.0,
      "mean_top3_capture": 1.0
+    },
+    "SON": {
+     "races": 1,
+     "winner_pre_rank_1": 0.0,
+     "winner_in_top3": 0.0,
+     "winner_in_W": 0.0,
+     "second_in_P2": 0.0,
+     "third_in_P3": 100.0,
+     "winner_is_ticket_head": 0.0,
+     "trio_set_covered": 0.0,
+     "mean_top3_capture": 1.0
     }
    }
   }
  },
  "all_local": {
-  "paper_pfs": 301.2,
+  "paper_pfs": 209.6,
   "formal_pfs": 0.0,
   "first_failure": {
-   "PREDICTION_ROLE_W": 1
+   "PREDICTION_ROLE_W": 2
   }
  },
  "improvement_priority": [
   {
    "id": "P1:ROLE_W_MISS",
-   "count": 1,
-   "impact_yen": 6000,
+   "count": 2,
+   "impact_yen": 12000,
    "tier": "P1",
    "layer": "ROLE",
    "title": "Winner outside W",
-   "race_count": 1,
+   "race_count": 2,
    "evidence_strength": "SINGLE_OR_FEW (過大評価しない)"
   },
   {
    "id": "P2:CALIBRATION_BACKLOG",
-   "count": 1,
-   "impact_yen": 6000,
+   "count": 2,
+   "impact_yen": 12000,
    "tier": "P2",
    "layer": "CALIBRATION",
    "title": "Probability / EV / Kelly not computable (uncalibrated)",
-   "race_count": 1,
+   "race_count": 2,
    "evidence_strength": "SINGLE_OR_FEW (過大評価しない)"
   }
  ],
@@ -104,15 +138,15 @@
  "daily_audit": {
   "1_delivery": {
    "races_managed": 36,
-   "formal_eligible_attempted": 5,
-   "paper_prestart_submitted": 5,
-   "formal_prestart_submitted": 5,
+   "formal_eligible_attempted": 6,
+   "paper_prestart_submitted": 6,
+   "formal_prestart_submitted": 6,
    "user_reached_owner_confirmed": 0
   },
   "2_computation": {
-   "full29": 5,
-   "signed_final": 5,
-   "krs_5000": 5,
+   "full29": 6,
+   "signed_final": 6,
+   "krs_5000": 6,
    "no_bet": 0,
    "hold": {}
   },
@@ -123,9 +157,9 @@
    "actual_purchase": "NONE (実購入なし)"
   },
   "5_learning": {
-   "result_receipts_verified": 1,
-   "learning_states_saved": 1,
-   "formal_races_binding_prior_states": 5,
+   "result_receipts_verified": 2,
+   "learning_states_saved": 2,
+   "formal_races_binding_prior_states": 6,
    "production_change_authorized": false
   },
   "6_failures": {
@@ -136,10 +170,16 @@
     "C2-DANGER-FAV-RANK-A": "21/30R",
     "C3-FAV-AS-W-WHEN-DIVERGED": "21/30R",
     "C4-LOCAL-CAP-60": "30R到達",
-    "C5-SMALL-POINTS": "0/30R",
-    "C6-CHECK10-REVISION": "0/30R"
+    "C5-SMALL-POINTS": "1/30R",
+    "C6-CHECK10-REVISION": "1/30R",
+    "C7-KAMETANI-BUY-MATCH": "1/30R",
+    "C8-ODDS-GAP-FAVORITE": "0/30R",
+    "C9-BENTER-COMBINATION": "0/30R",
+    "C10-HARVILLE-DISCOUNT": "0/30R",
+    "C11-FIXED-2-4-8-VS-AKI-FORM": "1/30R",
+    "C12-AKI-VS-MARKET-ROUGHNESS": "1/30R"
    }
   }
  },
- "sha256": "ae64a377d31871e613c4b45c776ba96c40b801648abd910ae399a7ee3dbe7c5c"
+ "sha256": "81e7845e068ff992a44b3f2232bcbc01f1d22337e2be42a599f2ecd0c50e416f"
 }
