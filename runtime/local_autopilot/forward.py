@@ -25,6 +25,31 @@ def _races(root):
             yield day, key, r
 
 
+def robustness(rows):
+    """Guardrails from the Ticket Constructor Frozen OOS Protocol v0.1 (Drive q191, sec.4):
+    leave-top1/2/3-payout-out PFS, longest losing streak, median per-race PFS and the
+    any-hit-but-loss rate. rows: [{'eff', 'pay'}] in post-time order. Evidence only."""
+    bet = [x for x in rows if x['eff'] > 0]
+    eff = sum(x['eff'] for x in bet)
+    pays = sorted((x['pay'] for x in bet), reverse=True)
+    tot = sum(pays)
+    out = {f'pfs_without_top{k}': (round(100 * (tot - sum(pays[:k])) / eff, 1) if eff else None) for k in (1, 2, 3)}
+    streak = best = 0
+    for x in bet:
+        streak = streak + 1 if x['pay'] < x['eff'] else 0
+        best = max(best, streak)
+    r = sorted(100 * x['pay'] / x['eff'] for x in bet)
+    med = None
+    if r:
+        m = len(r) // 2
+        med = round(r[m] if len(r) % 2 else (r[m - 1] + r[m]) / 2, 1)
+    hits = [x for x in bet if x['pay'] > 0]
+    out.update(max_loss_streak=best, median_race_pfs=med, bet_races=len(bet), hit_races=len(hits),
+               any_hit_but_loss_rate=(round(sum(1 for x in hits if x['pay'] < x['eff']) / len(hits), 3) if hits else None),
+               basis='Drive q191 KM Ticket Constructor Frozen OOS Protocol v0.1 sec.4 (guardrails; not a promotion rule)')
+    return out
+
+
 def summarize(root):
     rows, cum, peak, mdd = [], 0, 0, 0
     fails, days = Counter(), {}
@@ -65,6 +90,7 @@ def summarize(root):
             'bet_coverage': round(bets / n, 3) if n else None,
             'w_hit': sum(x['win'] for x in rows), 'p2_exact': sum(x['p2'] for x in rows),
             'p3_exact': sum(x['p3'] for x in rows), 'first_failure': dict(fails),
+            'robustness': robustness(rows),
             'milestones': {k: n >= k for k in (30, 100, 500)}, 'days': days}
 
 
@@ -175,6 +201,8 @@ def write(root):
          f"- 実効投資 {s['effective_invest']:,}円／払戻 {s['payout']:,}円／**PFS {s['pfs']}%**（最大払戻 {s['max_single_payout']:,}円を除くと {s['pfs_without_max_payout']}%）",
          f"- 最大ドローダウン {s['max_drawdown']:,}円／黒字Race率 {s['profitable_race_rate']}／Bet Coverage {s['bet_coverage']}",
          f"- W的中 {s['w_hit']}／P2一致 {s['p2_exact']}／P3一致 {s['p3_exact']}",
+         f"- 頑健性（影の計測）：上位2/3払戻を除くPFS {s['robustness']['pfs_without_top2']}%／{s['robustness']['pfs_without_top3']}%・"
+         f"最長連敗 {s['robustness']['max_loss_streak']}R・Race別PFS中央値 {s['robustness']['median_race_pfs']}%・的中なのに収支マイナス率 {s['robustness']['any_hit_but_loss_rate']}",
          f"- 第一失敗の分布：{s['first_failure']}", '', '| 日付 | Race | 締切前 | 精算 | 実効投資 | 払戻 | PFS |', '|---|---|---|---|---|---|---|']
     for k, d in s['days'].items():
         L.append(f"| {k} | {d['races']} | {d['prestart']} | {d['settled']} | {d['eff']:,} | {d['pay']:,} | "
