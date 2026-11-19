@@ -165,17 +165,26 @@ def from_rakuten_backfill(rec):
         if not no:
             continue
         fin = order.index(no) + 1 if no in order else None
+        st = re.match(r'([牡牝セ騸])\s*(\d+)', c.get('state') or '')
+        w = re.findall(r'[+-]?\d+', (c.get('weight') or '').replace('±', '+'))
         runners.append({'no': no, 'frame': _int(c.get('position')), 'name': c.get('horse') or c.get('name'),
-                        'horse_key': c.get('horse') or c.get('name'), 'finish': fin,
+                        'horse_key': ('RKT:' + c['horse_id']) if c.get('horse_id') else (c.get('horse') or c.get('name')),
+                        'finish': fin, 'sex': st[1] if st else None, 'age': int(st[2]) if st else None,
+                        'load': c.get('weightTax'), 'bw': int(w[0]) if w else None, 'bw_chg': int(w[1]) if len(w) > 1 else None,
+                        'jockey': re.sub(r'\s*\(.*', '', c.get('jockey') or '').lstrip('☆▲△◇★') or None,
+                        'trainer': c.get('tamer'), 'time': _time(c.get('time')), 'last3f': c.get('spurt'),
                         'status': 'RAN' if fin else ('SCRATCH' if no in (res.get('non_starters') or []) else 'DNF'),
-                        'pop': _int(c.get('popular') or c.get('ninki') or c.get('rank')), 'sire': None, 'damsire': None})
+                        'pop': _int(c.get('rank')), 'sire': None, 'damsire': None})
+    corners = [cv for name, cv in (h.get('corners') or []) if 'コーナー' in name]
     pays = {}
     for k in ('WIN', 'PLACE'):
         for combo, yen in ((res.get('payouts') or {}).get(k) or {}).items():
             pays.setdefault(k, {})[str(_int(combo))] = yen
     return {rid: {'race_id': rid, 'date': rec['race_date'], 'venue': v, 'race_no': rec['race_no'], 'surface': h.get('surface', 'DIRT'),
                   'distance': h.get('distance'), 'going': h.get('going') or '', 'weather': h.get('weather'), 'cond': h.get('race_name', ''),
-                  'field': sum(1 for r in runners if r['status'] != 'SCRATCH') or len(order), 'first_corner': {}, 'last_corner': {},
+                  'field': sum(1 for r in runners if r['status'] != 'SCRATCH') or len(order),
+                  'first_corner': corner_positions(corners[0]) if corners else {},
+                  'last_corner': corner_positions(corners[-1]) if corners else {},
                   'runners': runners, 'payouts': pays, 'source': 'RAKUTEN_RESULT_PAGE'}}
 
 

@@ -65,7 +65,10 @@ def parse_rows(html):
     rows = []
     for row in re.split(r'<tr class="box', body)[1:]:
         cells = {}
-        for cls, val in re.findall(r'<td class="([\w ]+)"[^>]*>(.*?)</td>', row, re.S):
+        hid = re.search(r'HORSEID/(\d+)', row)
+        if hid:
+            cells['horse_id'] = hid[1]
+        for cls, val in re.findall(r'<t[dh] class="([\w ]+)"[^>]*>(.*?)</t[dh]>', row, re.S):
             k = cls.split()[0]
             cells[k if k not in cells else f'{k}_{sum(1 for c in cells if c.startswith(k))}'] = rk.text(val)
         if cells:
@@ -84,6 +87,10 @@ def parse_page(html):
         h['going'] = m[1] if m else None
     w = re.search(r'天候[:：]?\s*(晴|曇|雨|小雨|雪|小雪)', t)
     h['weather'] = w[1] if w else None
+    i = html.find('summary="コーナー通過順位"')
+    seg = html[i:html.find('</table>', i)] if i >= 0 else ''
+    h['corners'] = [[rk.nfkc(a), rk.nfkc(b)] for a, b in
+                    re.findall(r'<th scope="row">(.*?)</th>\s*<td class="time">(.*?)</td>', seg, re.S)]
     res = settle.parse_result(html)
     if res:
         res['payouts'] = {k: {'-'.join(map(str, c)): y for c, y in v.items()} for k, v in res['payouts'].items()}
