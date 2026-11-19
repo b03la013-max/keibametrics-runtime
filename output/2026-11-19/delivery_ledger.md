@@ -6,7 +6,7 @@
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 22／重要変更 13／Revision 2署名 13
+- 10分前チェック：確認 23／重要変更 14／Revision 2署名 14
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -25,7 +25,7 @@
 | KSM_12 | 16:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_01 | 14:30 | POSTRESULT_DIAGNOSTIC | 13:45 | ○ | SIGNED_FINAL | 13:46 | ○ |  |
 | OHI_02 | 15:02 | POSTRESULT_DIAGNOSTIC | 14:17 | ○ | SIGNED_FINAL | 14:53 | ○ |  |
-| OHI_03 | 15:35 | PRESTART_PUSH_VERIFIED | 14:51 | ○ | SIGNED_FINAL | 14:52 | ○ |  |
+| OHI_03 | 15:35 | PRESTART_PUSH_VERIFIED | 14:51 | ○ | SIGNED_FINAL | 15:25 | ○ |  |
 | OHI_04 | 16:07 | PRESTART_PUSH_VERIFIED | 15:23 | ○ | SIGNED_FINAL | 15:24 | ○ |  |
 | OHI_05 | 16:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_06 | 17:12 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
