@@ -14,6 +14,24 @@ from jra_production_postresult import verify_final, _sha
 from jra_ticket_tree_renderer import render_ticket_tree
 
 
+
+def _canonical_open(url, timeout=20):
+    """Read a published canonical file at an exact commit.
+
+    The repository is private since 2026-11; raw.githubusercontent.com then answers 404
+    without credentials. With GH_TOKEN/GITHUB_TOKEN the same bytes at the same commit
+    are read through the authenticated contents API (raw media type). Public repos and
+    token-less runs keep the original raw URL."""
+    import os, re
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    m = re.fullmatch(r'https://raw\.githubusercontent\.com/([^/]+/[^/]+)/([0-9a-f]{40})/(.+)', url)
+    if token and m:
+        api = f'https://api.github.com/repos/{m[1]}/contents/{m[3]}?ref={m[2]}'
+        req = urllib.request.Request(api, headers={'Authorization': f'Bearer {token}',
+                                                   'Accept': 'application/vnd.github.raw'})
+        return urllib.request.urlopen(req, timeout=timeout)
+    return urllib.request.urlopen(url, timeout=timeout)
+
 def canonical_bytes(value):
     return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
 
@@ -947,10 +965,10 @@ if __name__=='__main__':
         base='https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/'+a.published_ref
         final_url=base+'/runtime/final_artifacts/'+final['race_id']+'.json'
         tree_url=base+'/runtime/jra_delivery/'+final['race_id']+'/canonical_tree.txt'
-        with urllib.request.urlopen(final_url,timeout=20) as response:remote=json.load(response)
+        with _canonical_open(final_url,timeout=20) as response:remote=json.load(response)
         verify_signed_final(remote,health,contract)
         if remote['sha256']!=final['sha256']:raise ValueError('JRA_DELIVERY_REMOTE_FINAL_MISMATCH')
-        with urllib.request.urlopen(tree_url,timeout=20) as response:remote_tree=response.read()
+        with _canonical_open(tree_url,timeout=20) as response:remote_tree=response.read()
         if remote_tree!=tree.encode():raise ValueError('JRA_DELIVERY_REMOTE_TREE_MISMATCH')
         observed=datetime.now(timezone.utc)
         receipt={'race_id':final['race_id'],'final_sha256':final['sha256'],
@@ -970,7 +988,7 @@ if __name__=='__main__':
         # Availability is not notification, destination arrival or user ACK.
         presentation_url=base+'/runtime/jra_delivery/'+final['race_id']+'/'
         for name in ('presentation.json','presentation_detail.json','presentation.md'):
-            with urllib.request.urlopen(presentation_url+name,timeout=20) as response:
+            with _canonical_open(presentation_url+name,timeout=20) as response:
                 remote_bytes=response.read()
             if remote_bytes!=(out/name).read_bytes():
                 raise ValueError('JRA_PRESENTATION_REMOTE_READBACK_MISMATCH:'+name)

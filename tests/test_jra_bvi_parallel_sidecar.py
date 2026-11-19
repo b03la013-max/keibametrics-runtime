@@ -249,6 +249,23 @@ def test_genuine_parent_final_required_before_canonical_entry(tmp_path,monkeypat
 REVIEWED_DELIVERY_PREFIX_SHA256='56e0fc7fad5deac4ea6dc58741dc1a2e7d769dccac9f97d5d8fdbc4da8d9269c'
 REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256='336f50e2f61c2c3cfafa66a204c3f533a58a5df06030309664ee4e98e4f52a38'
 REVIEWED_SOURCE_WAIT_SHA256='0898e6904eda9e41cc25f3c3b3325b4edcc9ab92e633eb32a7b561cd9c408c19'
+# Owner-approved (2026-11-15 19:50) pre-start Owner delivery, PR #422: two continue-on-error
+# steps and the issues: write permission. Reversed by exact bytes before the reviewed-prefix check.
+REVIEWED_OWNER_ISSUE_FINAL_STEP_SHA256='de5963723533dd8038493745338766f04725f8837d47524d45324b16551c7c79'
+REVIEWED_OWNER_ISSUE_NO_BET_STEP_SHA256='107ae8aa65f1df321232feeba67b70b1ae2e0eb2fcb8946755ec078c7caae7b9'
+
+
+def _reverse_owner_issue_delivery(prefix):
+    if '      - name: Deliver FINAL to the Owner' not in prefix:
+        return prefix
+    end_tag='jra_owner_issue_delivery.json\n'
+    a=prefix.index('\n      - name: Deliver FINAL to the Owner');b=prefix.index(end_tag,a)+len(end_tag)
+    c=prefix.index('      - name: Deliver NO-BET to the Owner');d=prefix.index(end_tag+'\n',c)+len(end_tag)+1
+    fin,nob=prefix[a:b],prefix[c:d]
+    assert hashlib.sha256(fin.encode()).hexdigest()==REVIEWED_OWNER_ISSUE_FINAL_STEP_SHA256
+    assert hashlib.sha256(nob.encode()).hexdigest()==REVIEWED_OWNER_ISSUE_NO_BET_STEP_SHA256
+    assert prefix.count('  issues: write\n')==1
+    return prefix.replace(fin,'',1).replace(nob,'',1).replace('  issues: write\n','',1)
 
 
 def _assert_production_prefix_boundary(workflow,original):
@@ -261,6 +278,7 @@ def _assert_production_prefix_boundary(workflow,original):
     marker='\n  pedigree-forward-shadow:'
     assert workflow.count(marker)==1
     prefix=workflow.split(marker)[0];baseline=original.split(marker)[0]
+    prefix=_reverse_owner_issue_delivery(prefix)
     if prefix==baseline:return
     wait_marker='      - name: Wait for canonical Signed SOURCE\n'
     bind_marker='      - name: Verify and bind Static to durable Signed SOURCE\n'
