@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-20（21:40時点）
+# 地方版 配送台帳 2026-11-20（00:00時点）
 
 - 管理Race 36／発走済み 0
-- PAPER：凍結 36・Push検証 29・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 36・Push検証 36・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -28,13 +28,13 @@
 | OHI_03 | 15:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_04 | 16:07 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_05 | 16:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| OHI_06 | 17:12 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_07 | 17:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_08 | 18:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_09 | 18:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_10 | 19:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_11 | 20:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| OHI_12 | 20:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| OHI_06 | 17:12 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_07 | 17:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_08 | 18:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_09 | 18:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_10 | 19:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_11 | 20:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| OHI_12 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_01 | 10:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_02 | 11:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_03 | 11:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
