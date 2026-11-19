@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-19（11:01時点）
+# 地方版 配送台帳 2026-11-19（11:10時点）
 
-- 管理Race 36／発走済み 3
-- PAPER：凍結 36・Push検証 36・送信 6（発走前 6）・読み戻し一致 6・本人確認 0
+- 管理Race 36／発走済み 4
+- PAPER：凍結 36・Push検証 35・送信 6（発走前 6）・読み戻し一致 6・本人確認 0
 - 正式：試行 6・Signed FINAL 6（NO-BET 0）・発走前送信 6・読み戻し一致 6・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -14,7 +14,7 @@
 | KSM_01 | 10:25 | POSTRESULT_DIAGNOSTIC | 09:43 | ○ | SIGNED_FINAL | 10:15 | ○ |  |
 | KSM_02 | 10:55 | PRESTART_PUSH_VERIFIED | 10:10 | ○ | SIGNED_FINAL | 10:45 | ○ |  |
 | KSM_03 | 11:25 | PRESTART_PUSH_VERIFIED | 10:40 | ○ | SIGNED_FINAL | 10:41 | ○ |  |
-| KSM_04 | 11:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_04 | 11:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KSM_05 | 12:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_06 | 13:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_07 | 13:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
