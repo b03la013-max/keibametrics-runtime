@@ -1,0 +1,40 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-20261120",
+  "registered_at": "2026-11-20T02:30:00+09:00",
+  "registered_by": "Claude (LOCAL C1 port; Owner instruction 2026-11-20 01:25)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-21",
+  "evidence_rule": {
+    "only_frozen_before_result": true,
+    "known_result_replay_never_counts": ["2026-11-14", "2026-11-15"],
+    "unit": "venue x surface (芝/ダ); no cross-venue carry-over",
+    "min_cell_races": 12,
+    "venue_rule": "promote needs >= 2 decisive venue x surface cells in the same direction and none opposite (runtime/analysis/jra_oos_strata.py venue_rule)",
+    "stages": [30, 100, 300],
+    "no_significance_claim_below": 100,
+    "always_report": ["W/P2/P3 capture with role widths", "ordered pair", "exact", "recommendation PFS", "PFS excluding the largest payout", "max single-race payout share", "bet coverage"]
+  },
+  "arms": [
+    {"id": "ZAI-V11-VS-V10", "tracker": "runtime/analysis/jra_zai_version_forward_oos.py", "kind": "PRODUCTION_CHAMPION_VS_SHADOW",
+     "metric": "paired top-3 mean rank (lower better)",
+     "keep_if": "at 100R the 95% CI upper bound <= +0.10 and venue_rule != CONSISTENT_DEGRADATION",
+     "revert_review_if": "at 100R CI lower bound > 0 (v1.1 worse) or venue_rule == CONSISTENT_DEGRADATION -> Owner review"},
+    {"id": "KEIBABOOK-PRODUCTION", "tracker": "runtime/analysis/jra_keibabook_forward_oos.py", "kind": "PRODUCTION_CHAMPION_VS_SHADOW",
+     "metric": "winner rank and top-3 capture with vs without Keibabook features",
+     "keep_if": "at 100R mean winner rank not worse by > 0.10 and venue_rule != CONSISTENT_DEGRADATION",
+     "revert_review_if": "at 100R mean winner rank worse by > 0.25 or CONSISTENT_DEGRADATION -> Owner review"},
+    {"id": "W_PLUS_STATIC2", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CANDIDATE",
+     "metric": "net profit change vs frozen Production tickets",
+     "promote_if": "at 300R net profit change > 0, PFS excl. max payout not lower, venue_rule == CONSISTENT_IMPROVEMENT",
+     "reject_if": "at 100R net profit change < 0 and PFS excl. max payout lower"},
+    {"id": "P2_KRS_HEAD_LOCAL", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CANDIDATE",
+     "metric": "net profit change; must beat P2_STATIC_NEXT_CONTROL to credit KRS",
+     "promote_if": "at 300R beats both baseline and P2_STATIC_NEXT_CONTROL on net profit and PFS excl. max payout, venue_rule == CONSISTENT_IMPROVEMENT",
+     "reject_if": "at 100R not better than P2_STATIC_NEXT_CONTROL"},
+    {"id": "P2_STATIC_NEXT_CONTROL", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CONTROL",
+     "metric": "net profit change", "promote_if": "control arm; promotion only by a separate Owner decision",
+     "reject_if": "n/a"}
+  ],
+  "owner_decisions_file_pattern": "profiles/KM_JRA_FORWARD_OOS_OWNER_DECISION_*.json",
+  "note": "Owner decision files override reporting for an arm (e.g. hold to 300R); trackers must read them before re-reporting."
+}

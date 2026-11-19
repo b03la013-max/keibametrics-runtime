@@ -131,7 +131,20 @@ def summary(root: Path) -> dict:
             "paired_top3_mean_rank_diff": sum(diff) / len(diff),
             "paired_diff_ci95": [bs[100], bs[3899]],
             "checkpoint": next((c for c in (300, 100, 30) if len(rows) >= c), "PRE_30"),
-            "note": "negative diff = v1.1 better; no significance claim below 100 races"}
+            "note": "negative diff = v1.1 better; no significance claim below 100 races",
+            **_strata_block(root, rows)}
+
+
+def _strata_block(root, rows):
+    try:
+        from jra_oos_strata import conditions, keys, split, venue_rule
+    except ImportError:
+        from runtime.analysis.jra_oos_strata import conditions, keys, split, venue_rule
+    for r in rows:
+        r["strata"] = keys(r["race_id"], conditions(root, r["race_id"]))
+    # positive effect = v1.1 better (lower top-3 mean rank)
+    sp = split(rows, lambda r: r["shadow_v1_0"]["top3_mean_rank"] - r["production_v1_1"]["top3_mean_rank"])
+    return {"strata": sp, "venue_rule": venue_rule(sp)}
 
 
 def main(argv=None):

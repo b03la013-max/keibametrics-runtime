@@ -12,6 +12,34 @@ def _roles(f, col):
     return [str(x['runner_id']) for x in f['role_registry'] if x['column'] == col and x['status'] != 'EXCLUDED']
 
 
+def delivered_failure(top3, W, P2, tickets, investment, payout):
+    """First material failure of the DELIVERED ticket set (LOCAL review.delivered_failure port):
+    W miss -> P2 miss -> no live ticket -> hit but loss -> NONE. PAPER / NO-BET are not failures."""
+    if not tickets:
+        return 'NO_BET_OR_PAPER'
+    if top3[0] not in W:
+        return 'PREDICTION_ROLE_W'
+    if top3[1] not in P2:
+        return 'PREDICTION_ROLE_P2'
+    if payout == 0:
+        return 'TICKET_SELECTION'
+    if payout < investment:
+        return 'CAPITAL_EFFICIENCY'
+    return 'NONE'
+
+
+def ticket_coverage(top3, tickets):
+    """Coverage of the settled ticket set itself (so flags describe the same object as the money)."""
+    w, s, t = (top3 + [None, None, None])[:3]
+    sel = [(x['bet_type'], [str(h) for h in x['selection']]) for x in tickets]
+    ex = {tuple(v[:2]) for b, v in sel if b == 'EXACTA'}
+    tri = {tuple(v[:3]) for b, v in sel if b == 'TRIFECTA'}
+    trio = {frozenset(v[:3]) for b, v in sel if b == 'TRIO'}
+    return {'ordered_pair': (w, s) in ex or any(v[:2] == (w, s) for v in tri),
+            'top3_set': frozenset((w, s, t)) in trio or (w, s, t) in tri,
+            'exact_order': (w, s, t) in tri}
+
+
 def classify(root: Path, date8: str) -> list:
     out = []
     for p in sorted(glob.glob(str(root / f'runtime/final_artifacts/KM-JRA-*-{date8}-R*.json'))):
@@ -43,7 +71,11 @@ def classify(root: Path, date8: str) -> list:
         pay = st.get('total_payout') or 0
         pl = st.get('profit_loss')
         inv = (pay - pl) if pl is not None else (st.get('total_investment') or 0)
-        out.append({'race_id': rid, 'top3': fo, 'static_rank_top3': [srank(h) for h in fo],
+        tickets = (f.get('final_ticket') or {}).get('tickets') or []
+        out.append({'race_id': rid,
+                    'delivered_failure': delivered_failure(fo, W, P2, tickets, inv, pay),
+                    'ticket_coverage': ticket_coverage(fo, tickets) if tickets else None,
+                    'role_width': {'field': len(rank), 'W': len(W), 'P2': len(P2), 'P3': len(P3)}, 'top3': fo, 'static_rank_top3': [srank(h) for h in fo],
                     'krs_ssrw_rank_winner': krank(w), 'W': W, 'P2': P2, 'P3': P3,
                     'W_static_ranks': [srank(h) for h in W], 'axis_rule': aki.get('axis_candidate_rule'),
                     'ASI': (aki.get('axes') or {}).get('ASI'), 'first_failure_stage': stage,

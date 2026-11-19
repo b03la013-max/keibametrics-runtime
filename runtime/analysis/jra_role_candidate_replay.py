@@ -16,7 +16,7 @@ import argparse, copy, glob, json, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / 'runtime'), str(ROOT / 'runtime/jra_source_runtime')]
+sys.path[:0] = [str(ROOT / 'runtime'), str(ROOT / 'runtime/jra_source_runtime'), str(ROOT / 'runtime/analysis')]
 from minimum_efficient_coverage import build_mec_plan  # noqa: E402
 from jra_production_postresult import settle_final  # noqa: E402
 
@@ -252,8 +252,18 @@ def evaluate_forward(root=ROOT):
         pay = sum((r.get(name) or r['baseline'])['payout'] for r in rows)
         agg[name] = {'races': len(rows), 'investment': inv, 'payout': pay,
                      'pfs': round(pay / inv * 100, 2) if inv else None}
+    from jra_oos_strata import conditions, keys, split, venue_rule
+    for r in rows:
+        r['strata'] = keys(r['race_id'], conditions(root, r['race_id']))
+    by_arm = {}
+    for name in CANDIDATES:
+        live = [r for r in rows if r.get(name)]
+        if live:  # effect = net profit change vs the frozen Production tickets (yen)
+            sp = split(live, lambda r, n=name: (r[n]['payout'] - r[n]['investment'])
+                       - (r['baseline']['payout'] - r['baseline']['investment']))
+            by_arm[name] = {'strata': sp, 'venue_rule': venue_rule(sp)}
     return {'classification': 'FORWARD_OOS (frozen before result)', 'note': 'no significance claim below 100 races',
-            'summary': agg}
+            'summary': agg, 'by_arm': by_arm}
 
 
 if __name__ == '__main__' and len(sys.argv) > 1 and sys.argv[1] in ('freeze', 'evaluate'):
