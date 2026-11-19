@@ -275,6 +275,12 @@ jobs:
                   declared=current.get("jra_owner_authorized_delta") or {}
                   delta=set(declared.get("keys") or [])
                   assert delta<=R45_ALLOWED_JRA_DELTA,sorted(delta-R45_ALLOWED_JRA_DELTA)
+                  # R52 Owner amendment (2026-11-14 BLOOD BIAS primary / TSL secondary, ZAI v1.1):
+                  # exactly these three JRA keys may differ, and only when the record is carried.
+                  amend=current.get("jra_owner_amendment_20261114") or {}
+                  if amend:
+                      assert amend.get("amendment_id")=="OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY"
+                      delta|={"external_band_inputs","zai_formula","tsl_authority"}
               if "aki_v21_activation" in delta:
                   # R50 is an explicit owner enactment, not automatic model promotion.
                   import hashlib
