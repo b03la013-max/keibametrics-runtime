@@ -28,3 +28,25 @@ def test_forward_freeze_only_before_post(tmp_path):
     assert body["production_effect"] == "NONE" and set(body["arms"]) == set(rc.CANDIDATES)
     # immutable: a second freeze does not overwrite
     assert rc.freeze_forward("20261115", root=root, now=post - dt.timedelta(minutes=10)) == []
+
+
+def test_market_ranking_uses_only_pre_cutoff_official_observation(tmp_path):
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    mk = rc.market_ranking(final)
+    assert mk and len(set(mk)) == len(mk)
+    rq = json.loads(Path(f"runtime/requests/{RID}-LIVE-R1-FORMAL.json").read_text())
+    rq["source_snapshot"]["jra_official_market_observation"]["captured_at"] = "2099-01-01T00:00:00+00:00"
+    (tmp_path / "runtime/requests").mkdir(parents=True)
+    (tmp_path / f"runtime/requests/{RID}-LIVE-R1-FORMAL.json").write_text(json.dumps(rq))
+    assert rc.market_ranking(final, root=tmp_path) is None  # observed after cutoff: never used
+
+
+def test_market_top3_adds_only_missing_favourites():
+    import copy
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    f = copy.deepcopy(final)
+    before = set(rc._live(f, "W"))
+    top3 = rc.market_ranking(final)[:3]
+    changed = rc.w_plus_market_top3(f)
+    assert set(rc._live(f, "W")) == before | set(top3)
+    assert changed == bool(set(top3) - before)
