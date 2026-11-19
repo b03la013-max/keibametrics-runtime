@@ -322,7 +322,7 @@
    "post_initial": "2026-11-19T15:02:00+09:00",
    "post_current": "2026-11-19T15:02:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "POSTRESULT_DIAGNOSTIC",
    "editions": [
     {
      "edition": "朝版",
@@ -813,7 +813,70 @@
      "USER_ACK_VERIFIED": false
     }
    },
-   "formal_effective": "rev2"
+   "formal_effective": "rev2",
+   "result_attempts": 1,
+   "settlement": {
+    "order": [
+     9,
+     4,
+     5,
+     11,
+     10,
+     1,
+     12,
+     2,
+     3,
+     7,
+     6,
+     8
+    ],
+    "invest": 1600,
+    "refund": 0,
+    "effective_invest": 1600,
+    "payout": 3960,
+    "win_hit": 1,
+    "top_in3": 1,
+    "top3_capture": 3,
+    "ordered_pair": 0,
+    "exact_triple": 0,
+    "settled_at": "2026-11-19T15:23:01.534706+09:00",
+    "revision": "OHI_02.r2",
+    "ticket_sha256": "8f90b4b14d6950319f5a53ca35d38df843f9e604fabe515be049270a503111ac",
+    "diagnosis": {
+     "winner_rank": 1,
+     "second_rank": 3,
+     "third_rank": 2,
+     "first_failure": "NONE"
+    }
+   },
+   "formal_result_attempts": 1,
+   "formal_settlement": {
+    "invest": 6000,
+    "refund": 0,
+    "effective_invest": 6000,
+    "payout": 3060,
+    "pfs": 51.0,
+    "win_hit": 0,
+    "diagnosis": {
+     "winner_rank": 2,
+     "second_rank": 3,
+     "third_rank": 1,
+     "first_failure": "W_WIDTH_OR_ROLE"
+    },
+    "signed_final_settlement": {
+     "invest": 15600,
+     "refund": 0,
+     "effective_invest": 15600,
+     "payout": 3060,
+     "pfs": 19.6
+    },
+    "result_receipt_sha256": "017f77b8cb9a87b5327e27b41c62dd5cdde15c35d214fb5f4764fa215ebd5a6a",
+    "result_receipt_verified": true,
+    "runtime_pfs": 19.615385,
+    "first_material_failure": "CAPITAL_EFFICIENCY",
+    "learning_state_id": "KM-LOCAL-OHI-20261119-R02-RKT-LEARNING-NEXT",
+    "learning_production_change_authorized": false
+   }
   },
   "OHI_03": {
    "venue_id": "OHI",
@@ -1003,7 +1066,7 @@
    "post_initial": "2026-11-19T16:07:00+09:00",
    "post_current": "2026-11-19T16:07:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "PREDICTION_COMPLETE",
    "editions": [
     {
      "edition": "朝版",
@@ -1051,13 +1114,60 @@
        "cpu": 0
       }
      }
+    },
+    {
+     "edition": "直前版",
+     "rev": "OHI_04.r2",
+     "source_sha256": "50672c53d59a53207d7df327c382b7812e63677c4013111c99b9a57d11c199d3",
+     "ticket_sha256": "654a30b62b556a966cef42d884ff3bf0d2e98ed1f3e1b146f14b0cc97defc5d8",
+     "source_fetched_at": "2026-11-19T15:22:00.703152+09:00",
+     "saved_at": "2026-11-19T15:22:01.457111+09:00",
+     "frozen_at": "2026-11-19T15:22:01.457111+09:00",
+     "revision": "取消・除外の変化を反映して再予測",
+     "delivery": {
+      "GENERATED": "2026-11-19T15:22:01.457111+09:00",
+      "FROZEN": "2026-11-19T15:22:01.457111+09:00",
+      "COMMITTED": null,
+      "PUSH_VERIFIED": null,
+      "LINK_AVAILABLE": null,
+      "USER_DELIVERY_SENT": "NOT_CONNECTED",
+      "USER_REACHED": "NOT_CONNECTED",
+      "USER_ACK_VERIFIED": "NOT_CONNECTED"
+     },
+     "before_cutoff": true,
+     "top": 14,
+     "quad": 3,
+     "aki_form": "1-2-4",
+     "sbo": {
+      "status": "USED",
+      "fetched_at": "2026-11-19T15:22:01.005563+09:00",
+      "sha256": "4094a0ae2901643fd47ded8cb3980edd034bbf22f4a495faecb1eaa18ca88b3c",
+      "coverage": 8,
+      "active": 13
+     },
+     "keibabook": {
+      "status": "USED",
+      "captured_at": "2026-11-19T00:17:31.431Z",
+      "sha256": "e2b0867082139039f2ff478c62ad00ca33c0ae7eb1a95b653744855e5dea0bfc",
+      "coverage": 14,
+      "signals": {
+       "cci": 14,
+       "tri": 14,
+       "tm": 14,
+       "pace": 9,
+       "rt": 0,
+       "cpu": 0
+      }
+     }
     }
    ],
    "attempts": 0,
    "last_error": null,
-   "source_fetched_at": "2026-11-18T21:39:46.679151+09:00",
-   "active_runners": 14,
-   "scratched": [],
+   "source_fetched_at": "2026-11-19T15:22:00.703152+09:00",
+   "active_runners": 13,
+   "scratched": [
+    "コードイレヴン"
+   ],
    "push_verified_at": "2026-11-18T12:41:49Z"
   },
   "OHI_05": {
@@ -10837,8 +10947,8 @@
   "plan_complete_at": "2026-11-18T21:03:10.554301+09:00",
   "first_tick_at": "2026-11-18T21:00:07.261344+09:00",
   "first_prediction_at": "2026-11-18T21:03:11.829111+09:00",
-  "requests": 107,
-  "wait_seconds": 3397.3269126415253,
+  "requests": 109,
+  "wait_seconds": 3457.2283816337585,
   "all_first_editions_at": "2026-11-18T21:54:12.614617+09:00",
   "rediscovered_at": "2026-11-19T06:04:16.179543+09:00"
  },
