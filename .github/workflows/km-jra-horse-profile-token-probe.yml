@@ -2,11 +2,9 @@ name: JRA Horse Profile Token Probe
 permissions:
   contents: write
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/km-jra-horse-profile-token-probe.yml"
+  # One-off diagnostic / probe: manual dispatch only (LOCAL A2 port, 2026-11-20).
   workflow_dispatch:
+
 jobs:
   probe:
     runs-on: ubuntu-latest

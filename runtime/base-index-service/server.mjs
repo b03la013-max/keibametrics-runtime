@@ -2,7 +2,10 @@ const MAP_URL="https://raw.githubusercontent.com/b03la013-max/keibametrics-runti
 const BASE=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"];
 const DERIVED=["DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"];
 let MAP=null;
-async function map(){if(MAP)return MAP;const r=await fetch(MAP_URL,{cache:"no-store"});if(!r.ok)throw new Error("MAP_FETCH_"+r.status);MAP=await r.json();return MAP;}
+// The repository is private since 2026-11: prefer the checked-out mapping (same file), raw URL as fallback.
+const MAP_LOCAL=new URL("../../mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",import.meta.url);
+async function map(){if(MAP)return MAP;try{const f=Bun.file(MAP_LOCAL);if(await f.exists()){MAP=await f.json();return MAP;}}catch(e){}
+const r=await fetch(MAP_URL,{cache:"no-store"});if(!r.ok)throw new Error("MAP_FETCH_"+r.status);MAP=await r.json();return MAP;}
 function js(b,s=200){return new Response(JSON.stringify(b),{status:s,headers:{"content-type":"application/json"}})}
 function prof(r){let n=r.career_starts;if(n==null)n=r.newcomer?0:4;n=Number(n);return n<=0?"NEWCOMER":n<=3?"LOW_CAREER":"ESTABLISHED"}
 function fs(name,f,m){const x=f?.[name];if(!x)return null;const cat=String(x.category||"").toUpperCase();if(!(cat in m.category_scale))throw new Error("BAD_CAT:"+name+":"+cat);if(!Array.isArray(x.evidence_refs)||!x.evidence_refs.length||!x.source_fact||!x.rule_id)throw new Error("BAD_FEATURE:"+name);return {score:Number(m.category_scale[cat]),cat,refs:x.evidence_refs.map(String),fact:String(x.source_fact),rule:String(x.rule_id)}}

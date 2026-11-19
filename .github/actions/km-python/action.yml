@@ -1,0 +1,26 @@
+name: KeibaMetrics Python (hosted or Owner Mac)
+description: >
+  On GitHub-hosted runners this is a no-op (ubuntu ships Python 3.12).
+  On the Owner's self-hosted Mac it selects Python >= 3.12 (3.9 changes float sums and breaks
+  replays), creates a venv, puts it first on PATH and points urllib at certifi's CA bundle.
+runs:
+  using: composite
+  steps:
+    - if: runner.environment == 'self-hosted'
+      shell: bash
+      run: |
+        set -euo pipefail
+        PYBIN=""
+        for c in python3.14 python3.13 python3.12 \
+                 /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 \
+                 /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
+                 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 /opt/homebrew/bin/python3 python3; do
+          if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)'; then
+            PYBIN="$c"; break
+          fi
+        done
+        [ -n "$PYBIN" ] || { echo "PYTHON_3_12_REQUIRED on the Mac (python.org or Homebrew)"; exit 1; }
+        "$PYBIN" -m venv "$RUNNER_TEMP/kmjra-venv"
+        echo "$RUNNER_TEMP/kmjra-venv/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/kmjra-venv/bin/python" -m pip install -q --disable-pip-version-check certifi
+        echo "SSL_CERT_FILE=$("$RUNNER_TEMP/kmjra-venv/bin/python" -m certifi)" >> "$GITHUB_ENV"

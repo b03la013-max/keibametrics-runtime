@@ -1,13 +1,12 @@
 name: JRA Kyoto R05 2026-10-17 Formal Intake Recovery
 run-name: Kyoto R05 rescue dispatch through authorized Resolver
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'runtime/jra_intake_recovery_requests/20261017-KYO-R05.json'
+  # One-off diagnostic / probe: manual dispatch only (LOCAL A2 port, 2026-11-20).
+  workflow_dispatch:
 permissions:
   contents: read
   actions: write
+
 jobs:
   authorized-resolver-dispatch:
     runs-on: ubuntu-latest

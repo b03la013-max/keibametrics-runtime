@@ -4,10 +4,8 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/km-jra-pdf-layout-diagnostic.yml"
+  # One-off diagnostic / probe: manual dispatch only (LOCAL A2 port, 2026-11-20).
+  workflow_dispatch:
 
 jobs:
   diag:

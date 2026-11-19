@@ -40,12 +40,14 @@ concurrency:
 
 jobs:
   autopilot:
-    runs-on: ubuntu-latest
+    # KM_JRA_RUNNER=mac routes the ~760 min/day loop to the Owner's self-hosted Mac (LOCAL A1 port).
+    runs-on: ${{ vars.KM_JRA_RUNNER == 'mac' && fromJSON('["self-hosted","km-jra"]') || 'ubuntu-latest' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+      - uses: ./.github/actions/km-python
       - name: Resolve existing start request date and mode
         id: start
         env:

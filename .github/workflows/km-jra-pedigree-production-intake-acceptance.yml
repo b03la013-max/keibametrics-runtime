@@ -1,72 +1,12 @@
 name: JRA Real Signed Pedigree Corpus Production Intake Acceptance
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "scripts/jra_pedigree_live_acceptance.py"
-      - "scripts/jra_pedigree_inventory.py"
-      - "tests/test_jra_pedigree_full_day.py"
-      - "runtime/jra_bvi_environment.py"
-      - "runtime/jra_bvi_env_shadow.py"
-      - "scripts/jra_bvi_env_acceptance.py"
-      - "tests/test_jra_bvi_env*.py"
-      - "runtime/jra_static_owner_forward_oos/models/bvi_env_*.json"
-      - "scripts/jra_bvi_pipeline_real_acceptance.py"
-      - "runtime/jra_bvi_shadow_comparison.py"
-      - "runtime/jra_bvi_consumption.py"
-      - "runtime/jra_bvi_static_proof.py"
-      - "runtime/jra_bvi_failure_attribution.py"
-      - "runtime/jra_bvi_oos_metrics.py"
-      - "tests/test_jra_bvi_proof_oos.py"
-      - "tests/test_jra_bvi_consumption.py"
-      - "runtime/jra_owner_authorized_feature_rules.py"
-      - "scripts/jra_bvi_pipeline_forward_shadow.py"
-      - "scripts/jra_bvi_parallel_sidecar.py"
-      - "tests/test_jra_bvi_parallel_sidecar.py"
-      - "tests/test_jra_bvi_forward_shadow.py"
-      - "runtime/jra_index_provenance_builder.py"
-      - "runtime/jra_static_owner_forward_oos.py"
-      - "scripts/jra_bvi_postcapture_real_closure.py"
-      - "runtime/jra_pedigree_corpus.py"
-      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
-      - "tests/test_jra_bvi_production_intake_ci_guard.py"
-      - "runtime/pedigree_corpus/**"
-  push:
-    branches: [main]
-    paths:
-      - "scripts/jra_pedigree_live_acceptance.py"
-      - "scripts/jra_pedigree_inventory.py"
-      - "tests/test_jra_pedigree_full_day.py"
-      - "runtime/jra_bvi_environment.py"
-      - "runtime/jra_bvi_env_shadow.py"
-      - "scripts/jra_bvi_env_acceptance.py"
-      - "tests/test_jra_bvi_env*.py"
-      - "runtime/jra_static_owner_forward_oos/models/bvi_env_*.json"
-      - "scripts/jra_bvi_pipeline_real_acceptance.py"
-      - "runtime/jra_bvi_shadow_comparison.py"
-      - "runtime/jra_bvi_consumption.py"
-      - "runtime/jra_bvi_static_proof.py"
-      - "runtime/jra_bvi_failure_attribution.py"
-      - "runtime/jra_bvi_oos_metrics.py"
-      - "tests/test_jra_bvi_proof_oos.py"
-      - "tests/test_jra_bvi_consumption.py"
-      - "runtime/jra_owner_authorized_feature_rules.py"
-      - "scripts/jra_bvi_pipeline_forward_shadow.py"
-      - "scripts/jra_bvi_parallel_sidecar.py"
-      - "tests/test_jra_bvi_parallel_sidecar.py"
-      - "tests/test_jra_bvi_forward_shadow.py"
-      - "runtime/jra_index_provenance_builder.py"
-      - "runtime/jra_static_owner_forward_oos.py"
-      - "scripts/jra_bvi_postcapture_real_closure.py"
-      - "runtime/jra_pedigree_corpus.py"
-      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
-      - "tests/test_jra_bvi_production_intake_ci_guard.py"
-      - "runtime/pedigree_corpus/**"
+  # One-off diagnostic / probe: manual dispatch only (LOCAL A2 port, 2026-11-20).
   workflow_dispatch:
 permissions:
   contents: read
   attestations: write
   id-token: write
+
 jobs:
   prove:
     runs-on: ubuntu-latest

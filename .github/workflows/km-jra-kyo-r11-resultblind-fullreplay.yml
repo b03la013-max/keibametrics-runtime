@@ -1,16 +1,14 @@
 name: Kyoto R11 result-blind candidate full-pipeline replay
 run-name: Kyoto R11 2026-10-12 result-blind FULL20 KRS5000 MEC PAPER
 on:
-  push:
-    branches: [main]
-    paths:
-      - "runtime/jra_resultblind_replay_requests/*.json"
+  # One-off diagnostic / probe: manual dispatch only (LOCAL A2 port, 2026-11-20).
   workflow_dispatch:
 permissions:
   contents: read
   id-token: write
   attestations: write
   artifact-metadata: write
+
 jobs:
   replay:
     runs-on: ubuntu-latest
