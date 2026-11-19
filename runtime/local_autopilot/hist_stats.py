@@ -30,6 +30,12 @@ Tables
                start's course (YouTube q50: 1400外⇔1600内 の取り違え。直線 386m / 286m). Course map = YouTube claim.
   T5_MON_COURSE  MON only: this start's course family (INNER 1500/1600, else OUTER; NAR 公式: 内回り 直線218m /
                外回り 330m) x the previous MON start's family (門別攻略条項 v1.0-MON 第4条・第5条 MIF-MON, q68).
+  T10_CRZ      venue x distance band x class x last-corner position (6=6+) -> 1st / 2nd / 3rd split
+               (佐賀 v1.2-SAG 第51条 CRZ-SAG・盛岡 v5.0-MOR: 1着・2着・3着の4角ゾーンはクラス／レース型で異なる, q57/q63)
+  T11_MPA      venue x distance band x the largest first-corner -> last-corner gain in the horse's previous 5 starts
+               (佐賀 第26条 MPA-SAG / 盛岡 MAI-MOR / 浦和 v1.7 第20条: 平均位置でなく最大進出履歴, q57/q63/q49)
+  T12_DIRECT   venue x distance x (has an earlier win at the same venue and distance?) x last-start finish band
+               (浦和 v1.7-URW-CANDIDATE 第26条 Direct Evidence vs Recent Reach Conflict / 佐賀 W1R-SAG, q49/q57)
 T6-T9 are YouTube-claim checks (2026-11-19 Drive reading, q39-q55): unverified claims, evidence only.
 Pre-race inputs only for the "candidate" / "change" definitions: a horse's earlier starts (strictly earlier date).
 Rates are never multiplied together; a horse's matching cells are listed side by side (no additive score).
@@ -98,6 +104,14 @@ def _f3(x):
 
 def last_corner_band(lc):
     return None if lc is None else '1-3' if lc <= 3 else '4-5' if lc <= 5 else '6+'
+
+
+def mpa_band(g):
+    return None if g is None else 'GAIN<=0' if g <= 0 else 'GAIN1-2' if g <= 2 else 'GAIN3-5' if g <= 5 else 'GAIN6+'
+
+
+def finish_band(f):
+    return None if not f else '1-3' if f <= 3 else '4-6' if f <= 6 else '7+'
 
 
 def class_code(cond):
@@ -248,6 +262,8 @@ def starts(races):
             early = [p['fc_ratio'] for p in prev[-5:] if p['fc_ratio'] is not None]
             fc = race['first_corner'].get(x['no'])
             lc = race['last_corner'].get(x['no'])
+            prior5 = [p for p in prev[-5:] if p.get('fc') and p.get('lc')]
+            gains = [p['fc'] - p['lc'] for p in prior5]
             row = {'race_id': race['race_id'], 'date': race['date'], 'venue': race['venue'], 'surface': race['surface'],
                    'distance': race['distance'], 'band': dist_band(race['distance']), 'going': going_class(race['going']),
                    'cls': class_code(race['cond']), 'field': field, 'fband': field_band(field), 'frame': x.get('frame'),
@@ -263,10 +279,14 @@ def starts(races):
                    'special': special_flag(race['venue'], race.get('cond')),
                    'prev_led': (last['fc'] == 1) if last and last.get('fc') else None,
                    'prev_dist': last['distance'] if last else None, 'prev_venue': last['venue'] if last else None,
-                   'days_since': (date.fromisoformat(race['date']) - date.fromisoformat(last['date'])).days if last else None}
+                   'days_since': (date.fromisoformat(race['date']) - date.fromisoformat(last['date'])).days if last else None,
+                   'mpa_gain': max(gains) if gains else None,
+                   'direct_win': (any(p['venue'] == race['venue'] and p['distance'] == race['distance'] and p.get('finish') == 1
+                                      for p in prev) if prev else None),
+                   'last_finish': last.get('finish') if last else None}
             out.append(row)
             hist[x.get('horse_key')].append({'date': race['date'], 'distance': race['distance'], 'venue': race['venue'],
-                                             'fc_ratio': row['fc_ratio'], 'fc': fc})
+                                             'fc_ratio': row['fc_ratio'], 'fc': fc, 'lc': lc, 'finish': x.get('finish')})
     return out
 
 
@@ -406,6 +426,13 @@ def build(races, source):
                                          'conditions': dict(zip(('venue', 'distance', 'special'), k)),
                                          'starts': n, 'led_again': hit, 'rate': round(hit / n, 4), 'ci95': wilson(hit, n),
                                          'small_sample': n < MIN_N})
+    # T10-T12: venue-canon checks from the 2026-11-19 Drive reading (佐賀 v1.2-SAG / 盛岡 v5.0-MOR / 浦和 v1.7 候補)
+    group('T10_CRZ', lambda r: (r['venue'], r['band'], r['cls'], None if r['lc'] is None else min(r['lc'], 6)),
+          ('venue', 'band', 'class', 'last_corner_pos(6=6+)'))
+    group('T11_MPA', lambda r: (r['venue'], r['band'], mpa_band(r['mpa_gain'])), ('venue', 'band', 'max_gain_prev5'))
+    group('T12_DIRECT', lambda r: None if r['direct_win'] is None else
+          (r['venue'], r['distance'], r['direct_win'], finish_band(r['last_finish'])),
+          ('venue', 'distance', 'same_venue_distance_win_before', 'last_finish'))
     group('T9_SPECIAL', lambda r: (r['venue'], r['special'], pop_band(r['pop'])), ('venue', 'special', 'pop'), with_exp=False)
     return {'profile': PROFILE, 'class': CLASS, 'source': source, 'period': per, 'races': len(by_race), 'starts': len(rows),
             'min_n': MIN_N, 'leakage_note': LEAK_NOTE, 'tables': dict(tables)}
@@ -467,7 +494,10 @@ def md(stats, top=20):
     for name, title in (('T3_GATE', '枠（A/E＝人気から見た期待3着内に対する実績）'), ('T5_DIST_CHANGE', '距離変更'),
                         ('T5_INTERVAL', '出走間隔'), ('T4_FRONT_FINISH', '4角位置→着順'),
                         ('T6_JOCKEY', '騎手×距離（YouTube主張の検証用・未検証）'),
-                        ('T7_LAST3F', '上がり最速×4角位置（YouTube主張の検証用・未検証）')):
+                        ('T7_LAST3F', '上がり最速×4角位置（YouTube主張の検証用・未検証）'),
+                        ('T10_CRZ', 'クラス×4角位置→着順（佐賀CRZ-SAG／盛岡の検証用）'),
+                        ('T11_MPA', '近5走の最大進出（1角→4角）（MPA-SAG／MAI-MORの検証用）'),
+                        ('T12_DIRECT', '同場同距離の勝利歴×前走着順（浦和v1.7候補 Direct Evidenceの検証用）')):
         cs = [c for c in stats['tables'].get(name, []) if not c['small_sample'] and c.get('ae_top3')]
         if not cs:
             continue

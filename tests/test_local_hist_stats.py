@@ -106,3 +106,18 @@ def test_mon_course_family():
     assert hs.mon_course(1700) == 'OUTER' and hs.mon_course(1200) == 'OUTER' and hs.mon_course(None) is None
     st = hs.build(races(), 'TEST')                 # fixture has no MON starts -> empty table, no crash
     assert st['tables'].get('T5_MON_COURSE', []) == []
+
+
+def test_crz_mpa_direct_tables():
+    st = hs.build(races(), 'TEST')
+    t = st['tables']
+    crz = {(c['conditions']['band'], c['conditions']['class'], c['conditions']['last_corner_pos(6=6+)']): c for c in t['T10_CRZ']}
+    assert crz[('S', 'C2', 1)]['n1'] == 1 and crz[('M', 'C2', 2)]['n2'] == 1 and crz[('M', 'C2', 4)]['n3'] == 1
+    mpa = t['T11_MPA']
+    assert [c['conditions']['max_gain_prev5'] for c in mpa] == ['GAIN<=0'] and mpa[0]['starts'] == 3
+    d = {(c['conditions']['same_venue_distance_win_before'], c['conditions']['last_finish']): c['starts'] for c in t['T12_DIRECT']}
+    assert d == {(False, '1-3'): 2, (False, '4-6'): 1}      # first starts (no history) are excluded
+    rows = hs.starts(races())
+    ao2 = [x for x in rows if x['date'] == '2026-10-15' and x['no'] == 1][0]
+    assert ao2['mpa_gain'] == 0 and ao2['last_finish'] == 1 and ao2['direct_win'] is False
+    assert hs.mpa_band(6) == 'GAIN6+' and hs.finish_band(7) == '7+' and hs.finish_band(None) is None
