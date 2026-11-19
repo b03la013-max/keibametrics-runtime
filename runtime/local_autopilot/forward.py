@@ -44,6 +44,18 @@ def robustness(rows):
         m = len(r) // 2
         med = round(r[m] if len(r) % 2 else (r[m - 1] + r[m]) / 2, 1)
     hits = [x for x in bet if x['pay'] > 0]
+    # leave-one-day-out (Accuracy & PFS Shadow R1 Rev.1 specs/06, Drive q266): PFS with each day removed
+    days = sorted({x['day'] for x in bet if x.get('day')})
+    lodo = {}
+    for d in days if len(days) > 1 else []:
+        e = sum(x['eff'] for x in bet if x.get('day') != d)
+        lodo[d] = round(100 * sum(x['pay'] for x in bet if x.get('day') != d) / e, 1) if e else None
+    full = round(100 * tot / eff, 1) if eff else None
+    vals = [v for v in lodo.values() if v is not None]
+    out['leave_one_day_out'] = {'days': len(days), 'min_pfs': min(vals) if vals else None,
+                                'max_pfs': max(vals) if vals else None,
+                                'most_dependent_day': min(lodo, key=lambda k: lodo[k] if lodo[k] is not None else 1e9) if vals else None,
+                                'crosses_100': bool(vals and full is not None and any((v >= 100) != (full >= 100) for v in vals))}
     out.update(max_loss_streak=best, median_race_pfs=med, bet_races=len(bet), hit_races=len(hits),
                any_hit_but_loss_rate=(round(sum(1 for x in hits if x['pay'] < x['eff']) / len(hits), 3) if hits else None),
                basis='Drive q191 KM Ticket Constructor Frozen OOS Protocol v0.1 sec.4 (guardrails; not a promotion rule)')

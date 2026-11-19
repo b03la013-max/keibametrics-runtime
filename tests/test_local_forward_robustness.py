@@ -16,3 +16,14 @@ def test_guardrails():
 def test_empty():
     o = robustness([])
     assert o['pfs_without_top1'] is None and o['median_race_pfs'] is None and o['any_hit_but_loss_rate'] is None
+
+
+def test_leave_one_day_out():
+    rows = [{'day': '2026-11-10', 'eff': 1000, 'pay': 5000},
+            {'day': '2026-11-11', 'eff': 1000, 'pay': 0},
+            {'day': '2026-11-12', 'eff': 1000, 'pay': 200}]
+    lo = robustness(rows)['leave_one_day_out']
+    assert lo['days'] == 3 and lo['min_pfs'] == 10.0 and lo['max_pfs'] == 260.0
+    assert lo['most_dependent_day'] == '2026-11-10' and lo['crosses_100'] is True
+    one = robustness([{'day': 'd', 'eff': 100, 'pay': 0}])['leave_one_day_out']
+    assert one['days'] == 1 and one['min_pfs'] is None and one['crosses_100'] is False
