@@ -1,7 +1,7 @@
 # 地方版 週次 2026-W47（自動・推薦試算・実購入なし）
 
-- 反省済みRace 117／PAPER PFS 63.1%／正式推薦 PFS 149.1%
-- 第一失敗：{'NONE': 14, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 19, 'PREDICTION_ROLE_W': 38, 'PREDICTION_ROLE_P2': 16, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 118／PAPER PFS 62.6%／正式推薦 PFS 147.5%
+- 第一失敗：{'NONE': 14, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 19, 'PREDICTION_ROLE_W': 39, 'PREDICTION_ROLE_P2': 16, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -9,16 +9,16 @@
 | KSM | 17 | 35.2 | 593.5 | {'PREDICTION_ROLE_W': 7, 'PREDICTION_ROLE_P2': 5, 'CAPITAL_EFFICIENCY': 2, 'NONE': 3} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 36 | 91.9 | 50.1 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 5, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 4, 'PREDICTION_ROLE_W': 14, 'CAPITAL_EFFICIENCY': 4, 'EXACT_ORIENTATION': 2} |
-| SON | 16 | 17.9 | 71.6 | {'PREDICTION_ROLE_W': 8, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 3, 'NONE': 1} |
+| SON | 17 | 17.0 | 67.4 | {'PREDICTION_ROLE_W': 9, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 3, 'NONE': 1} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 117 | 31.6% | 67.5% | 31.6% | 16.2% | 12.8% | 9.4% | 24.8% | 1.54 |
-| 正式推薦 | 86 | 32.6% | 55.8% | 55.8% | 68.6% | 100.0% | 55.8% | 22.1% | 1.24 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中33.3%（無作為10.2%、差+23.1）／P2 平均1.0頭 的中22.2%（無作為10.2%、差+12.0）／P3 平均1.0頭 的中0.0%（無作為10.2%、差-10.2）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中66.7%（無作為30.6%、差+36.0）／P2 平均6.0頭 的中33.3%（無作為61.3%、差-28.0）／P3 平均9.89頭 的中100.0%（無作為100.0%、差+0.0）
+| PAPER | 118 | 31.4% | 66.9% | 31.4% | 16.1% | 12.7% | 9.3% | 24.6% | 1.53 |
+| 正式推薦 | 87 | 32.2% | 55.2% | 55.2% | 69.0% | 100.0% | 55.2% | 21.8% | 1.23 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中30.0%（無作為10.0%、差+20.0）／P2 平均1.0頭 的中20.0%（無作為10.0%、差+10.0）／P3 平均1.0頭 的中0.0%（無作為10.0%、差-10.0）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中60.0%（無作為30.1%、差+29.9）／P2 平均6.0頭 的中40.0%（無作為60.2%、差-20.2）／P3 平均10.1頭 的中100.0%（無作為100.0%、差+0.0）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -26,19 +26,19 @@
 |---|---|---|---|---|
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 4 | 3,000 | RECURRING |
-| P1:ROLE_W_MISS | P1 | 55 | 248,500 | RECURRING |
+| P1:ROLE_W_MISS | P1 | 56 | 254,500 | RECURRING |
 | P1:HIT_BUT_LOSS | P1 | 28 | 108,750 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 25 | 108,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 117 | 451,350 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 118 | 457,350 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 2 | 12,000 | SINGLE_OR_FEW (過大評価しない) |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
 
 # 地方版 月次 2026-11（自動・推薦試算・実購入なし）
 
-- 反省済みRace 117／PAPER PFS 63.1%／正式推薦 PFS 149.1%
-- 第一失敗：{'NONE': 14, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 19, 'PREDICTION_ROLE_W': 38, 'PREDICTION_ROLE_P2': 16, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 118／PAPER PFS 62.6%／正式推薦 PFS 147.5%
+- 第一失敗：{'NONE': 14, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 19, 'PREDICTION_ROLE_W': 39, 'PREDICTION_ROLE_P2': 16, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -46,16 +46,16 @@
 | KSM | 17 | 35.2 | 593.5 | {'PREDICTION_ROLE_W': 7, 'PREDICTION_ROLE_P2': 5, 'CAPITAL_EFFICIENCY': 2, 'NONE': 3} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 36 | 91.9 | 50.1 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 5, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 4, 'PREDICTION_ROLE_W': 14, 'CAPITAL_EFFICIENCY': 4, 'EXACT_ORIENTATION': 2} |
-| SON | 16 | 17.9 | 71.6 | {'PREDICTION_ROLE_W': 8, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 3, 'NONE': 1} |
+| SON | 17 | 17.0 | 67.4 | {'PREDICTION_ROLE_W': 9, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 3, 'NONE': 1} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 117 | 31.6% | 67.5% | 31.6% | 16.2% | 12.8% | 9.4% | 24.8% | 1.54 |
-| 正式推薦 | 86 | 32.6% | 55.8% | 55.8% | 68.6% | 100.0% | 55.8% | 22.1% | 1.24 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中33.3%（無作為10.2%、差+23.1）／P2 平均1.0頭 的中22.2%（無作為10.2%、差+12.0）／P3 平均1.0頭 的中0.0%（無作為10.2%、差-10.2）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中66.7%（無作為30.6%、差+36.0）／P2 平均6.0頭 的中33.3%（無作為61.3%、差-28.0）／P3 平均9.89頭 的中100.0%（無作為100.0%、差+0.0）
+| PAPER | 118 | 31.4% | 66.9% | 31.4% | 16.1% | 12.7% | 9.3% | 24.6% | 1.53 |
+| 正式推薦 | 87 | 32.2% | 55.2% | 55.2% | 69.0% | 100.0% | 55.2% | 21.8% | 1.23 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中30.0%（無作為10.0%、差+20.0）／P2 平均1.0頭 的中20.0%（無作為10.0%、差+10.0）／P3 平均1.0頭 的中0.0%（無作為10.0%、差-10.0）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中60.0%（無作為30.1%、差+29.9）／P2 平均6.0頭 的中40.0%（無作為60.2%、差-20.2）／P3 平均10.1頭 的中100.0%（無作為100.0%、差+0.0）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -63,11 +63,11 @@
 |---|---|---|---|---|
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 4 | 3,000 | RECURRING |
-| P1:ROLE_W_MISS | P1 | 55 | 248,500 | RECURRING |
+| P1:ROLE_W_MISS | P1 | 56 | 254,500 | RECURRING |
 | P1:HIT_BUT_LOSS | P1 | 28 | 108,750 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 25 | 108,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 117 | 451,350 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 118 | 457,350 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 2 | 12,000 | SINGLE_OR_FEW (過大評価しない) |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
