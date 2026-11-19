@@ -19,6 +19,14 @@ Tables
   T4_FRONT     three separate denominators (11/19 proposal 3): pre-race front candidate -> took the lead group;
                took the lead group -> still there at the last corner; last-corner position -> 1st / 2nd / 3rd
   T5_CHANGE    distance change / venue change / days since last start, each vs the horse's previous start
+  T6_JOCKEY    venue x distance x jockey (Drive YouTube 競馬場シリーズ: 騎手×距離の勝率主張, e.g. FNB1200 御神本 31.4 %)
+  T7_LAST3F    venue x distance x (fastest 上がり3F in the race?) x last-corner band (1-3 / 4-5 / 6+)
+               (YouTube: KAW 4角6番手以下の上がり最速 12.9 % vs 2-3番手 69.9 %, KOC 7.5 % vs 84.4 %)
+  T8_LEAD_REPEAT  led at the first corner last start -> leads at the first corner again (YouTube: KAW 33.5 %,
+               KAW900 24.1 %, KOC 38.4 %, KOC Final 3割未満); denominator = horses whose previous start was a lead
+  T9_SPECIAL   venue x special-race flag (KOC 一発逆転ファイナルレース = 記者選抜) x popularity band
+               (YouTube: KOC Final 1番人気 勝率 23.6 % vs 通常 47.8 %)
+T6-T9 are YouTube-claim checks (2026-11-19 Drive reading, q39-q55): unverified claims, evidence only.
 Pre-race inputs only for the "candidate" / "change" definitions: a horse's earlier starts (strictly earlier date).
 Rates are never multiplied together; a horse's matching cells are listed side by side (no additive score).
 """
@@ -55,6 +63,23 @@ def field_band(n):
 
 def pop_band(p):
     return None if not p else str(p) if p <= 5 else '6-9' if p <= 9 else '10+'
+
+
+def special_flag(venue, cond):
+    s = str(cond or '')
+    if venue == 'KOC' and ('一発逆転' in s or '記者選抜' in s):
+        return 'KOC_FINAL'
+    return 'NORMAL'
+
+
+def _f3(x):
+    m = re.search(r'\d+(?:\.\d+)?', str(x or ''))
+    v = float(m[0]) if m else None
+    return v if v and 25 <= v <= 60 else None
+
+
+def last_corner_band(lc):
+    return None if lc is None else '1-3' if lc <= 3 else '4-5' if lc <= 5 else '6+'
 
 
 def class_code(cond):
@@ -195,6 +220,8 @@ def starts(races):
     out = []
     for race in sorted(races.values(), key=lambda r: (r['date'], r['venue'], r['race_no'] or 0)):
         field = race.get('field') or sum(1 for x in race['runners'] if x['status'] != 'SCRATCH')
+        f3s = [_f3(x.get('last3f')) for x in race['runners'] if x['status'] == 'RAN']
+        best3 = min([v for v in f3s if v], default=None)
         for x in race['runners']:
             if x['status'] == 'SCRATCH' or not x.get('no'):
                 continue
@@ -213,11 +240,15 @@ def starts(races):
                    'fc': fc, 'lc': lc, 'fc_ratio': (fc - 1) / max(1, field - 1) if fc else None,
                    'lc_ratio': (lc - 1) / max(1, field - 1) if lc else None,
                    'front_candidate': (sum(early) / len(early) <= 0.25) if len(early) >= 2 else None,
+                   'jockey': x.get('jockey') or None, 'last3f': _f3(x.get('last3f')),
+                   'fastest3f': (None if best3 is None or _f3(x.get('last3f')) is None else _f3(x.get('last3f')) == best3),
+                   'special': special_flag(race['venue'], race.get('cond')),
+                   'prev_led': (last['fc'] == 1) if last and last.get('fc') else None,
                    'prev_dist': last['distance'] if last else None, 'prev_venue': last['venue'] if last else None,
                    'days_since': (date.fromisoformat(race['date']) - date.fromisoformat(last['date'])).days if last else None}
             out.append(row)
             hist[x.get('horse_key')].append({'date': race['date'], 'distance': race['distance'], 'venue': race['venue'],
-                                             'fc_ratio': row['fc_ratio']})
+                                             'fc_ratio': row['fc_ratio'], 'fc': fc})
     return out
 
 
@@ -339,6 +370,21 @@ def build(races, source):
     group('T5_VENUE_CHANGE', lambda r: (r['venue'], None if not r['prev_venue'] else ('SAME' if r['prev_venue'] == r['venue'] else 'FROM_' + r['prev_venue'])),
           ('venue', 'previous_venue'))
     group('T5_INTERVAL', lambda r: (r['venue'], gap(r)), ('venue', 'days_since_last'))
+    # T6-T9: YouTube claim checks (unverified claims; evidence only)
+    group('T6_JOCKEY', lambda r: (r['venue'], r['distance'], r['jockey']), ('venue', 'distance', 'jockey'))
+    group('T7_LAST3F', lambda r: (r['venue'], r['distance'], r['fastest3f'], last_corner_band(r['lc'])),
+          ('venue', 'distance', 'fastest_last3f', 'last_corner_band'))
+    g = defaultdict(lambda: [0, 0])
+    for r in rows:
+        if r['prev_led'] and r['fc'] is not None:
+            g[(r['venue'], r['distance'], r['special'])][0] += 1
+            g[(r['venue'], r['distance'], r['special'])][1] += r['fc'] == 1
+    for k, (n, hit) in sorted(g.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
+        tables['T8_LEAD_REPEAT'].append({'table': 'T8_LEAD_REPEAT', 'source': source, 'period': per,
+                                         'conditions': dict(zip(('venue', 'distance', 'special'), k)),
+                                         'starts': n, 'led_again': hit, 'rate': round(hit / n, 4), 'ci95': wilson(hit, n),
+                                         'small_sample': n < MIN_N})
+    group('T9_SPECIAL', lambda r: (r['venue'], r['special'], pop_band(r['pop'])), ('venue', 'special', 'pop'), with_exp=False)
     return {'profile': PROFILE, 'class': CLASS, 'source': source, 'period': per, 'races': len(by_race), 'starts': len(rows),
             'min_n': MIN_N, 'leakage_note': LEAK_NOTE, 'tables': dict(tables)}
 
@@ -397,7 +443,9 @@ def md(stats, top=20):
             L.append(f"| {k['venue']} | {k['band']} | {k['pop']} | {c['starts']}{'※' if c['small_sample'] else ''} | {c['n1']} | {c['n2']} | {c['n3']} | "
                      f"{c['top3']:.1%} ({ci[0]:.0%}–{ci[1]:.0%}) | {c['roi_win']:.0%} | {c['roi_place']:.0%} |")
     for name, title in (('T3_GATE', '枠（A/E＝人気から見た期待3着内に対する実績）'), ('T5_DIST_CHANGE', '距離変更'),
-                        ('T5_INTERVAL', '出走間隔'), ('T4_FRONT_FINISH', '4角位置→着順')):
+                        ('T5_INTERVAL', '出走間隔'), ('T4_FRONT_FINISH', '4角位置→着順'),
+                        ('T6_JOCKEY', '騎手×距離（YouTube主張の検証用・未検証）'),
+                        ('T7_LAST3F', '上がり最速×4角位置（YouTube主張の検証用・未検証）')):
         cs = [c for c in stats['tables'].get(name, []) if not c['small_sample'] and c.get('ae_top3')]
         if not cs:
             continue

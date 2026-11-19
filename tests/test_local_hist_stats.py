@@ -67,3 +67,28 @@ def test_bh_and_time_split():
     assert q[0] < q[1] or q[0] < 0.05
     a, b = hs.time_split(races(), '2026-10-10')
     assert list(a) == ['OHI_20261001_R01'] and list(b) == ['OHI_20261015_R01']
+
+
+def test_youtube_claim_tables_jockey_last3f_lead_repeat_special():
+    rl = ('競馬場,競走年月日,レース番号,芝ダート区分,距離,天候,馬場,頭数,条件,コーナー通過順1,コーナー通過順2\n'
+          '高知,2026/10/01,12,ダ,1300,晴,重,3,一発逆転ファイナルレース,"1,2,3","1,2,3"\n'
+          '高知,2026/10/08,12,ダ,1300,晴,良,3,C3,"2,1,3","3,1,2"\n')
+    hl = ('競馬場,競走年月日,レース番号,枠番,馬番,馬名,性,齢,生年月日,父馬名,母父馬名,騎手名,馬体重,馬体重増減,着順,タイム,人気,上がり3F\n'
+          '高知,2026/10/01,12,1,1,アオ,牡,3,2023/03/01,父A,母父A,宮川,450,0,1,1:23.5,2,40.1\n'
+          '高知,2026/10/01,12,2,2,アカ,牝,3,2023/04/01,父B,母父B,永森,440,2,2,1:23.8,1,39.8\n'
+          '高知,2026/10/01,12,3,3,キイ,牡,4,2022/05/01,父A,母父C,赤岡,460,-2,3,1:24.0,3,40.5\n'
+          '高知,2026/10/08,12,1,1,アオ,牡,3,2023/03/01,父A,母父A,宮川,452,2,2,1:23.0,1,39.9\n'
+          '高知,2026/10/08,12,2,2,アカ,牝,3,2023/04/01,父B,母父B,永森,440,0,1,1:22.9,2,39.5\n'
+          '高知,2026/10/08,12,3,3,キイ,牡,4,2022/05/01,父A,母父C,赤岡,460,0,3,1:23.5,3,40.0\n')
+    pb = '競馬場,競走年月日,レース番号,単勝組番,単勝払戻金（円）\n高知,2026/10/01,12,1,420\n高知,2026/10/08,12,2,330\n'
+    st = hs.build(hs.from_nar_csv(rl, hl, pb), 'TEST')
+    t = st['tables']
+    j = [c for c in t['T6_JOCKEY'] if c['conditions']['jockey'] == '宮川'][0]
+    assert (j['starts'], j['n1']) == (2, 1)
+    f = [c for c in t['T7_LAST3F'] if c['conditions']['fastest_last3f'] is True]
+    assert sum(c['starts'] for c in f) == 2 and all(c['conditions']['last_corner_band'] == '1-3' for c in f)
+    lr = t['T8_LEAD_REPEAT']                       # アオ led 10/01, did not lead 10/08
+    assert len(lr) == 1 and (lr[0]['starts'], lr[0]['led_again']) == (1, 0) and lr[0]['conditions']['special'] == 'NORMAL'
+    sp = {c['conditions']['special'] for c in t['T9_SPECIAL']}
+    assert sp == {'KOC_FINAL', 'NORMAL'}
+    assert hs.special_flag('OHI', '一発逆転') == 'NORMAL' and hs._f3('99.9') is None
