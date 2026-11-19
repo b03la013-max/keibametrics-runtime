@@ -99,3 +99,10 @@ def test_ohi_course_change_table():
     c = st['tables']['T5_OHI_COURSE']
     assert c and all(x['conditions'] == {'venue': 'OHI', 'course': 'OUTER', 'previous_course': 'OUTER'} for x in c)
     assert hs.ohi_course(1600) == 'INNER' and hs.ohi_course(1650) == 'LEFT' and hs.ohi_course(None) is None
+
+
+def test_mon_course_family():
+    assert hs.mon_course(1600) == 'INNER' and hs.mon_course(1500) == 'INNER'
+    assert hs.mon_course(1700) == 'OUTER' and hs.mon_course(1200) == 'OUTER' and hs.mon_course(None) is None
+    st = hs.build(races(), 'TEST')                 # fixture has no MON starts -> empty table, no crash
+    assert st['tables'].get('T5_MON_COURSE', []) == []
