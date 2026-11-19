@@ -121,3 +121,31 @@ def test_crz_mpa_direct_tables():
     ao2 = [x for x in rows if x['date'] == '2026-10-15' and x['no'] == 1][0]
     assert ao2['mpa_gain'] == 0 and ao2['last_finish'] == 1 and ao2['direct_win'] is False
     assert hs.mpa_band(6) == 'GAIN6+' and hs.finish_band(7) == '7+' and hs.finish_band(None) is None
+
+
+def test_pop_going_order_shuffle_and_returnee_tables():
+    import copy
+    st = hs.build(races(), 'TEST')
+    t = st['tables']
+    g = {(c['conditions']['going'], c['conditions']['pop']) for c in t['T13_POP_GOING']}
+    assert {c['conditions']['going'] for c in t['T13_POP_GOING']} == {'良', '重'} or len(g) >= 2
+    sh = t['T14_ORDER_SHUFFLE']
+    assert sum(c['races'] for c in sh) == 2 and sum(c['top3_all_pop123'] for c in sh) == 2
+    assert sum(c['order_not_popularity_given_pop123'] for c in sh) == 1     # 10/15: pop3 -> pop1 -> pop2
+    assert sum(c['pop1_win_given_pop123'] for c in sh) == 1
+    # 出戻り: OHI -> KSM -> OHI is RETURN; OHI -> KSM is NEW_MOVE; 南関 rotation is SAME
+    r = races()
+    a, b = r['OHI_20261001_R01'], r['OHI_20261015_R01']
+    k = copy.deepcopy(a)
+    k.update(race_id='KAW_20261008_R01', date='2026-10-08', venue='KAW')
+    rows = hs.starts({'a': a, 'k': k, 'b': b})
+    mv = {(x['venue'], x['date']): x['move'] for x in rows if x['no'] == 1}
+    assert mv[('OHI', '2026-10-01')] is None
+    k2 = copy.deepcopy(k)
+    k2.update(venue='KSM', race_id='KSM_20261008_R01')
+    rows = hs.starts({'a': a, 'k': k2, 'b': b})
+    mv = {(x['venue'], x['date']): x['move'] for x in rows if x['no'] == 1}
+    assert mv[('KSM', '2026-10-08')] == 'NEW_MOVE' and mv[('OHI', '2026-10-15')] == 'RETURN'
+    assert {c['conditions']['move'] for c in hs.build({'a': a, 'k': k2, 'b': b}, 'T')['tables']['T15_RETURNEE']} == {'NEW_MOVE', 'RETURN'}
+    # 南関 rotation (OHI -> KAW -> OHI) is the same circuit, not a move
+    assert {x['move'] for x in hs.starts({'a': a, 'k': k, 'b': b}) if x['no'] == 1} == {None, 'SAME'}

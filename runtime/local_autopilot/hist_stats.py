@@ -258,6 +258,14 @@ def from_rakuten_backfill(rec):
 
 
 # ------------------------------------------------------------------ per-start rows with pre-race history features
+CIRCUIT = {'OHI': 'NANKAN', 'FNB': 'NANKAN', 'KAW': 'NANKAN', 'URW': 'NANKAN', 'MIZ': 'IWATE', 'MOR': 'IWATE',
+           'SON': 'HYOGO', 'HMJ': 'HYOGO'}
+
+
+def _circ(v):
+    return CIRCUIT.get(v, v)
+
+
 def starts(races):
     """Flatten to one row per start of a horse that ran; attach pre-race features from the horse's earlier starts."""
     hist = defaultdict(list)
@@ -295,7 +303,13 @@ def starts(races):
                    'mpa_gain': max(gains) if gains else None,
                    'direct_win': (any(p['venue'] == race['venue'] and p['distance'] == race['distance'] and p.get('finish') == 1
                                       for p in prev) if prev else None),
-                   'last_finish': last.get('finish') if last else None}
+                   'last_finish': last.get('finish') if last else None,
+                   # 出戻り (YouTube ゆっくり解説「見逃してるぜ？その穴馬」パターン1): came from another venue AND had run
+                   # here before that move. NEW_MOVE = from another venue, never ran here before. SAME = last start here.
+                   # Venues that share horses on a rotation (南関4場 / 岩手 / 兵庫) count as one circuit, so a
+                   # rotation start is SAME, not a move.
+                   'move': (None if not last else 'SAME' if _circ(last['venue']) == _circ(race['venue']) else
+                            'RETURN' if any(_circ(p['venue']) == _circ(race['venue']) for p in prev[:-1]) else 'NEW_MOVE')}
             out.append(row)
             hist[x.get('horse_key')].append({'date': race['date'], 'distance': race['distance'], 'venue': race['venue'],
                                              'fc_ratio': row['fc_ratio'], 'fc': fc, 'lc': lc, 'finish': x.get('finish')})
@@ -446,6 +460,35 @@ def build(races, source):
           (r['venue'], r['distance'], r['direct_win'], finish_band(r['last_finish'])),
           ('venue', 'distance', 'same_venue_distance_win_before', 'last_finish'))
     group('T9_SPECIAL', lambda r: (r['venue'], r['special'], pop_band(r['pop'])), ('venue', 'special', 'pop'), with_exp=False)
+    # T13-T15: claim checks from the Owner-added YouTube transcripts (2026-11-19, ゆっくり解説 地方各場シリーズ). Evidence only.
+    # T13 名古屋「重・不良の日は荒れる」/ 高知「乾くほど荒れる」: popularity band x going, per venue.
+    group('T13_POP_GOING', lambda r: (r['venue'], r['going'], pop_band(r['pop'])), ('venue', 'going', 'pop'), with_exp=False)
+    # T14 名古屋/金沢「連複は堅いが連単が跳ねる（着順荒れ）」: race level. Among races whose top-3 finishers were all
+    # popularity 1-3, how often was the order not the popularity order, and how often did popularity 1 win.
+    g = defaultdict(lambda: [0, 0, 0, 0, 0])
+    for rid, rs in by_race.items():
+        top = sorted((x for x in rs if x['finish'] in (1, 2, 3)), key=lambda x: x['finish'])
+        if len(top) != 3 or any(not x['pop'] for x in top):
+            continue
+        k = (rs[0]['venue'], rs[0]['band'])
+        g[k][0] += 1
+        if {x['pop'] for x in top} == {1, 2, 3}:
+            g[k][1] += 1
+            g[k][2] += [x['pop'] for x in top] != [1, 2, 3]
+            g[k][3] += top[0]['pop'] == 1
+        g[k][4] += top[0]['pop'] == 1
+    for k, (n, fav3, shuf, fav_win_in, fav_win) in sorted(g.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
+        tables['T14_ORDER_SHUFFLE'].append({
+            'table': 'T14_ORDER_SHUFFLE', 'unit': 'race', 'source': source, 'period': per,
+            'conditions': dict(zip(('venue', 'band'), k)), 'races': n,
+            'top3_all_pop123': fav3, 'top3_all_pop123_rate': round(fav3 / n, 4) if n else None,
+            'order_not_popularity_given_pop123': shuf,
+            'order_shuffle_rate': round(shuf / fav3, 4) if fav3 else None,
+            'order_shuffle_ci95': wilson(shuf, fav3), 'pop1_win_given_pop123': fav_win_in,
+            'pop1_win_rate': round(fav_win / n, 4) if n else None, 'small_sample': fav3 < MIN_N})
+    # T15 出戻り馬: previous start at another venue, and whether the horse had run at this venue before that move.
+    group('T15_RETURNEE', lambda r: None if r['move'] is None else (r['venue'], r['move'], finish_band(r['last_finish'])),
+          ('venue', 'move', 'last_finish'))
     return {'profile': PROFILE, 'class': CLASS, 'source': source, 'period': per, 'races': len(by_race), 'starts': len(rows),
             'min_n': MIN_N, 'leakage_note': LEAK_NOTE, 'tables': dict(tables)}
 
