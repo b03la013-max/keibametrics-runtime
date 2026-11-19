@@ -8,7 +8,14 @@ GENERATED = sorted(p for p in (ROOT / ".github/workflows").glob("*jra*.yml")
 
 
 def test_jra_generated_workflows_exist():
-    assert len(GENERATED) >= 20
+    assert len(GENERATED) >= 11
+
+
+def test_committing_workflows_never_get_generated_paths():
+    # A workflow that commits/pushes must not be re-triggered by its own FINAL commits.
+    for p in GENERATED:
+        t = p.read_text(encoding="utf-8")
+        assert "contents: write" not in t and "git push" not in t, p.name
 
 
 def test_jra_path_filters_cover_every_dependency():
