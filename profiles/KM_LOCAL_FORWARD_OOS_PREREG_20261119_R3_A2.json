@@ -1,0 +1,12 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261119-R3-AMENDMENT-A2",
+ "amends": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R3 (file unchanged; A1 still applies)",
+ "recorded_at": "2026-11-19T19:20:00+09:00",
+ "owner_decision": "2026-11-19 18:54 JST「計算し直して含めてください」",
+ "candidate": "C7-KAMETANI-BUY-MATCH",
+ "defect": "From the first 2026-11-19 revision every prediction.kametani was {status: ERROR, KeyError 'rules'}: nankan() filled the shared module cache first so _load() skipped the v2 rules (introduced 9ec738db, fixed 68728e33).",
+ "fix": "For revisions whose kametani status is ERROR, the v2 matcher is rerun by runtime/local_autopilot/kametani_recalc.py from frozen pre-race inputs only: the revision's race_cond / ranking (frame, odds -> popularity) / prior_runs, the original formal full29 sire and damsire, and sex/age from a Keibabook 出馬表 capture taken before the first post. Output: output/<day>/kametani_recalc/<revision>.json with input sha256s, rules sha, code version, recomputed_at, class RECOMPUTED_FROM_FROZEN_PRE_RACE_INPUTS.",
+ "evaluation_rule": "C7 uses the recomputed record only where the signed revision's kametani is ERROR; signed revision files are not modified. The matcher has no outcome input. Stages and decision rule unchanged.",
+ "disclosure": "Recomputation happened after the races; the inputs and rules were fixed before them. Reports show how many C7 races come from recomputed records.",
+ "production_change": "NONE"
+}

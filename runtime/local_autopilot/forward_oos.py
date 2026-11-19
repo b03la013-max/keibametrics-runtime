@@ -208,6 +208,7 @@ def evaluate_r3(root, p3):
     fv = p3['frozen_values']
     kb_buy, kb_ctl, g_hi, g_lo, ll = [], [], [], [], {'market': [], 'model': [], 'combined': []}
     hv = {'plain': [], 'discount': []}
+    recalc_races = set()
     for x in sm.load(root):
         if (_post(root, x['day'], x['key']) or start.replace(year=1900)) < start:
             continue
@@ -215,6 +216,11 @@ def evaluate_r3(root, p3):
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
         ranking = pred.get('ranking') or []
         kg = pred.get('kametani') or {}
+        if kg.get('status') == 'ERROR':        # 2026-11-19 cache bug: recomputed from frozen pre-race inputs (amendment A2)
+            from runtime.local_autopilot import kametani_recalc
+            kg = kametani_recalc.load(Path(root) / x['day'], res.get('revision') or '') or {}
+            if kg:
+                recalc_races.add(x['key'] + '@' + x['day'])
         if not str(kg.get('profile', '')).startswith('KM-LOCAL-KAMETANI-PEDIGREE-EVIDENCE-v2'):
             kg = {}                  # v1 (split at '／', OR) mis-classified scenes: excluded from C7 (amendment A1)
         for no, ev in (kg.get('by_horse') or {}).items():
@@ -246,7 +252,8 @@ def evaluate_r3(root, p3):
     hi, lo = sm._rolesum(g_hi), sm._rolesum(g_lo)
     return {
         'C7-KAMETANI-BUY-MATCH': {'buy_match': b, 'control': c, 'stage': _stage(len([v for v in kb_buy if v]), p3['stages']),
-                                  'top3_diff': round(b['top3_rate'] - c['top3_rate'], 1) if b and c else None},
+                                  'top3_diff': round(b['top3_rate'] - c['top3_rate'], 1) if b and c else None,
+                                  'races_from_recomputed_records_A2': len(recalc_races)},
         'C8-ODDS-GAP-FAVORITE': {'gap12_hi': hi, 'gap12_lo': lo, 'stage': _stage(len([v for v in g_hi + g_lo if v]), p3['stages']),
                                  'fav_win_diff': round(hi['win_rate'] - lo['win_rate'], 1) if hi and lo else None},
         'C9-BENTER-COMBINATION': {'races': len(ll['market']), 'stage': _stage(len(ll['market']), p3['stages']),
@@ -309,7 +316,8 @@ def _md_r3(c):
     g = lambda d, k: (d or {}).get(k)
     c7, c8, c9, c10 = (c[k] for k in ('C7-KAMETANI-BUY-MATCH', 'C8-ODDS-GAP-FAVORITE', 'C9-BENTER-COMBINATION', 'C10-HARVILLE-DISCOUNT'))
     return [f"- C7 亀谷 買い条件該当：{c7['stage']}／3着内率 該当 {g(c7['buy_match'], 'top3_rate')}%（{g(c7['buy_match'], 'races')}頭）"
-            f" 対 非該当 {g(c7['control'], 'top3_rate')}%／複勝回収 {g(c7['buy_match'], 'place_pfs')}%",
+            f" 対 非該当 {g(c7['control'], 'top3_rate')}%／複勝回収 {g(c7['buy_match'], 'place_pfs')}%"
+            f"（うち {c7.get('races_from_recomputed_records_A2', 0)}R は11/19不具合分を凍結入力から再計算：修正A2）",
             f"- C8 オッズ断層（2番人気/1番人気 ≥ 2.5）：{c8['stage']}／1番人気勝率 断層あり {g(c8['gap12_hi'], 'win_rate')}%"
             f" 対 なし {g(c8['gap12_lo'], 'win_rate')}%",
             f"- C9 Benter結合：{c9['stage']}／勝ち馬対数損失 市場 {c9['logloss_market']}・モデル {c9['logloss_model']}・結合 {c9['logloss_combined']}",
