@@ -57,7 +57,9 @@ def cap_eval(sm, res, full29=None):
             'invest_full': a['invest'], 'invest_capped': b['invest'], 'invest_saved': a['invest'] - b['invest'],
             'payout_full': a['payout'], 'payout_capped': b['payout'],
             'hits_lost': sorted(set(a['hits']) - set(b['hits'])),
-            'loss_avoided': max(0, (a['invest'] - a['payout']) - (b['invest'] - b['payout'])),
+            'loss_avoided': max(0, (a['invest'] - a['payout']) - (b['invest'] - b['payout'])),   # clipped at 0 per race
+            'payout_lost': a['payout'] - b['payout'],
+            'net_change': (b['payout'] - b['invest']) - (a['payout'] - a['invest']),           # signed: capped minus full MEC
             'pfs_full': a['pfs'], 'pfs_capped': b['pfs']}
 
 
@@ -167,7 +169,10 @@ def evaluate_day(day_dir):
                          'payout_full': s('payout_full'), 'payout_capped': s('payout_capped'),
                          'pfs_full': round(100 * s('payout_full') / s('invest_full'), 1) if s('invest_full') else None,
                          'pfs_capped': round(100 * s('payout_capped') / s('invest_capped'), 1) if s('invest_capped') else None,
-                         'races_with_lost_hits': sum(1 for x in c if x['hits_lost']), 'loss_avoided': s('loss_avoided')}
+                         'races_with_lost_hits': sum(1 for x in c if x['hits_lost']), 'loss_avoided': s('loss_avoided'),
+                         'invest_saved': s('invest_saved'), 'payout_lost': sum(x['payout_full'] - x['payout_capped'] for x in c),
+                         'net_change': sum((x['payout_capped'] - x['invest_capped']) - (x['payout_full'] - x['invest_full']) for x in c),
+                         'races_worse_after_cap': sum(1 for x in c if (x['payout_capped'] - x['invest_capped']) < (x['payout_full'] - x['invest_full']))}
     if rows:
         sm_ = {}
         for c in [f'C{n:02d}' for n in SMALL]:
@@ -203,7 +208,9 @@ def md(o):
             m = a[mode]
             L.append(f"- {label} {m['races']}R：全MEC {m['invest_full']:,}円→{m['payout_full']:,}円（{m['pfs_full']}%）／"
                      f"上限後 {m['invest_capped']:,}円→{m['payout_capped']:,}円（{m['pfs_capped']}%）／"
-                     f"的中を失ったRace {m['races_with_lost_hits']}／回避損失 {m['loss_avoided']:,}円")
+                     f"的中を失ったRace {m['races_with_lost_hits']}／純損益差（上限後−全MEC）{m.get('net_change', 0):+,}円"
+                     f"＝投資削減 {m.get('invest_saved', 0):,}円−失った払戻 {m.get('payout_lost', 0):,}円"
+                     f"（上限で悪化 {m.get('races_worse_after_cap', 0)}R。旧『回避損失』{m['loss_avoided']:,}円は改善Raceだけの合計）")
     sc = a.get('small_point_comparison')
     if sc:
         L += ['', '## 少点数Candidate比較（研究・同一予測/KRS/MEC、選択順はR54上限と同じ、100円均等）', '',
