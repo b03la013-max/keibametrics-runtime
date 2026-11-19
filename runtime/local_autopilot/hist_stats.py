@@ -544,15 +544,18 @@ def load_sources(root):
         if rl and hl and pb:
             races.update(from_nar_csv(rl[0].read_bytes(), hl[0].read_bytes(), pb[0].read_bytes()))
             src.append('NAR_OFFICIAL_CSV:' + m.name)
+    nar = sorted(x.split(':')[1] for x in src if x.startswith('NAR_OFFICIAL_CSV:'))
+    src = [x for x in src if not x.startswith('NAR_OFFICIAL_CSV:')] + (
+        [f'NAR_OFFICIAL_CSV:{nar[0]}-{nar[-1]} ({len(nar)} months)'] if nar else [])
     return races, '+'.join(src) or 'NONE'
 
 
-def write(root):
+def write(root, name='hist_stats'):
     from pathlib import Path
     races, src = load_sources(root)
     if not races:
         return None
     st = build(races, src)
-    dump(st, Path(root) / 'hist_stats.json')
-    Path(root, 'hist_stats.md').write_text(md(st))
+    dump(st, Path(root) / f'{name}.json')
+    Path(root, f'{name}.md').write_text(md(st))
     return st

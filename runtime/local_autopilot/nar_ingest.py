@@ -15,7 +15,7 @@ from pathlib import Path
 from runtime.local_autopilot import hist_stats
 
 
-def ingest(out_root, zips):
+def ingest(out_root, zips, name='hist_stats'):
     out_root = Path(out_root)
     done = []
     for z in zips:
@@ -42,7 +42,7 @@ def ingest(out_root, zips):
                'ingested_at': datetime.now(timezone(timedelta(hours=9))).isoformat(), 'class': hist_stats.CLASS}
         (dest / 'manifest.json').write_text(json.dumps(man, ensure_ascii=False, indent=1) + '\n')
         done.append(ym)
-    st = hist_stats.write(out_root)
+    st = hist_stats.write(out_root, name)
     return done, st
 
 
