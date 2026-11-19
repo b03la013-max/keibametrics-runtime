@@ -22,3 +22,17 @@ def test_pre_freeze_scratch_is_not_a_did_not_finish():
     st = settle.settle_parsed(res, pred, 'x')
     assert st['did_not_finish'] == [] and st['non_starters_pre_freeze'] == [2, 9]
     assert st['refund'] == 0
+
+
+def test_coverage_and_hit_but_loss_describe_the_settled_ticket_set():
+    # 11/19 全36R反省 PFS P0-1: flags must come from the same (delivered 60-point) tickets as the money.
+    t = [('EXACTA', [1, 3]), ('TRIFECTA', [1, 3, 2])]
+    c = review.delivered_coverage(t, [1, 3, 7], {'effective_invest': 6000, 'payout': 4310})   # OHI_03 11/19
+    assert c['ordered_pair_ticket_coverage'] is True
+    assert c['ordered_exact_ticket_coverage'] is False      # full MEC had 1-3-7; the cap dropped it
+    assert c['top3_set_ticket_coverage'] is False
+    assert c['hit_but_loss'] is True
+    assert review.delivered_coverage(t, [1, 3, 2], {'effective_invest': 6000, 'payout': 7420})['hit_but_loss'] is False
+    assert review.delivered_coverage(t, [9, 3, 2], {'effective_invest': 6000, 'payout': 0})['hit_but_loss'] is False
+    assert review.delivered_coverage([('TRIO', [3, 5, 10])], [10, 3, 5], {'effective_invest': 100, 'payout': 0})[
+        'top3_set_ticket_coverage'] is True

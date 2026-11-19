@@ -103,6 +103,23 @@ def delivered_failure(roles, tickets, order, settle_row):
     return 'NONE'
 
 
+def delivered_coverage(tickets, order, settle_row):
+    """Ticket coverage and hit-but-loss of ONE ticket set (the one that was settled), so the review flags
+    describe the same object as the money (11/19 全36R反省 PFS P0-1: the Runtime auto-review flags were judged on
+    the signed full MEC while the settlement was the 60-point delivered subset; KSM_07/OHI_05 profitable but
+    hit_but_loss=true, OHI_03/SON_06/SON_12 exact trifecta dropped by the cap but coverage=true)."""
+    st = settle_row or {}
+    w, s, t = (list(order) + [None, None, None])[:3]
+    pairs, tri, trio, win = _pairs_thirds(tickets)
+    ex = {tuple(sel[:2]) for bt, sel in tickets if bt == 'EXACTA' and len(sel) >= 2}
+    eff = st.get('effective_invest', st.get('invest')) or 0
+    pay = st.get('payout') or 0
+    return {'ordered_pair_ticket_coverage': (w, s) in ex or (w, s, t) in tri,
+            'top3_set_ticket_coverage': frozenset((w, s, t)) in trio,
+            'ordered_exact_ticket_coverage': (w, s, t) in tri,
+            'hit_but_loss': bool(0 < pay < eff)}
+
+
 def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
     """Common evaluation of one decision track (PAPER or FORMAL) against the official order."""
     pos = {h: i + 1 for i, h in enumerate(order)}
@@ -133,6 +150,7 @@ def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
              'pfs': round(100 * st['payout'] / eff, 1) if eff else None,
              'no_bet': bool(eff == 0), 'no_bet_reason': st.get('no_bet_reason') or ('NO_TICKETS' if eff == 0 else None)}
     return {'track': name, 'ranking': ranking, 'horses': horses, 'evaluation': ev, 'settlement': money,
+            'ticket_coverage': delivered_coverage(tickets, order, st),
             'first_failure': (st.get('diagnosis') or {}).get('first_failure')}
 
 
@@ -260,12 +278,16 @@ def build(day_dir, key, r):
     conv = (auto or {}).get('conversion') or {}
     layers['TICKET'] = {'status': 'OK' if main['settlement']['payout'] else 'ISSUE',
                         'evidence': {'head_local_p2': e['head_local_p2'], 'pair_conditioned_third': e['pair_conditioned_third'],
-                                     'trio_set_covered': e['trio_set_covered'], **{k: conv.get(k) for k in
+                                     'trio_set_covered': e['trio_set_covered'],
+                                     **{k: v for k, v in main['ticket_coverage'].items() if k != 'hit_but_loss'},
+                                     'runtime_full_mec': {k: conv.get(k) for k in
                                      ('ordered_pair_ticket_coverage', 'top3_set_ticket_coverage', 'ordered_exact_ticket_coverage')}}}
     cap = (auto or {}).get('capital') or {}
     m = main['settlement']
     layers['CAPITAL'] = {'status': 'OK' if (m['pfs'] or 0) >= 100 else 'ISSUE' if m['effective_invest'] else 'UNKNOWN',
-                         'evidence': {'pfs': m['pfs'], 'profit_loss': m['profit_loss'], 'hit_but_loss': cap.get('hit_but_loss'),
+                         'evidence': {'pfs': m['pfs'], 'profit_loss': m['profit_loss'],
+                                      'hit_but_loss': main['ticket_coverage']['hit_but_loss'],
+                                      'hit_but_loss_runtime_full_mec': cap.get('hit_but_loss'),
                                       'tickets': len(formal['horses']) if False else (sm or {}).get('ticket_count')}}
 
     correct = [k for k, ok in (('winner_in_W', e['winner_in_W']), ('second_in_P2', e['second_in_P2']),
