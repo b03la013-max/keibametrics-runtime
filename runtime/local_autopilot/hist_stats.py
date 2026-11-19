@@ -116,7 +116,8 @@ def finish_band(f):
 
 def class_code(cond):
     """Coarse class from the race condition text ('C2三' -> 'C2', 'B1' -> 'B1', '2歳' -> '2YO', 'A2' ...)."""
-    s = str(cond or '')
+    import unicodedata
+    s = unicodedata.normalize('NFKC', str(cond or ''))
     m = re.search(r'([ABC])\s*([1-4])', s)
     if m:
         return m[1] + m[2]
@@ -133,6 +134,9 @@ def _int(x):
 
 
 def _time(x):
+    x = str(x or '').strip()
+    if x.isdigit() and len(x) >= 3:                 # NAR CSV '1149' = 1:14.9
+        return int(x[:-3] or 0) * 60 + int(x[-3:-1]) + int(x[-1]) / 10
     m = re.match(r'(?:(\d+):)?(\d+(?:\.\d+)?)', str(x or '').strip())
     return (int(m[1] or 0) * 60 + float(m[2])) if m else None
 
@@ -163,24 +167,32 @@ def _decode(b):
     return b.decode('utf-8', 'replace')
 
 
+def _ndate(s):
+    s = str(s or '').strip().replace('/', '-')
+    return f'{s[:4]}-{s[4:6]}-{s[6:8]}' if re.fullmatch(r'\d{8}', s) else s
+
+
 def from_nar_csv(racelist, horselist, payback, source='NAR_OFFICIAL_CSV'):
     """keiba.go.jp data-download CSVs (bytes or str) -> {race_id: race}. Column names per the official manual."""
     t = lambda x: _decode(x) if isinstance(x, (bytes, bytearray)) else x
     races = {}
     for r in _rows(t(racelist)):
         v = VENUE_CODE.get(r.get('競馬場', '').strip(), r.get('競馬場', '').strip())
-        d = r.get('競走年月日', '').replace('/', '-').strip()
+        if v == 'OBI':                              # ばんえい is a different sport: never pooled with flat racing
+            continue
+        d = _ndate(r.get('競走年月日'))
         rid = f"{v}_{d.replace('-', '')}_R{int(_int(r.get('レース番号')) or 0):02d}"
         corners = [r.get(f'コーナー通過順{i}') for i in range(1, 9) if r.get(f'コーナー通過順{i}')]
         races[rid] = {'race_id': rid, 'date': d, 'venue': v, 'race_no': _int(r.get('レース番号')),
                       'surface': 'TURF' if '芝' in r.get('芝ダート区分', '') else 'DIRT', 'distance': _int(r.get('距離')),
-                      'going': r.get('馬場', '').strip(), 'weather': r.get('天候', '').strip(), 'cond': r.get('条件', '').strip(),
+                      'going': r.get('馬場', '').strip(), 'weather': r.get('天候', '').strip(),
+                      'cond': (r.get('レース名', '') + ' ' + r.get('条件', '')).strip(),
                       'field': _int(r.get('頭数')), 'first_corner': corner_positions(corners[0]) if corners else {},
                       'last_corner': corner_positions(corners[-1]) if corners else {}, 'runners': [], 'payouts': {},
                       'source': source}
     for h in _rows(t(horselist)):
         v = VENUE_CODE.get(h.get('競馬場', '').strip(), h.get('競馬場', '').strip())
-        d = h.get('競走年月日', '').replace('/', '-').strip()
+        d = _ndate(h.get('競走年月日'))
         rid = f"{v}_{d.replace('-', '')}_R{int(_int(h.get('レース番号')) or 0):02d}"
         if rid not in races:
             continue
@@ -197,7 +209,7 @@ def from_nar_csv(racelist, horselist, payback, source='NAR_OFFICIAL_CSV'):
             'pop': _int(h.get('人気')), 'time': _time(h.get('タイム')), 'last3f': h.get('上がり3F', '').strip()})
     for p in _rows(t(payback)):
         v = VENUE_CODE.get(p.get('競馬場', '').strip(), p.get('競馬場', '').strip())
-        d = p.get('競走年月日', '').replace('/', '-').strip()
+        d = _ndate(p.get('競走年月日'))
         rid = f"{v}_{d.replace('-', '')}_R{int(_int(p.get('レース番号')) or 0):02d}"
         if rid not in races:
             continue
