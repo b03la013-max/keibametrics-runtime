@@ -1063,6 +1063,7 @@ jobs:
         if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
