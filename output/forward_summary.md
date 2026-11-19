@@ -143,5 +143,5 @@
 | 2026-11-19 | KSM_12 | `5b4665fd87abf225` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-19 | SON_12 | `18f13ca0bee1640b` | 済 | 6000 | 2440 | True | CAPITAL_EFFICIENCY |
 | 2026-11-19 | OHI_05 | `cb0020f498f4e7be` | 済 | 6000 | 7420 | True | CAPITAL_EFFICIENCY |
-| 2026-11-19 | OHI_06 | `4a80f1062e03b15e` | 待 | – | – | – | – |
+| 2026-11-19 | OHI_06 | `cb0ae65101a5976d` | 待 | – | – | – | – |
 | 2026-11-19 | OHI_07 | `10254d5bf23d463a` | 待 | – | – | – | – |
