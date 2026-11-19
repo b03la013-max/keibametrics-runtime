@@ -30,7 +30,7 @@
 
 ## 正式Production（署名FINAL・未知未来・推薦試算・実購入なし）
 
-- 署名FINAL 111R／精算 110R／署名RESULT検証 110R
+- 署名FINAL 112R／精算 110R／署名RESULT検証 110R
 - 実効投資 699,600円／払戻 918,040円／PFS 131.2%／正式◎1着 36
 - 正式29指数（Production計算器・未消費）のF3S-L順：108R中 1着的中 34／上位3頭の3着内捕捉 150（正式Static 144）
 - 数値Consumer昇格ゲート：精算 108/100R・Ownerレビュー OWNER_APPROVED (2026-11-16)・承認 True
@@ -148,3 +148,4 @@
 | 2026-11-19 | OHI_08 | `85bb166ec8b47f03` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-19 | OHI_09 | `efd2d592a2bad2d2` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
 | 2026-11-19 | OHI_10 | `f4134d46c2b6303a` | 待 | – | – | – | – |
+| 2026-11-19 | OHI_11 | `e182d0bcc8614bf9` | 待 | – | – | – | – |
