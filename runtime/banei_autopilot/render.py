@@ -2,7 +2,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'local_autopilot'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'local_autopilot'))
 import ticket_tree  # noqa: E402
 
 MARK_ORDER = ['◎', '○', '▲', '△', '穴']
