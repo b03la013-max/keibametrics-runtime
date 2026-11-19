@@ -92,3 +92,10 @@ def test_youtube_claim_tables_jockey_last3f_lead_repeat_special():
     sp = {c['conditions']['special'] for c in t['T9_SPECIAL']}
     assert sp == {'KOC_FINAL', 'NORMAL'}
     assert hs.special_flag('OHI', '一発逆転') == 'NORMAL' and hs._f3('99.9') is None
+
+
+def test_ohi_course_change_table():
+    st = hs.build(races(), 'TEST')                 # fixture: OHI 1200 (OUTER) then 1400 (OUTER)
+    c = st['tables']['T5_OHI_COURSE']
+    assert c and all(x['conditions'] == {'venue': 'OHI', 'course': 'OUTER', 'previous_course': 'OUTER'} for x in c)
+    assert hs.ohi_course(1600) == 'INNER' and hs.ohi_course(1650) == 'LEFT' and hs.ohi_course(None) is None

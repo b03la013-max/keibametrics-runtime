@@ -26,6 +26,8 @@ Tables
                KAW900 24.1 %, KOC 38.4 %, KOC Final 3割未満); denominator = horses whose previous start was a lead
   T9_SPECIAL   venue x special-race flag (KOC 一発逆転ファイナルレース = 記者選抜) x popularity band
                (YouTube: KOC Final 1番人気 勝率 23.6 % vs 通常 47.8 %)
+  T5_OHI_COURSE  OHI only: this start's course (INNER 1000/1600/1700, LEFT 1650, else OUTER) x the previous OHI
+               start's course (YouTube q50: 1400外⇔1600内 の取り違え。直線 386m / 286m). Course map = YouTube claim.
 T6-T9 are YouTube-claim checks (2026-11-19 Drive reading, q39-q55): unverified claims, evidence only.
 Pre-race inputs only for the "candidate" / "change" definitions: a horse's earlier starts (strictly earlier date).
 Rates are never multiplied together; a horse's matching cells are listed side by side (no additive score).
@@ -63,6 +65,13 @@ def field_band(n):
 
 def pop_band(p):
     return None if not p else str(p) if p <= 5 else '6-9' if p <= 9 else '10+'
+
+
+OHI_COURSE = {1000: 'INNER', 1600: 'INNER', 1700: 'INNER', 1650: 'LEFT'}
+
+
+def ohi_course(d):
+    return None if not d else OHI_COURSE.get(int(d), 'OUTER')
 
 
 def special_flag(venue, cond):
@@ -370,6 +379,8 @@ def build(races, source):
     group('T5_VENUE_CHANGE', lambda r: (r['venue'], None if not r['prev_venue'] else ('SAME' if r['prev_venue'] == r['venue'] else 'FROM_' + r['prev_venue'])),
           ('venue', 'previous_venue'))
     group('T5_INTERVAL', lambda r: (r['venue'], gap(r)), ('venue', 'days_since_last'))
+    group('T5_OHI_COURSE', lambda r: None if r['venue'] != 'OHI' or r['prev_venue'] != 'OHI' else
+          (r['venue'], ohi_course(r['distance']), ohi_course(r['prev_dist'])), ('venue', 'course', 'previous_course'))
     # T6-T9: YouTube claim checks (unverified claims; evidence only)
     group('T6_JOCKEY', lambda r: (r['venue'], r['distance'], r['jockey']), ('venue', 'distance', 'jockey'))
     group('T7_LAST3F', lambda r: (r['venue'], r['distance'], r['fastest3f'], last_corner_band(r['lc'])),
