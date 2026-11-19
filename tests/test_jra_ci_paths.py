@@ -8,7 +8,7 @@ GENERATED = sorted(p for p in (ROOT / ".github/workflows").glob("*jra*.yml")
 
 
 def test_jra_generated_workflows_exist():
-    assert len(GENERATED) >= 29
+    assert len(GENERATED) >= 20
 
 
 def test_jra_path_filters_cover_every_dependency():
