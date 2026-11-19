@@ -25,7 +25,7 @@ def _n(s):
 
 
 def _load():
-    if not _CACHE:
+    if 'rules' not in _CACHE:          # not `if not _CACHE`: nankan() shares the dict ('nk'), 2026-11-19 KeyError fix
         v1 = json.loads(RULES_V1.read_text())
         v2 = json.loads(RULES_V2.read_text())
         _CACHE['types'] = {_n(e['name']): e.get('type') or '' for e in v1['entries'] if e['kind'] in ('SIRE', 'DAMSIRE')}
