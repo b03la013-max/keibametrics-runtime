@@ -11,6 +11,11 @@ Candidates
   runner to W as PROTECTED (REVIEW). Tests the single-axis width limit.
 - P2_KRS_HEAD_LOCAL: for every formal W head, add the most frequent KRS exacta
   second for that head (if not already a P2) as PROTECTED P2. Tests head-local P2.
+- W_PLUS_MARKET1 / W_PLUS_MARKET_TOP3 (LOCAL C18/C19 port, 2026-11-20): add the official
+  pre-cutoff market favourite (or favourites 1-3) missing from W. Market facts come only from
+  the request's signed JRA official market observation captured before prediction_cutoff.
+- W_PLUS_STATIC_SAME_COUNT_CONTROL (LOCAL C20): add as many runners as W_PLUS_MARKET_TOP3
+  would, chosen by Static rank instead of the market, so width and signal are separable.
 """
 import argparse, copy, glob, json, sys
 from pathlib import Path
@@ -105,8 +110,57 @@ def p2_static_next_control(f):
     return changed
 
 
+def market_ranking(f, root=ROOT):
+    """Official popularity order captured before the prediction cutoff, else None."""
+    import datetime as dt
+    rq = root / 'runtime/requests' / f"{f['race_id']}-LIVE-R1-FORMAL.json"
+    if not rq.exists():
+        return None
+    m = (json.loads(rq.read_text()).get('source_snapshot') or {}).get('jra_official_market_observation') or {}
+    try:
+        if m.get('status') != 'PASS' or dt.datetime.fromisoformat(m['captured_at']) > dt.datetime.fromisoformat(f['prediction_cutoff']):
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    rs = [r for r in m.get('runners') or [] if isinstance(r.get('popularity_rank'), int)]
+    return [str(r['runner_id']) for r in sorted(rs, key=lambda r: r['popularity_rank'])] or None
+
+
+def _add_heads(f, picks, tag):
+    added = [r for r in picks if _promote(f, 'W', r, tag)]
+    for r in added:
+        _mirror_pairs(f, new_head=r, tag=tag)
+    return bool(added)
+
+
+def _market_missing(f, n):
+    mk = market_ranking(f)
+    return None if mk is None else [r for r in mk[:n] if r not in _live(f, 'W')]
+
+
+def w_plus_market1(f):
+    miss = _market_missing(f, 1)
+    return bool(miss) and _add_heads(f, miss, 'W_PLUS_MARKET1')
+
+
+def w_plus_market_top3(f):
+    miss = _market_missing(f, 3)
+    return bool(miss) and _add_heads(f, miss, 'W_PLUS_MARKET_TOP3')
+
+
+def w_plus_static_same_count_control(f):
+    miss = _market_missing(f, 3)
+    if not miss:
+        return False
+    W = _live(f, 'W')
+    picks = [r for r in (str(x) for x in f['static_prediction']['ranking']) if r not in W][:len(miss)]
+    return _add_heads(f, picks, 'W_PLUS_STATIC_SAME_COUNT_CONTROL')
+
+
 CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head_local,
-              'P2_STATIC_NEXT_CONTROL': p2_static_next_control}
+              'P2_STATIC_NEXT_CONTROL': p2_static_next_control, 'W_PLUS_MARKET1': w_plus_market1,
+              'W_PLUS_MARKET_TOP3': w_plus_market_top3,
+              'W_PLUS_STATIC_SAME_COUNT_CONTROL': w_plus_static_same_count_control}
 
 
 def _settle(f, official):
@@ -128,8 +182,10 @@ def run(dates, root=ROOT):
             official = json.loads(rp.read_text())['official_result']
             top3 = [str(x) for x in official['finish_order'][:3]]
             base_inv, base_pay = _settle(final, official)
+            mk = market_ranking(final, root)
             row = {'race_id': rid, 'top3': top3, 'baseline': {'investment': base_inv, 'payout': base_pay,
-                   'W_hit': top3[0] in _live(final, 'W'), 'P2_hit': top3[1] in _live(final, 'P2')}}
+                   'W_hit': top3[0] in _live(final, 'W'), 'P2_hit': top3[1] in _live(final, 'P2')},
+                   'winner_market_rank': mk.index(top3[0]) + 1 if mk and top3[0] in mk else None}
             for name, fn in CANDIDATES.items():
                 f = copy.deepcopy(final)
                 if not fn(f):
@@ -170,6 +226,10 @@ def summarize(rows):
                      'pfs_excl_max_payout': round((pay - pays[-1]) / inv * 100, 2) if inv and pays else None,
                      'W_hit': wh, 'P2_hit': p2,
                      'hit_races': sum(1 for r in rows if ((r[name] or r['baseline']) if name != 'baseline' else r['baseline'])['payout'] > 0)}
+    miss = [r for r in rows if not r['baseline']['W_hit']]
+    out['winner_outside_W'] = {'races': len(miss),
+                               'market_rank_1_3': sum(1 for r in miss if (r.get('winner_market_rank') or 99) <= 3),
+                               'market_unknown': sum(1 for r in miss if r.get('winner_market_rank') is None)}
     return out
 
 
