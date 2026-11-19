@@ -212,6 +212,13 @@ class Backfill:
             self.st['hist_stats'] = {'races': hs['races'], 'starts': hs['starts']} if hs else None
         except Exception as e:                     # never let the tables break the backfill
             self.st['hist_stats'] = f'FAIL:{type(e).__name__}:{e}'
+        try:                                       # popularity-structure evidence (Drive「地方競馬攻略一般」, shadow only)
+            from runtime.local_autopilot import pop_structures
+            ps = pop_structures.write(self.dir.parent)
+            self.st['pop_structures'] = {'tri2_races': ps['fav_head_tri2']['NANKAN']['races']
+                                         + ps['fav_head_tri2']['OTHER_LOCAL']['races']} if ps else None
+        except Exception as e:                     # never let the tables break the backfill
+            self.st['pop_structures'] = f'FAIL:{type(e).__name__}:{e}'
         c = Counter(v['status'] for v in self.st['races'].values())
         print('BACKFILL', json.dumps({'fetched': self.fetched, 'days': len(self.st['days']), 'races': dict(c),
                                       'discovery': self.st.get('discovery'), 'stop': self.st.get('last_stop')},
