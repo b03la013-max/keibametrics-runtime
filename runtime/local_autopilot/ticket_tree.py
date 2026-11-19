@@ -146,3 +146,98 @@ def block(tickets, unit=100, paper=True):
     if paper:
         L += ['購入判定', '└─ ペーパー', '確率状態', '└─ 未較正', 'EV', '└─ 算出不可']
     return '\n'.join(L), total
+
+
+# ------------------------------------------------------------------ round-trip (KAW v2.4 第368条, evidence only)
+_SECTIONS = {'軸', '相手', '1着', '2着', '3着', '1列目', '2列目', '3列目'}
+
+
+def _depth_body(ln):
+    """'│  ├─ 6' → (1, '6'); '└─ 1着 4' → (0, '1着 4')."""
+    for i, ch in enumerate(ln):
+        if ch in '├└':
+            return i // 3, ln[i + 2:].strip()
+    return None, ln.strip()
+
+
+def reflatten(text):
+    """Parse a block()/render() tree back into [(kind, set_of_combos)] in display order, and the footer total.
+    Used only to check Canonical → Tree → Reflatten identity; never builds or changes tickets."""
+    out, cur, total = [], None, None
+    lines = text.split('\n')
+    for k, ln in enumerate(lines):
+        s = ln.strip()
+        if s == '点数':
+            for f in lines[k + 1:]:
+                d, b = _depth_body(f)
+                if b.startswith('合計'):
+                    total = int(b.split('　')[1].split('点')[0])
+            break
+        d, body = _depth_body(ln)
+        if d is None:
+            base = s.split('（')[0]
+            if base in SIZE:
+                cur = {'kind': base, 'cols': {}, 'sec': None, 'groups': [], 'items': []}
+                out.append(cur)
+            elif base in _SECTIONS and cur is not None:
+                cur['sec'] = base
+                cur['cols'][base] = []
+            continue
+        if cur is None or body == 'なし':
+            continue
+        parts = body.split()
+        if len(parts) == 2 and parts[0] in _SECTIONS:            # group header (non-formation layout)
+            if d == 0:
+                cur['groups'].append([int(parts[1]), []])
+            else:
+                cur['groups'][-1][1].append([int(parts[1]), []])
+            continue
+        h = int(body)
+        if cur['groups']:
+            g = cur['groups'][-1]
+            if SIZE[cur['kind']] == 2:
+                g[1].append(h)
+            else:
+                g[1][-1][1].append(h)
+        elif cur['sec']:
+            cur['cols'][cur['sec']].append(h)
+        else:
+            cur['items'].append(h)
+    res = []
+    for c in out:
+        kind, n = c['kind'], SIZE[c['kind']]
+        if c['groups']:
+            raw = ([(a, b) for a, bs in c['groups'] for b in bs] if n == 2 else
+                   [(a, b, t) for a, ss in c['groups'] for b, ts in ss for t in ts])
+            combos = _key(kind, norm(kind, raw))
+        elif '軸' in c['cols']:
+            axis, rest = c['cols']['軸'], c['cols'].get('相手', [])
+            if kind == '三連複':
+                combos = {tuple(sorted(x)) for x in combinations(list(dict.fromkeys(axis + rest)), 3) if set(axis) <= set(x)}
+            else:
+                combos = _expand(kind, [axis, rest])
+        elif c['cols']:
+            combos = _expand(kind, [c['cols'].get(name, []) for name in COL[kind]])
+        else:
+            combos = {(h,) for h in c['items']}
+        res.append((kind, combos))
+    return res, total
+
+
+def roundtrip(tickets, unit=100):
+    """Canonical tickets → block() tree → reflatten → compare (bet type, full combo set, point total).
+    Returns {'ok', 'mismatches'}; a mismatch is a display defect to report, never a reason to add or drop tickets."""
+    text, total = block(tickets, unit=unit, paper=False)
+    back, back_total = reflatten(text)
+    want = [(kind, _key(kind, norm(kind, combos)) if SIZE.get(kind, 1) > 1 else {tuple(c) for c in norm(kind, combos)})
+            for kind, combos, _ in tickets]
+    mm = []
+    if len(back) != len(want):
+        mm.append({'what': 'bet_type_count', 'canonical': len(want), 'tree': len(back)})
+    for (k1, s1), (k2, s2) in zip(want, back):
+        if k1 != k2 or s1 != s2:
+            mm.append({'what': 'combos', 'kind': k1, 'tree_kind': k2,
+                       'missing_in_tree': sorted(s1 - s2), 'extra_in_tree': sorted(s2 - s1)})
+    if back_total != total:
+        mm.append({'what': 'point_total', 'canonical': total, 'tree': back_total})
+    return {'ok': not mm, 'mismatches': mm}
