@@ -43,6 +43,7 @@ def base_indices(h, moisture):
     first); fallback h['own_past'] (same shape, own time-based index). Provenance kept per value."""
     band = moisture_band(moisture)
     out = {}
+    pre = h.get('idx_pre')                         # precomputed (e.g. NAR-ledger own index), lowest priority
     for src_key, src in (('sbo_past', 'SBO'), ('own_past', 'OWN')):
         past = [p for p in (h.get(src_key) or []) if _f(p.get('idx')) is not None]
         if not past:
@@ -54,6 +55,9 @@ def base_indices(h, moisture):
         for k, v in (('recent', rec), ('track', trk), ('avg', avg)):
             if v is not None and k not in out:
                 out[k] = (round(v, 2), src)
+    for k, v in (pre or {}).items():
+        if k in BSI_W and k not in out and v is not None and v == v:
+            out[k] = (round(float(v), 2), 'OWN-NAR')
     return {k: (out[k][0] if k in out else None) for k in BSI_W}, {k: out[k][1] for k in out}
 
 
