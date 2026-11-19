@@ -246,7 +246,8 @@ def build(day_dir, key, r):
         formal['first_material_failure'] = delivered_failure(froles, ft, order, fr)
         formal['refs'].update(
             effective_revision='REVISION_2' if fdir.name == 'rev2' else 'REVISION_1',
-            source_at=(sm.get('stages') or {}).get('SOURCE'), signed_final_at=(sm.get('stages') or {}).get('SIGNED_FINAL'),
+            source_at=(sm.get('stages') or {}).get('SOURCE_FREEZE') or (sm.get('stages') or {}).get('SOURCE'),
+            source_receipt_sha256=(src or {}).get('receipt_sha256'), signed_final_at=(sm.get('stages') or {}).get('SIGNED_FINAL'),
             delivered_ticket_sha256=hashlib.sha256(json.dumps(ft, separators=(',', ':')).encode()).hexdigest(),
             settled_ticket_sha256=fr.get('ticket_sha256'))
     full29 = _load(fdir / f'{key}.full29.json') if sm else None

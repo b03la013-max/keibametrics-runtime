@@ -36,3 +36,9 @@ def test_coverage_and_hit_but_loss_describe_the_settled_ticket_set():
     assert review.delivered_coverage(t, [9, 3, 2], {'effective_invest': 6000, 'payout': 0})['hit_but_loss'] is False
     assert review.delivered_coverage([('TRIO', [3, 5, 10])], [10, 3, 5], {'effective_invest': 100, 'payout': 0})[
         'top3_set_ticket_coverage'] is True
+
+
+def test_source_at_reads_the_source_freeze_stage():
+    # 11/19 PFS P0-4: all 36 reviews had refs.source_at = null because the stage is named SOURCE_FREEZE.
+    import inspect
+    assert "get('SOURCE_FREEZE')" in inspect.getsource(review.build)
