@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-20（19:10時点）
+# 地方版 配送台帳 2026-11-20（19:15時点）
 
 - 管理Race 36／発走済み 33
 - PAPER：凍結 36・Push検証 36・送信 34（発走前 34）・読み戻し一致 34・本人確認 0
@@ -31,7 +31,7 @@
 | OHI_06 | 17:12 | POSTRESULT_DIAGNOSTIC | 16:30 | ○ | SIGNED_FINAL | 16:33 | ○ |  |
 | OHI_07 | 17:45 | POSTRESULT_DIAGNOSTIC | 17:03 | ○ | SIGNED_FINAL | 17:37 | ○ |  |
 | OHI_08 | 18:20 | POSTRESULT_DIAGNOSTIC | 17:40 | ○ | SIGNED_FINAL | 18:13 | ○ |  |
-| OHI_09 | 18:55 | PRESTART_PUSH_VERIFIED | 18:15 | ○ | SIGNED_FINAL | 18:15 | ○ |  |
+| OHI_09 | 18:55 | POSTRESULT_DIAGNOSTIC | 18:15 | ○ | SIGNED_FINAL | 18:15 | ○ |  |
 | OHI_10 | 19:30 | PRESTART_PUSH_VERIFIED | 18:49 | ○ | SIGNED_FINAL | 18:51 | ○ |  |
 | OHI_11 | 20:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_12 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
