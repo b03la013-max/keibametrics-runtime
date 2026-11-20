@@ -37,7 +37,8 @@ def rows(root, days=None):
                     'fav_odds': odds[pops[0]] if pops else None,
                     'fav_out3': bool(pops) and pops[0] not in o, 'fav_won': bool(pops) and pops[0] == o[0],
                     'winner_pop': pops.index(o[0]) + 1 if o[0] in pops else None,
-                    'tri': tri[0] if tri else None, 'trio': trio[0] if trio else None})
+                    'tri': tri[0] if tri else None, 'trio': trio[0] if trio else None,
+                    'p': _probs(rk)})
     return out
 
 
@@ -60,6 +61,43 @@ def spearman(xs, ys):
     n = len(pr)
     d = sum((a[i] - b[i]) ** 2 for i in range(n))
     return round(1 - 6 * d / (n * (n * n - 1)), 3)
+
+
+def _probs(rk):
+    p = {r['no']: float(r['p_win']) for r in rk if r.get('p_win')}
+    if len(p) < len(rk):
+        p = {r['no']: 1 / r['win'] for r in rk if r.get('win')}
+    t = sum(p.values())
+    return {k: v / t for k, v in p.items()} if t else {}
+
+
+def harville3(p, i, j, k):
+    a, b = 1 - p[i], 1 - p[i] - p[j]
+    return p[i] * p[j] / a * p[k] / b if a > 0 and b > 0 else 0.0
+
+
+def same_points(rs):
+    """C25 (Owner 2026-11-21 02:14): at the SAME number of points as the AKI-chosen formation in each race,
+    (a) the AKI-chosen formation, (b) the best trifecta combinations by PAPER Harville probability,
+    (c) fixed 2-4-8 cut to the same number of points in Harville order."""
+    agg = {k: [0, 0, 0] for k in ('AKI_CHOSEN', 'TOPN_HARVILLE', 'F248_TOPN')}
+    for r in rs:
+        aki = form_tickets(r['rank'], r['form'])
+        n, p = len(aki), r['p']
+        if not n or not p:
+            continue
+        nos = [x for x in r['rank'] if x in p]
+        allc = sorted(((i, j, k) for i in nos for j in nos for k in nos if len({i, j, k}) == 3),
+                      key=lambda c: -harville3(p, *c))
+        f248 = sorted((tuple(t[1]) for t in form_tickets(r['rank'], '2-4-8')), key=lambda c: -harville3(p, *c))
+        for name, t in (('AKI_CHOSEN', aki), ('TOPN_HARVILLE', [('TRIFECTA', list(c)) for c in allc[:n]]),
+                        ('F248_TOPN', [('TRIFECTA', list(c)) for c in f248[:n]])):
+            i, pay, h = sm.settle(t, r['payouts'], r['ns'])
+            a = agg[name]
+            a[0] += i; a[1] += pay; a[2] += h
+    races = sum(1 for r in rs if r['p'] and r['form'])
+    return {k: {'races': races, 'invest': v[0], 'payout': v[1], 'hit_races': v[2],
+                'pfs': round(100 * v[1] / v[0], 1) if v[0] else None} for k, v in agg.items()}
 
 
 def form_tickets(rank, form):
@@ -107,6 +145,7 @@ def audit(root, days=None):
         fm[f] = {'points_per_race': round(inv / 100 / len(rs), 1), 'hit_rate': round(100 * hit / len(rs), 1),
                  'pfs': round(100 * pay / inv, 1) if inv else None}
     out['trifecta_formation'] = fm
+    out['same_points'] = same_points(rs)
     return out
 
 

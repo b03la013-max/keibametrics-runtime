@@ -1,0 +1,23 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261121-R10",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-21T02:25:00+09:00",
+ "first_eligible_post": "2026-11-21T02:25:00+09:00",
+ "origin": "C11 reached 100R (fixed 2-4-8 42.6% vs AKI-chosen 2.8%) but the two use different numbers of points. Owner 2026-11-21 02:14: keep PAPER as it is and pre-register a SAME-POINTS comparison before deciding.",
+ "owner_decision": {"candidate": "C11", "decision": "HOLD (PAPER trifecta formation unchanged) until C25 decides", "owner_words": "今のまま、同じ点数での比較を事前登録して判断を先に延ばす"},
+ "change_under_test": "PAPER 三連単: in each race, the same number of points as the AKI-chosen formation, chosen as (a) the AKI-chosen formation [current], (b) the best trifecta combinations by the PAPER Harville probability, (c) fixed 2-4-8 cut to that number in Harville order.",
+ "learning_races": "2026-11-13..20 PAPER 260R (in-sample; designed after seeing these races)",
+ "in_sample": {"all_260R": {"AKI_CHOSEN": 11.4, "TOPN_HARVILLE": 61.0, "F248_TOPN": 48.9, "hit_races": [6, 21, 20]},
+               "post_R4_108R": {"AKI_CHOSEN": 2.8, "TOPN_HARVILLE": 62.5, "F248_TOPN": 20.8, "hit_races": [2, 8, 7]}},
+ "production_change": "NONE. PAPER and formal tickets unchanged.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "venue_rule": "same direction in >= 2 venues with >= 12 races each",
+ "candidates": [
+  {"id": "C25-AKI-FORM-SAME-POINTS",
+   "hypothesis": "At equal points, choosing trifecta combinations by probability beats the AKI-chosen formation shape.",
+   "primary_metric": "PFS and hit races at equal points (AKI_CHOSEN vs TOPN_HARVILLE vs F248_TOPN), top-1 race share",
+   "promote_if": "at 100 races TOPN_HARVILLE (or F248_TOPN) PFS exceeds AKI_CHOSEN by >= 10 points with more hit races and top-1 share < 40% -> decision packet to the Owner on the PAPER trifecta selection",
+   "reject_if": "at 100 races AKI_CHOSEN PFS >= both alternatives"}
+ ]
+}

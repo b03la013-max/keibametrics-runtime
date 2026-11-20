@@ -155,6 +155,14 @@ def evaluate(root, prereg_path=PREREG):
             'races': n, 'stage': _stage(n, p4['stages']),
             'auc_aki': (au.get('AKI_total') or {}).get('fav_out_of_top3'),
             'auc_market': (au.get('MARKET_fav_odds') or {}).get('fav_out_of_top3')}
+    pre10 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261121_R10.json')
+    if pre10.exists():
+        from runtime.local_autopilot import aki_audit
+        p10 = json.loads(pre10.read_text())
+        days10 = {x['day'] for x in sm.load(root) if x['day'] >= p10['first_eligible_post'][:10]}
+        sp = aki_audit.same_points(aki_audit.rows(root, days10)) if days10 else {}
+        n10 = (sp.get('AKI_CHOSEN') or {}).get('races', 0)
+        out['candidates']['C25-AKI-FORM-SAME-POINTS'] = {'races': n10, 'stage': _stage(n10, p10['stages']), **sp}
     pre5 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261118_R5.json')
     if pre5.exists():
         from runtime.local_autopilot import formal_mix
@@ -309,6 +317,10 @@ def md(o):
            f"- C12 荒れ予測 AKI 対 1番人気オッズ（AUC）：{c['C12-AKI-VS-MARKET-ROUGHNESS']['stage']}／"
            f"{c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_aki']} 対 {c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_market']}"]
           if 'C11-FIXED-2-4-8-VS-AKI-FORM' in c else []),
+        *([f"- C25 3連単 同じ点数（AKI選択の点数に合わせる）：{c['C25-AKI-FORM-SAME-POINTS']['stage']}／回収率 AKI選択 "
+           f"{(c['C25-AKI-FORM-SAME-POINTS'].get('AKI_CHOSEN') or {}).get('pfs')}% 対 確率上位 "
+           f"{(c['C25-AKI-FORM-SAME-POINTS'].get('TOPN_HARVILLE') or {}).get('pfs')}% 対 2-4-8を同点数に "
+           f"{(c['C25-AKI-FORM-SAME-POINTS'].get('F248_TOPN') or {}).get('pfs')}%"] if 'C25-AKI-FORM-SAME-POINTS' in c else []),
         *([f"- C18 W＋1番人気：{c['C18-W-PLUS-FAVORITE']['stage']}／勝ち馬捕捉 {c['C18-W-PLUS-FAVORITE'].get('win_in_W_cand')}% 対 "
            f"{c['C18-W-PLUS-FAVORITE'].get('win_in_W')}%／同点数馬単 {c['C18-W-PLUS-FAVORITE'].get('exacta_pfs_cand')}% 対 "
            f"{c['C18-W-PLUS-FAVORITE'].get('exacta_pfs_signed')}%",
