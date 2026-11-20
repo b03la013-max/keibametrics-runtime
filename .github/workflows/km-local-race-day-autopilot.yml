@@ -54,7 +54,8 @@ jobs:
   autopilot:
     # Owner decision 2026-11-18: run on the Owner's Mac (self-hosted runner, no billed minutes).
     # Fallback: dispatch with -f runner=github.
-    runs-on: ${{ (inputs.runner || 'mac') == 'github' && 'ubuntu-latest' || 'self-hosted' }}
+    # Pinned to the LOCAL Mac runner (label km-local) so a LOCAL loop never occupies the JRA runner (km-jra), Owner decision 2026-11-20 02:03.
+    runs-on: ${{ (inputs.runner || 'mac') == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","km-local"]') }}
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
