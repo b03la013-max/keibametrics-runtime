@@ -85,7 +85,23 @@ def audit(roles, tickets):
     tri_common = set.intersection(*[set(c) for c in trifecta]) if len(trifecta) > 1 else set()
     tri_mono = sorted(tri_common) if (tri_common and len(roles.get('W', [])) > 1) else []
     cells = cell_coverage(roles, exacta, trifecta)
-    return {'exposure': ex, 'global_zero': global_zero, 'w_without_head': w_no_head,
+    # 園田 v2.6-SON 第430条／v2.7 第501条 Quinella Reverse Orientation：買った馬連 A-B の両馬が1着候補（W）なのに、
+    # 着順指定券（馬単・三連単の1-2着）は片方向しか無い（逆方向は無言で消えている）。着順指定券が無いレースは対象外。
+    quinella = {tuple(sorted(c)) for kind, cs in tickets if kind == '馬連' for c in cs}
+    one_way = []
+    if first_two:
+        wset = set(roles.get('W', []))
+        for a, b in sorted(quinella):
+            if a in wset and b in wset:
+                fwd, rev = (a, b) in first_two, (b, a) in first_two
+                if fwd != rev:
+                    one_way.append((a, b) if fwd else (b, a))
+    # 園田 v2.3-SON 第286条 P2-Protected Effective Coverage：2着候補（P2）が券には出ているのに、着順指定券の2着には
+    # 一度も無い（3着や馬連・三連複だけ）＝2着としての実質の買いが0。
+    p2_no_second = [h for h in roles.get('P2', []) if has_ordered and ex.get(h, {}).get('second', 0) == 0
+                    and ex.get(h, {}).get('total', 0) > 0]
+    return {'quinella_one_way': one_way, 'p2_no_second': p2_no_second,
+            'exposure': ex, 'global_zero': global_zero, 'w_without_head': w_no_head,
             'pair_trio_gaps': gaps, 'hub': hub, 'extreme_hub': extreme_hub, 'tri_monoculture': tri_mono,
             'trio_order_divergence': divergence, 'cells': cells, 'hub_failure': hub_fail}
 
@@ -240,6 +256,11 @@ def line(a):
     if a.get('trio_order_divergence'):
         p.append('三連複にある1着候補→2着候補の並びが馬単・三連単の1-2着に無い：'
                  + '／'.join('→'.join(map(str, g)) for g in a['trio_order_divergence'][:6]))
+    if a.get('quinella_one_way'):
+        p.append('馬連で買った1着候補どうしの組で、着順指定券は片方向だけ（園田 v2.6 第430条）：'
+                 + '／'.join('→'.join(map(str, g)) + 'のみ' for g in a['quinella_one_way'][:6]))
+    if a.get('p2_no_second'):
+        p.append('2着候補なのに着順指定券の2着に無い（園田 v2.3 第286条）：' + '、'.join(map(str, a['p2_no_second'])))
     if a.get('tri_monoculture'):
         p.append('三連単の全点に同じ馬（' + '・'.join(map(str, a['tri_monoculture'])) + '番、1着候補は複数）')
     c = a.get('cells')

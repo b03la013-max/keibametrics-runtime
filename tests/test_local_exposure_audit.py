@@ -128,3 +128,23 @@ def test_hub_failure_unordered_keeps_world_and_empty():
     assert hf['hub'] == 2 or hf['hub'] == 3
     assert ex.hub_failure(roles, [], 1) is None
     assert ex.audit(roles, [])['hub_failure'] is None
+
+
+def test_quinella_one_way_and_p2_no_second_sonoda_v26():
+    roles = {'W': [1, 2], 'P2': [3, 5], 'P3': [4]}
+    tickets = [('馬連', [(1, 2), (1, 3)]), ('馬単', [(1, 2), (1, 3)]), ('三連単', [(1, 2, 5), (2, 1, 3)])]
+    a = ex.audit(roles, tickets)
+    assert a['quinella_one_way'] == []        # 1→2 and 2→1 both present (2→1 via 三連単)
+    assert a['p2_no_second'] == [5]           # 5 only as a 三連単 third
+    t2 = [('馬連', [(1, 2)]), ('馬単', [(2, 1)]), ('三連複', [(1, 2, 3)])]
+    a2 = ex.audit(roles, t2)
+    assert a2['quinella_one_way'] == [(2, 1)]
+    assert a2['p2_no_second'] == [3]           # 3 only in 三連複 → never bought as a 2nd
+    s = ex.line(a2)
+    assert '2→1のみ' in s and '第430条' in s
+
+
+def test_quinella_one_way_needs_ordered_tickets():
+    roles = {'W': [1, 2], 'P2': [3], 'P3': []}
+    a = ex.audit(roles, [('馬連', [(1, 2)]), ('三連複', [(1, 2, 3)])])
+    assert a['quinella_one_way'] == [] and a['p2_no_second'] == []
