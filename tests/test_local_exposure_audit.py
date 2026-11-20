@@ -41,3 +41,12 @@ def test_trifecta_monoculture():
     assert '三連単の全点に同じ馬' in ex.line(a)
     b = ex.audit(roles, [('三連単', [(1, 3, 4), (2, 3, 5)])])
     assert b['tri_monoculture'] == [3]
+
+
+def test_trio_order_divergence():
+    roles = {'W': [1], 'P2': [2, 5], 'P3': [3]}
+    a = ex.audit(roles, [('馬単', [(1, 2)]), ('三連複', [(1, 2, 3), (1, 3, 5)])])
+    assert a['trio_order_divergence'] == [(1, 5)]
+    assert '1→5' in ex.line(a)
+    b = ex.audit(roles, [('三連複', [(1, 3, 5)])])     # no ordered ticket at all → nothing to compare
+    assert b['trio_order_divergence'] == []

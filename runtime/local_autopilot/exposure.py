@@ -65,6 +65,16 @@ def audit(roles, tickets):
                     c = [x for x in t if x not in (a, b)][0]
                     if c in role_horses and (a, b, c) not in trifecta:
                         gaps.append((a, b, c))
+    # I2.3 第4・8条 Reverse Bridge / Topology Divergence: a bought 三連複 holds a W→P2 order
+    # that no 馬単 / 三連単 (first two) covers, while ordered tickets are bought at all
+    first_two = exacta | {c[:2] for c in trifecta}
+    divergence = []
+    if first_two:
+        for t in sorted(trio):
+            for a in roles.get('W', []):
+                for b in roles.get('P2', []) + [w for w in roles.get('W', []) if w != a]:
+                    if a in t and b in t and (a, b) not in first_two and (a, b) not in divergence:
+                        divergence.append((a, b))
     hub = None
     if n_multi:
         h, cnt = max(containing.items(), key=lambda kv: (kv[1], -kv[0]))
@@ -74,7 +84,8 @@ def audit(roles, tickets):
     tri_common = set.intersection(*[set(c) for c in trifecta]) if len(trifecta) > 1 else set()
     tri_mono = sorted(tri_common) if (tri_common and len(roles.get('W', [])) > 1) else []
     return {'exposure': ex, 'global_zero': global_zero, 'w_without_head': w_no_head,
-            'pair_trio_gaps': gaps, 'hub': hub, 'extreme_hub': extreme_hub, 'tri_monoculture': tri_mono}
+            'pair_trio_gaps': gaps, 'hub': hub, 'extreme_hub': extreme_hub, 'tri_monoculture': tri_mono,
+            'trio_order_divergence': divergence}
 
 
 def line(a):
@@ -90,6 +101,9 @@ def line(a):
     if a['hub']:
         p.append(f"最多出現 {a['hub']['no']}番（{a['hub']['share'] * 100:.0f}%／{a['hub']['tickets']}点）"
                  + ('・1着候補が複数なのに全点が同じ馬（Extreme Hub）' if a['extreme_hub'] else ''))
+    if a.get('trio_order_divergence'):
+        p.append('三連複にある1着候補→2着候補の並びが馬単・三連単の1-2着に無い：'
+                 + '／'.join('→'.join(map(str, g)) for g in a['trio_order_divergence'][:6]))
     if a.get('tri_monoculture'):
         p.append('三連単の全点に同じ馬（' + '・'.join(map(str, a['tri_monoculture'])) + '番、1着候補は複数）')
     return '- 役割と券面の対応（I2.2 Directional Exposure・検算のみ、買い目は変えない）：' + '／'.join(p)
