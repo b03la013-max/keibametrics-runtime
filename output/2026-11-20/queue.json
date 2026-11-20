@@ -2472,7 +2472,7 @@
    "post_initial": "2026-11-20T12:25:00+09:00",
    "post_current": "2026-11-20T12:25:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "POSTRESULT_DIAGNOSTIC",
    "editions": [
     {
      "edition": "朝版",
@@ -2759,7 +2759,68 @@
      "USER_ACK_VERIFIED": false
     }
    },
-   "formal_effective": "rev2"
+   "formal_effective": "rev2",
+   "result_attempts": 1,
+   "settlement": {
+    "order": [
+     7,
+     10,
+     4,
+     2,
+     5,
+     3,
+     9,
+     8,
+     6,
+     1
+    ],
+    "invest": 1600,
+    "refund": 0,
+    "effective_invest": 1600,
+    "payout": 0,
+    "win_hit": 1,
+    "top_in3": 1,
+    "top3_capture": 1,
+    "ordered_pair": 0,
+    "exact_triple": 0,
+    "settled_at": "2026-11-20T12:47:45.257789+09:00",
+    "revision": "KSM_05.r2",
+    "ticket_sha256": "f7b06356c596f34bea0083aeae0f1e9ae66f1c2f805fa536f02f66d48b3e3649",
+    "diagnosis": {
+     "winner_rank": 1,
+     "second_rank": 5,
+     "third_rank": 7,
+     "first_failure": "P2_MISS"
+    }
+   },
+   "formal_result_attempts": 1,
+   "formal_settlement": {
+    "invest": 6000,
+    "refund": 0,
+    "effective_invest": 6000,
+    "payout": 1890,
+    "pfs": 31.5,
+    "win_hit": 1,
+    "diagnosis": {
+     "winner_rank": 1,
+     "second_rank": 2,
+     "third_rank": 6,
+     "first_failure": "NONE"
+    },
+    "signed_final_settlement": {
+     "invest": 13200,
+     "refund": 0,
+     "effective_invest": 13200,
+     "payout": 1890,
+     "pfs": 14.3
+    },
+    "result_receipt_sha256": "7f09144863b5e4e67c1bc482331c137b0f44870acdaab8f38073d0130b64d748",
+    "result_receipt_verified": true,
+    "runtime_pfs": 14.318182,
+    "first_material_failure": "CAPITAL_EFFICIENCY",
+    "learning_state_id": "KM-LOCAL-KSM-20261120-R05-RKT-LEARNING-NEXT",
+    "learning_production_change_authorized": false
+   }
   },
   "KSM_06": {
    "venue_id": "KSM",
@@ -2922,6 +2983,52 @@
       "RECEIPT_VERIFIED"
      ]
     }
+   },
+   "check10": {
+    "started_at": "2026-11-20T12:45:43.896192+09:00",
+    "decision": "KEEP_REVISION_1 (再計算を要する変更なし)",
+    "checked_at": "2026-11-20T12:46:44.298440+09:00",
+    "material": false,
+    "reasons": [],
+    "identity": {
+     "active_removed": [],
+     "active_added": [],
+     "jockey_changed": [],
+     "going": null,
+     "post": null
+    },
+    "observed": {
+     "body_weight_new": [],
+     "body_weight_changed": []
+    },
+    "role_diff": {},
+    "rank_up": [
+     "2"
+    ],
+    "rank_down": [
+     "1"
+    ],
+    "rev1_source_raw_sha256": "cfe76da2c793705f734a3e4d0b6aab7b2d3c0269a1b1f44c01ac8dc9f34b9c07",
+    "new_source_raw_sha256": "20242d1ecb226597890475a4eee04561c79a61f2ff50dc04daed2fa73989d8ae",
+    "weather_change_since_t45": {
+     "temperature_c": [
+      12.4,
+      9.6
+     ],
+     "wind_speed_ms": [
+      7.9,
+      5.8
+     ],
+     "wind_direction_code": [
+      13,
+      15
+     ],
+     "humidity_pct": [
+      33,
+      49
+     ]
+    },
+    "finished_at": "2026-11-20T12:46:44.673687+09:00"
    }
   },
   "KSM_07": {
@@ -2933,7 +3040,7 @@
    "post_initial": "2026-11-20T13:30:00+09:00",
    "post_current": "2026-11-20T13:30:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "PREDICTION_COMPLETE",
    "editions": [
     {
      "edition": "朝版",
@@ -2972,11 +3079,47 @@
       "captured_at": "2026-11-19T11:20:44.496Z",
       "sha256": "4f11955bdb4a567be2a7a9d03974e54c0b277b95092e2a7c8bbda27cf204ec1b"
      }
+    },
+    {
+     "edition": "直前版",
+     "rev": "KSM_07.r2",
+     "source_sha256": "8aaf43c79a4b12b8d93a96616044571367e583115149484e4e97a470ac0550ff",
+     "ticket_sha256": "edfb222d2e5bfc40b1f89e447d186908677dedd1cf5ca80d14f7a0c241e3856c",
+     "source_fetched_at": "2026-11-20T12:45:43.216950+09:00",
+     "saved_at": "2026-11-20T12:45:43.887508+09:00",
+     "frozen_at": "2026-11-20T12:45:43.887508+09:00",
+     "revision": "直前の馬体重・オッズ・騎手を反映して再予測",
+     "delivery": {
+      "GENERATED": "2026-11-20T12:45:43.887508+09:00",
+      "FROZEN": "2026-11-20T12:45:43.887508+09:00",
+      "COMMITTED": null,
+      "PUSH_VERIFIED": null,
+      "LINK_AVAILABLE": null,
+      "USER_DELIVERY_SENT": "NOT_CONNECTED",
+      "USER_REACHED": "NOT_CONNECTED",
+      "USER_ACK_VERIFIED": "NOT_CONNECTED"
+     },
+     "before_cutoff": true,
+     "top": 4,
+     "quad": 4,
+     "aki_form": "1-3-6",
+     "sbo": {
+      "status": "USED",
+      "fetched_at": "2026-11-20T12:45:43.499379+09:00",
+      "sha256": "03c9d31f4bbea6f84c1efc5ad21f93f2960c9d68f7e664474a72ca191313b3cf",
+      "coverage": 9,
+      "active": 10
+     },
+     "keibabook": {
+      "status": "NOT_PROVIDED",
+      "captured_at": "2026-11-20T00:17:18.427Z",
+      "sha256": "7118fc0476023da441dec22c14d058ca701bdd70b879013a913f3379c21b34bc"
+     }
     }
    ],
    "attempts": 0,
    "last_error": null,
-   "source_fetched_at": "2026-11-19T21:15:40.611058+09:00",
+   "source_fetched_at": "2026-11-20T12:45:43.216950+09:00",
    "active_runners": 10,
    "scratched": [],
    "push_verified_at": "2026-11-19T21:16:42+09:00"
@@ -6260,8 +6403,8 @@
   "plan_complete_at": "2026-11-19T21:04:29.814061+09:00",
   "first_tick_at": "2026-11-19T21:01:26.180801+09:00",
   "first_prediction_at": "2026-11-19T21:04:31.211016+09:00",
-  "requests": 69,
-  "wait_seconds": 3556.41956281662,
+  "requests": 72,
+  "wait_seconds": 3719.487627029419,
   "all_first_editions_at": "2026-11-19T21:40:05.648849+09:00",
   "rediscovered_at": "2026-11-20T06:00:16.953965+09:00"
  },
