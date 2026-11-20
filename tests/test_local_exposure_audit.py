@@ -106,3 +106,25 @@ def test_cross_pair_third_banei_v37():
     # 3着候補がどの三連単でも3着に無いなら「補償の誤認」ではないので出さない
     d = ex.audit({'W': [1], 'P2': [2], 'P3': [7]}, [('馬単', [(1, 2)]), ('三連単', [(1, 2, 3)])])['cells']
     assert d['cross_pair_third'] == []
+
+
+def test_hub_failure_sonoda_v28():
+    # 園田 v2.8 第561条の型：40点中34点が同じ馬依存 → 点数が多くても1つの World
+    roles = {'W': [3, 6, 5], 'P2': [1, 2], 'P3': [9]}
+    tickets = [('三連単', [(6, 3, 1), (6, 3, 2), (6, 1, 2), (3, 6, 1), (5, 6, 1)]), ('馬単', [(3, 5), (6, 3)])]
+    a = ex.audit(roles, tickets)
+    hf = a['hub_failure']
+    assert a['hub']['no'] == 6 and hf['hub'] == 6
+    assert hf['points'] == 7 and hf['live_points'] == 1 and hf['dead_share'] == round(6 / 7, 3)
+    assert hf['w_head_live'] == [3] and hf['w_dead'] == [5]
+    s = ex.line(a)
+    assert '6番が3着外なら残る点 1/7' in s and '他の1着候補：5' in s
+
+
+def test_hub_failure_unordered_keeps_world_and_empty():
+    roles = {'W': [1, 2], 'P2': [3], 'P3': []}
+    a = ex.audit(roles, [('三連複', [(1, 2, 3), (2, 3, 4)]), ('馬単', [(1, 3)])])
+    hf = a['hub_failure']
+    assert hf['hub'] == 2 or hf['hub'] == 3
+    assert ex.hub_failure(roles, [], 1) is None
+    assert ex.audit(roles, [])['hub_failure'] is None

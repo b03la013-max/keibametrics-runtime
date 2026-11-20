@@ -80,13 +80,35 @@ def audit(roles, tickets):
         h, cnt = max(containing.items(), key=lambda kv: (kv[1], -kv[0]))
         hub = {'no': h, 'share': round(cnt / n_multi, 3), 'tickets': n_multi}
     extreme_hub = bool(hub and hub['share'] == 1.0 and len(roles.get('W', [])) > 1 and n_multi > 1)
+    hub_fail = hub_failure(roles, tickets, hub['no']) if hub else None
     # I2.1 §9 TRI-CAPITAL-MONOCULTURE: several W, every 三連単 needs the same horse
     tri_common = set.intersection(*[set(c) for c in trifecta]) if len(trifecta) > 1 else set()
     tri_mono = sorted(tri_common) if (tri_common and len(roles.get('W', [])) > 1) else []
     cells = cell_coverage(roles, exacta, trifecta)
     return {'exposure': ex, 'global_zero': global_zero, 'w_without_head': w_no_head,
             'pair_trio_gaps': gaps, 'hub': hub, 'extreme_hub': extreme_hub, 'tri_monoculture': tri_mono,
-            'trio_order_divergence': divergence, 'cells': cells}
+            'trio_order_divergence': divergence, 'cells': cells, 'hub_failure': hub_fail}
+
+
+def hub_failure(roles, tickets, hub_no):
+    """園田 v2.8-SON 第559・560・562条（Hub Failure Scenario／Point Count Width ≠ World Coverage Width）の検算：
+    if the most-contained horse finishes outside the top 3, which tickets can still hit, and which OTHER W heads
+    still have a live winner world (an ordered ticket headed by them, or a 単勝/unordered ticket holding them,
+    without the hub)?  Points that all die with one horse are one world, however many they are.
+    Evidence only — nothing is added, removed or re-weighted."""
+    items = [(kind, tuple(c)) for kind, combos in tickets for c in combos]
+    if not items:
+        return None
+    live = [(k, c) for k, c in items if hub_no not in c]
+    w_other = [w for w in roles.get('W', []) if w != hub_no]
+    ordered_heads = {c[0] for k, c in live if k in ORDERED or k == '単勝'}
+    unordered_any = {h for k, c in live if k not in ORDERED and k != '単勝' for h in c}
+    w_head_live = [w for w in w_other if w in ordered_heads]
+    w_any_live = [w for w in w_other if w in ordered_heads or w in unordered_any]
+    w_dead = [w for w in w_other if w not in w_any_live]
+    return {'hub': hub_no, 'points': len(items), 'live_points': len(live),
+            'dead_share': round(1 - len(live) / len(items), 3),
+            'w_head_live': w_head_live, 'w_any_live': w_any_live, 'w_dead': w_dead}
 
 
 def cell_coverage(roles, exacta, trifecta):
@@ -209,6 +231,12 @@ def line(a):
     if a['hub']:
         p.append(f"最多出現 {a['hub']['no']}番（{a['hub']['share'] * 100:.0f}%／{a['hub']['tickets']}点）"
                  + ('・1着候補が複数なのに全点が同じ馬（Extreme Hub）' if a['extreme_hub'] else ''))
+    hf = a.get('hub_failure')
+    if hf and hf['points'] > 1:
+        t = f"{hf['hub']}番が3着外なら残る点 {hf['live_points']}/{hf['points']}（園田 v2.8 Hub Failure）"
+        if hf['w_dead']:
+            t += '・そのとき勝ち筋が消える他の1着候補：' + '、'.join(map(str, hf['w_dead']))
+        p.append(t)
     if a.get('trio_order_divergence'):
         p.append('三連複にある1着候補→2着候補の並びが馬単・三連単の1-2着に無い：'
                  + '／'.join('→'.join(map(str, g)) for g in a['trio_order_divergence'][:6]))
