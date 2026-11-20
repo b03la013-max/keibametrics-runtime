@@ -91,3 +91,18 @@ def test_marginal_quinella_and_empty():
     lab = {(k, c): cls for k, c, cls in m['tickets']}
     assert lab[('馬連', (1, 2))] == 'REDUNDANT' and lab[('馬連', (3, 4))] == 'NEW_PAIR'
     assert ex.marginal([])['total'] == 0 and '券なし' in ex.marginal_line(ex.marginal([]))
+
+
+def test_cross_pair_third_banei_v37():
+    # 帯広 2026-09-06 7R：10→1 を馬単で買い、3 は 3→9→10 の頭／別の並びでは3着に使うのに 10→1→3 が無い
+    roles = {'W': [10, 9], 'P2': [1], 'P3': [3, 5]}
+    tickets = [('馬単', [(10, 1), (9, 10)]),
+               ('三連単', [(10, 1, 9), (9, 10, 3), (10, 9, 5)])]
+    c = ex.audit(roles, tickets)['cells']
+    assert (10, 1, 3) in c['cross_pair_third'] and (10, 1, 5) in c['cross_pair_third']
+    assert (9, 10, 5) in c['cross_pair_third'] and (9, 10, 3) not in c['cross_pair_third']
+    assert all(h not in (a, b) for a, b, h in c['cross_pair_third'])
+    assert '10→1→3' in ex.line(ex.audit(roles, tickets))
+    # 3着候補がどの三連単でも3着に無いなら「補償の誤認」ではないので出さない
+    d = ex.audit({'W': [1], 'P2': [2], 'P3': [7]}, [('馬単', [(1, 2)]), ('三連単', [(1, 2, 3)])])['cells']
+    assert d['cross_pair_third'] == []

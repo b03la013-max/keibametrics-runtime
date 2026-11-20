@@ -108,8 +108,21 @@ def cell_coverage(roles, exacta, trifecta):
             thirds = {c[2] for c in trifecta if c[:2] == (a, b)}
             depth[(a, b)] = len(thirds & role_set)
     zero_depth = [k for k, v in depth.items() if v == 0 and k in set(exacta)]
+    # ばんえい v3.7-BAN Rev.1（帯広 2026-09-06 6R・7R 反省）：Third は馬単体ではなく並びごとに見る。
+    # 馬単で買った並び A→B について、3着候補（P3、と W/P2）の馬 C が A→B→C に無いのに、別の並びの三連単では
+    # 3着に買われている＝「別の並びで買ったから補償済み」とみなしてしまう形（Cross-Pair Compensation）を列挙する。
+    cross_pair = []
+    if trifecta:
+        third_any = {c[2] for c in trifecta}
+        cand = list(dict.fromkeys(P3 + P2 + W))
+        for a, b in sorted(set(exacta)):
+            thirds = {c[2] for c in trifecta if c[:2] == (a, b)}
+            for h in cand:
+                if h not in (a, b) and h not in thirds and h in third_any:
+                    cross_pair.append((a, b, h))
     return {'expected': len(expected), 'bought': len(expected) - len(missing), 'missing': missing,
-            'breadth': len(first_two), 'depth': depth, 'exacta_zero_depth': zero_depth}
+            'breadth': len(first_two), 'depth': depth, 'exacta_zero_depth': zero_depth,
+            'cross_pair_third': cross_pair}
 
 
 MC_ORDER = ('NEW_HEAD_PATH', 'NEW_PAIR', 'NEW_SET', 'NEW_THIRD', 'NEW_ORDER', 'STRUCTURAL_PROTECTION', 'REDUNDANT')
@@ -209,5 +222,9 @@ def line(a):
                 f" ほか{len(c['missing']) - 6}" if len(c['missing']) > 6 else '') + '）'
         if c['exacta_zero_depth']:
             t += '・馬単で買った並びに三連単の3着が無い：' + '／'.join('→'.join(map(str, m)) for m in c['exacta_zero_depth'][:6])
+        if c.get('cross_pair_third'):
+            cp = c['cross_pair_third']
+            t += '・別の並びでは3着に買っているが馬単の並びの3着に無い（ばんえい v3.7 Pair-local Third）：' + '／'.join(
+                '→'.join(map(str, m)) for m in cp[:6]) + (f" ほか{len(cp) - 6}" if len(cp) > 6 else '')
         p.append(t)
     return '- 役割と券面の対応（I2.2 Directional Exposure・検算のみ、買い目は変えない）：' + '／'.join(p)
