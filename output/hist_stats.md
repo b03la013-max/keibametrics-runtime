@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-04', '2026-11-20'] ／ 690R・7439出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-04', '2026-11-20'] ／ 696R・7506出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -151,13 +151,13 @@
 | MOR | L | 4 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | MOR | L | 5 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | MOR | L | 6-9 | 4※ | 0 | 0 | 0 | 0.0% (0%–49%) | 0% | 0% |
-| MOR | M | 1 | 26※ | 7 | 7 | 6 | 76.9% (58%–89%) | 43% | 85% |
-| MOR | M | 10+ | 43 | 0 | 0 | 2 | 4.7% (1%–15%) | 0% | 62% |
-| MOR | M | 2 | 26※ | 8 | 5 | 4 | 65.4% (46%–81%) | 117% | 82% |
-| MOR | M | 3 | 26※ | 6 | 3 | 6 | 57.7% (39%–74%) | 107% | 86% |
-| MOR | M | 4 | 26※ | 4 | 5 | 3 | 46.2% (29%–65%) | 108% | 79% |
-| MOR | M | 5 | 26※ | 0 | 2 | 2 | 15.4% (6%–34%) | 0% | 45% |
-| MOR | M | 6-9 | 97 | 1 | 4 | 3 | 8.2% (4%–15%) | 63% | 61% |
+| MOR | M | 1 | 32 | 10 | 8 | 7 | 78.1% (61%–89%) | 46% | 87% |
+| MOR | M | 10+ | 54 | 0 | 0 | 2 | 3.7% (1%–13%) | 0% | 49% |
+| MOR | M | 2 | 32 | 10 | 6 | 5 | 65.6% (48%–80%) | 122% | 85% |
+| MOR | M | 3 | 32 | 7 | 4 | 7 | 56.2% (39%–72%) | 103% | 86% |
+| MOR | M | 4 | 32 | 4 | 6 | 4 | 43.8% (28%–61%) | 88% | 78% |
+| MOR | M | 5 | 32 | 0 | 2 | 3 | 15.6% (7%–32%) | 0% | 43% |
+| MOR | M | 6-9 | 121 | 1 | 6 | 4 | 9.1% (5%–16%) | 50% | 57% |
 | MOR | S | 1 | 15※ | 4 | 4 | 1 | 60.0% (36%–80%) | 57% | 68% |
 | MOR | S | 10+ | 31 | 0 | 0 | 0 | 0.0% (-0%–11%) | 0% | 0% |
 | MOR | S | 2 | 15※ | 9 | 1 | 2 | 80.0% (55%–93%) | 189% | 113% |
@@ -290,18 +290,18 @@
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 91 | 6.6% | 0.44 | 0% |
 | venue=SON / band=S / last_corner_pos(6=6+)=6 | 103 | 6.8% | 0.48 | 0% |
 | venue=MON / band=S / last_corner_pos(6=6+)=6 | 144 | 8.3% | 0.51 | 21% |
-| venue=MOR / band=M / last_corner_pos(6=6+)=6 | 136 | 9.6% | 0.59 | 9% |
+| venue=MOR / band=M / last_corner_pos(6=6+)=6 | 171 | 8.8% | 0.56 | 7% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=5 | 50 | 18.0% | 0.59 | 0% |
+| venue=MOR / band=M / last_corner_pos(6=6+)=5 | 31 | 19.4% | 0.62 | 38% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=1 | 67 | 89.5% | 1.56 | 323% |
 | venue=SON / band=M / last_corner_pos(6=6+)=4 | 43 | 23.3% | 0.65 | 4% |
 | venue=SON / band=M / last_corner_pos(6=6+)=1 | 54 | 88.9% | 1.53 | 251% |
+| venue=MOR / band=M / last_corner_pos(6=6+)=2 | 34 | 67.7% | 1.51 | 91% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=2 | 43 | 67.4% | 1.42 | 167% |
 | venue=MON / band=S / last_corner_pos(6=6+)=2 | 31 | 58.1% | 1.38 | 64% |
 | venue=SON / band=M / last_corner_pos(6=6+)=2 | 38 | 65.8% | 1.35 | 339% |
 | venue=MON / band=S / last_corner_pos(6=6+)=1 | 38 | 68.4% | 1.34 | 136% |
-| venue=KSM / band=M / last_corner_pos(6=6+)=4 | 55 | 36.4% | 1.29 | 0% |
-| venue=SON / band=M / last_corner_pos(6=6+)=3 | 44 | 43.2% | 1.13 | 93% |
-| venue=KSM / band=M / last_corner_pos(6=6+)=3 | 38 | 42.1% | 1.13 | 18% |
+| venue=MOR / band=M / last_corner_pos(6=6+)=3 | 33 | 54.5% | 1.33 | 80% |
 
 ## 騎手×距離（YouTube主張の検証用・未検証）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -336,18 +336,18 @@
 | venue=KNZ / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 43 | 4.7% | 0.24 | 0% |
 | venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=6+ | 59 | 3.4% | 0.26 | 0% |
 | venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 64 | 4.7% | 0.36 | 0% |
+| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 103 | 5.8% | 0.41 | 4% |
 | venue=SON / distance=1230 / fastest_last3f=False / last_corner_band=6+ | 57 | 7.0% | 0.43 | 0% |
-| venue=MOR / distance=1600 / fastest_last3f=False / last_corner_band=6+ | 38 | 5.3% | 0.45 | 0% |
-| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 84 | 7.1% | 0.47 | 5% |
+| venue=MOR / distance=1600 / fastest_last3f=False / last_corner_band=6+ | 51 | 5.9% | 0.47 | 0% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 53 | 18.9% | 0.58 | 0% |
 | venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=1-3 | 37 | 73.0% | 1.55 | 202% |
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=4-5 | 32 | 25.0% | 0.66 | 0% |
+| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 40 | 22.5% | 0.70 | 12% |
 | venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 84 | 66.7% | 1.41 | 84% |
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=1-3 | 38 | 60.5% | 1.35 | 346% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 102 | 60.8% | 1.35 | 219% |
 | venue=MON / distance=1200 / fastest_last3f=False / last_corner_band=1-3 | 31 | 48.4% | 1.30 | 100% |
-| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 33 | 24.2% | 0.77 | 0% |
-| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 49 | 55.1% | 1.25 | 64% |
+| venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 60 | 58.3% | 1.28 | 60% |
 | venue=SON / distance=1230 / fastest_last3f=False / last_corner_band=1-3 | 31 | 51.6% | 1.23 | 52% |
 
 ## クラス×4角位置→着順（佐賀CRZ-SAG／盛岡の検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
@@ -365,7 +365,7 @@
 | venue=SON / band=S / class=C3 / last_corner_pos(6=6+)=6 | 31 | 6.5% | 0.53 | 0% |
 | venue=MOR / band=S / class=C2 / last_corner_pos(6=6+)=6 | 42 | 9.5% | 0.55 | 0% |
 | venue=MON / band=S / class=2YO / last_corner_pos(6=6+)=6 | 62 | 11.3% | 0.60 | 33% |
-| venue=MOR / band=M / class=C2 / last_corner_pos(6=6+)=6 | 32 | 15.6% | 0.94 | 0% |
+| venue=MOR / band=M / class=C2 / last_corner_pos(6=6+)=6 | 48 | 10.4% | 0.71 | 0% |
 
 ## 近5走の最大進出（1角→4角）（MPA-SAG／MAI-MORの検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
 
