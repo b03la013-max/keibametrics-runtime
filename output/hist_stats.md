@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-06', '2026-11-20'] ／ 587R・6350出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-05', '2026-11-20'] ／ 593R・6408出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -20,13 +20,13 @@
 | FNB | M | 4 | 3※ | 0 | 1 | 1 | 66.7% (21%–94%) | 0% | 143% |
 | FNB | M | 5 | 3※ | 0 | 0 | 1 | 33.3% (6%–79%) | 0% | 163% |
 | FNB | M | 6-9 | 12※ | 1 | 1 | 1 | 25.0% (9%–53%) | 168% | 87% |
-| FNB | S | 1 | 5※ | 2 | 1 | 0 | 60.0% (23%–88%) | 74% | 68% |
+| FNB | S | 1 | 7※ | 3 | 1 | 0 | 57.1% (25%–84%) | 73% | 64% |
 | FNB | S | 10+ | 10※ | 0 | 0 | 0 | 0.0% (-0%–28%) | 0% | 0% |
-| FNB | S | 2 | 5※ | 1 | 2 | 1 | 80.0% (38%–96%) | 72% | 108% |
-| FNB | S | 3 | 5※ | 1 | 0 | 1 | 40.0% (12%–77%) | 84% | 72% |
-| FNB | S | 4 | 5※ | 1 | 0 | 0 | 20.0% (4%–62%) | 166% | 34% |
-| FNB | S | 5 | 5※ | 0 | 0 | 1 | 20.0% (4%–62%) | 0% | 48% |
-| FNB | S | 6-9 | 20※ | 0 | 2 | 2 | 20.0% (8%–42%) | 0% | 96% |
+| FNB | S | 2 | 7※ | 2 | 3 | 1 | 85.7% (49%–97%) | 100% | 123% |
+| FNB | S | 3 | 7※ | 1 | 0 | 1 | 28.6% (8%–64%) | 60% | 51% |
+| FNB | S | 4 | 7※ | 1 | 0 | 1 | 28.6% (8%–64%) | 119% | 69% |
+| FNB | S | 5 | 7※ | 0 | 0 | 1 | 14.3% (3%–51%) | 0% | 34% |
+| FNB | S | 6-9 | 27※ | 0 | 3 | 3 | 22.2% (11%–41%) | 0% | 102% |
 | KAW | L | 1 | 6※ | 1 | 0 | 1 | 33.3% (10%–70%) | 30% | 37% |
 | KAW | L | 10+ | 26※ | 0 | 2 | 1 | 11.5% (4%–29%) | 0% | 158% |
 | KAW | L | 2 | 6※ | 2 | 1 | 0 | 50.0% (19%–81%) | 135% | 92% |
@@ -124,13 +124,13 @@
 | MIZ | S | 4 | 14※ | 1 | 6 | 3 | 71.4% (45%–88%) | 45% | 124% |
 | MIZ | S | 5 | 14※ | 0 | 1 | 0 | 7.1% (1%–31%) | 0% | 11% |
 | MIZ | S | 6-9 | 52 | 0 | 3 | 2 | 9.6% (4%–21%) | 0% | 59% |
-| MON | L | 1 | 2※ | 2 | 0 | 0 | 100.0% (34%–100%) | 155% | 120% |
-| MON | L | 10+ | 5※ | 0 | 0 | 0 | 0.0% (-0%–43%) | 0% | 0% |
-| MON | L | 2 | 2※ | 0 | 1 | 0 | 50.0% (9%–91%) | 0% | 90% |
-| MON | L | 3 | 2※ | 0 | 1 | 0 | 50.0% (9%–91%) | 0% | 90% |
-| MON | L | 4 | 2※ | 0 | 0 | 1 | 50.0% (9%–91%) | 0% | 85% |
-| MON | L | 5 | 2※ | 0 | 0 | 0 | 0.0% (0%–66%) | 0% | 0% |
-| MON | L | 6-9 | 8※ | 0 | 0 | 1 | 12.5% (2%–47%) | 0% | 48% |
+| MON | L | 1 | 3※ | 3 | 0 | 0 | 100.0% (44%–100%) | 137% | 113% |
+| MON | L | 10+ | 7※ | 0 | 0 | 0 | 0.0% (0%–35%) | 0% | 0% |
+| MON | L | 2 | 3※ | 0 | 1 | 0 | 33.3% (6%–79%) | 0% | 60% |
+| MON | L | 3 | 3※ | 0 | 1 | 1 | 66.7% (21%–94%) | 0% | 107% |
+| MON | L | 4 | 3※ | 0 | 0 | 1 | 33.3% (6%–79%) | 0% | 57% |
+| MON | L | 5 | 3※ | 0 | 1 | 0 | 33.3% (6%–79%) | 0% | 57% |
+| MON | L | 6-9 | 12※ | 0 | 0 | 1 | 8.3% (1%–35%) | 0% | 32% |
 | MON | M | 1 | 3※ | 1 | 1 | 0 | 66.7% (21%–94%) | 67% | 83% |
 | MON | M | 10+ | 7※ | 0 | 0 | 0 | 0.0% (0%–35%) | 0% | 0% |
 | MON | M | 2 | 3※ | 0 | 0 | 1 | 33.3% (6%–79%) | 0% | 40% |
@@ -138,13 +138,13 @@
 | MON | M | 4 | 3※ | 1 | 0 | 0 | 33.3% (6%–79%) | 343% | 70% |
 | MON | M | 5 | 3※ | 0 | 2 | 0 | 66.7% (21%–94%) | 0% | 300% |
 | MON | M | 6-9 | 12※ | 0 | 0 | 1 | 8.3% (1%–35%) | 0% | 40% |
-| MON | S | 1 | 31 | 11 | 7 | 5 | 74.2% (57%–86%) | 66% | 85% |
-| MON | S | 10+ | 110 | 0 | 0 | 3 | 2.7% (1%–8%) | 0% | 46% |
-| MON | S | 2 | 31 | 8 | 3 | 3 | 45.2% (29%–62%) | 107% | 62% |
-| MON | S | 3 | 31 | 4 | 10 | 7 | 67.7% (50%–81%) | 92% | 124% |
-| MON | S | 4 | 31 | 5 | 3 | 3 | 35.5% (21%–53%) | 142% | 73% |
-| MON | S | 5 | 31 | 1 | 3 | 5 | 29.0% (16%–47%) | 36% | 91% |
-| MON | S | 6-9 | 124 | 2 | 5 | 5 | 9.7% (6%–16%) | 64% | 41% |
+| MON | S | 1 | 34 | 11 | 7 | 8 | 76.5% (60%–88%) | 60% | 87% |
+| MON | S | 10+ | 113 | 0 | 0 | 3 | 2.6% (1%–8%) | 0% | 45% |
+| MON | S | 2 | 34 | 10 | 3 | 3 | 47.1% (31%–63%) | 115% | 63% |
+| MON | S | 3 | 34 | 5 | 11 | 7 | 67.7% (51%–81%) | 96% | 120% |
+| MON | S | 4 | 34 | 5 | 4 | 3 | 35.3% (21%–52%) | 129% | 71% |
+| MON | S | 5 | 34 | 1 | 3 | 5 | 26.5% (15%–43%) | 33% | 83% |
+| MON | S | 6-9 | 135 | 2 | 6 | 5 | 9.6% (6%–16%) | 59% | 40% |
 | MOR | L | 1 | 1※ | 1 | 0 | 0 | 100.0% (21%–100%) | 160% | 100% |
 | MOR | L | 2 | 1※ | 0 | 1 | 0 | 100.0% (21%–100%) | 0% | 100% |
 | MOR | L | 3 | 1※ | 0 | 0 | 1 | 100.0% (21%–100%) | 0% | 120% |
@@ -279,7 +279,7 @@
 | venue=SON / band=S / last_corner_pos(6=6+)=6 | 46 | 4.3% | 0.30 | 0% |
 | venue=KOC / band=M / last_corner_pos(6=6+)=6 | 41 | 4.9% | 0.31 | 0% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 45 | 6.7% | 0.33 | 0% |
-| venue=MON / band=S / last_corner_pos(6=6+)=6 | 70 | 7.1% | 0.50 | 15% |
+| venue=MON / band=S / last_corner_pos(6=6+)=6 | 82 | 6.1% | 0.43 | 12% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 77 | 7.8% | 0.52 | 0% |
 | venue=MOR / band=M / last_corner_pos(6=6+)=6 | 115 | 8.7% | 0.54 | 11% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=5 | 36 | 16.7% | 0.55 | 0% |
@@ -313,13 +313,14 @@
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=6+ | 46 | 2.2% | 0.13 | 0% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 93 | 2.1% | 0.14 | 0% |
 | venue=MOR / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 46 | 2.2% | 0.18 | 0% |
-| venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 35 | 2.9% | 0.23 | 0% |
+| venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 39 | 2.6% | 0.20 | 0% |
 | venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=6+ | 59 | 3.4% | 0.26 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 78 | 6.4% | 0.43 | 6% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 39 | 20.5% | 0.60 | 0% |
 | venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=1-3 | 37 | 73.0% | 1.55 | 202% |
 | venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 63 | 66.7% | 1.43 | 92% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 63 | 60.3% | 1.39 | 330% |
+| venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=1-3 | 35 | 51.4% | 1.32 | 215% |
 | venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 49 | 18.4% | 0.77 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 47 | 55.3% | 1.25 | 67% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 31 | 25.8% | 0.80 | 0% |
@@ -334,7 +335,7 @@
 | venue=SON / band=M / class=C3 / last_corner_pos(6=6+)=6 | 41 | 4.9% | 0.32 | 0% |
 | venue=KNZ / band=M / class=C2 / last_corner_pos(6=6+)=6 | 30 | 6.7% | 0.35 | 0% |
 | venue=MOR / band=M / class=C1 / last_corner_pos(6=6+)=6 | 76 | 6.6% | 0.41 | 16% |
-| venue=MON / band=S / class=C4 / last_corner_pos(6=6+)=6 | 40 | 5.0% | 0.41 | 0% |
+| venue=MON / band=S / class=C4 / last_corner_pos(6=6+)=6 | 40 | 5.0% | 0.43 | 0% |
 | venue=KSM / band=M / class=C1 / last_corner_pos(6=6+)=6 | 38 | 7.9% | 0.47 | 0% |
 | venue=MOR / band=S / class=C2 / last_corner_pos(6=6+)=6 | 42 | 9.5% | 0.56 | 0% |
 
