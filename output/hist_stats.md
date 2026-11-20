@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-20'] ／ 778R・8406出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-20'] ／ 785R・8479出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -69,20 +69,20 @@
 | KNZ | S | 4 | 2※ | 0 | 0 | 0 | 0.0% (0%–66%) | 0% | 0% |
 | KNZ | S | 5 | 2※ | 0 | 0 | 0 | 0.0% (0%–66%) | 0% | 0% |
 | KNZ | S | 6-9 | 8※ | 1 | 1 | 1 | 37.5% (14%–69%) | 241% | 221% |
-| KOC | M | 1 | 23※ | 12 | 3 | 2 | 73.9% (54%–87%) | 96% | 83% |
-| KOC | M | 10+ | 33 | 0 | 0 | 1 | 3.0% (1%–15%) | 0% | 52% |
-| KOC | M | 2 | 23※ | 5 | 7 | 3 | 65.2% (45%–81%) | 90% | 97% |
-| KOC | M | 3 | 23※ | 2 | 4 | 7 | 56.5% (37%–74%) | 51% | 94% |
-| KOC | M | 4 | 23※ | 1 | 4 | 2 | 30.4% (16%–51%) | 29% | 60% |
-| KOC | M | 5 | 23※ | 0 | 1 | 3 | 17.4% (7%–37%) | 0% | 27% |
-| KOC | M | 6-9 | 85 | 3 | 4 | 5 | 14.1% (8%–23%) | 89% | 54% |
-| KOC | S | 1 | 24※ | 9 | 9 | 3 | 87.5% (69%–96%) | 50% | 100% |
-| KOC | S | 10+ | 31 | 1 | 0 | 2 | 9.7% (3%–25%) | 133% | 206% |
-| KOC | S | 2 | 24※ | 3 | 4 | 6 | 54.2% (35%–72%) | 49% | 70% |
-| KOC | S | 3 | 24※ | 7 | 2 | 7 | 66.7% (47%–82%) | 167% | 116% |
-| KOC | S | 4 | 24※ | 2 | 4 | 1 | 29.2% (15%–49%) | 85% | 52% |
-| KOC | S | 5 | 24※ | 2 | 1 | 2 | 20.8% (9%–40%) | 95% | 52% |
-| KOC | S | 6-9 | 89 | 0 | 4 | 3 | 7.9% (4%–15%) | 0% | 49% |
+| KOC | M | 1 | 24※ | 12 | 3 | 2 | 70.8% (51%–85%) | 92% | 79% |
+| KOC | M | 10+ | 36 | 0 | 0 | 1 | 2.8% (0%–14%) | 0% | 48% |
+| KOC | M | 2 | 24※ | 5 | 7 | 3 | 62.5% (43%–79%) | 86% | 93% |
+| KOC | M | 3 | 24※ | 2 | 4 | 7 | 54.2% (35%–72%) | 49% | 90% |
+| KOC | M | 4 | 24※ | 1 | 4 | 2 | 29.2% (15%–49%) | 28% | 58% |
+| KOC | M | 5 | 24※ | 0 | 2 | 3 | 20.8% (9%–40%) | 0% | 48% |
+| KOC | M | 6-9 | 89 | 4 | 4 | 6 | 15.7% (10%–25%) | 105% | 61% |
+| KOC | S | 1 | 28※ | 11 | 10 | 3 | 85.7% (69%–94%) | 56% | 98% |
+| KOC | S | 10+ | 36 | 1 | 0 | 2 | 8.3% (3%–22%) | 114% | 177% |
+| KOC | S | 2 | 28※ | 4 | 5 | 6 | 53.6% (36%–70%) | 60% | 70% |
+| KOC | S | 3 | 28※ | 7 | 3 | 8 | 64.3% (46%–79%) | 143% | 112% |
+| KOC | S | 4 | 28※ | 2 | 4 | 3 | 32.1% (18%–51%) | 73% | 52% |
+| KOC | S | 5 | 28※ | 3 | 2 | 2 | 25.0% (13%–43%) | 262% | 65% |
+| KOC | S | 6-9 | 102 | 0 | 4 | 4 | 7.8% (4%–15%) | 0% | 49% |
 | KSM | L | 1 | 1※ | 1 | 0 | 0 | 100.0% (21%–100%) | 140% | 130% |
 | KSM | L | 10+ | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | KSM | L | 2 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
@@ -215,20 +215,20 @@
 | SAG | L | 4 | 5※ | 0 | 2 | 1 | 60.0% (23%–88%) | 0% | 102% |
 | SAG | L | 5 | 5※ | 0 | 0 | 0 | 0.0% (-0%–43%) | 0% | 0% |
 | SAG | L | 6-9 | 20※ | 0 | 0 | 3 | 15.0% (5%–36%) | 0% | 82% |
-| SAG | M | 1 | 40 | 26 | 5 | 2 | 82.5% (68%–91%) | 93% | 90% |
-| SAG | M | 10+ | 80 | 0 | 1 | 2 | 3.8% (1%–10%) | 0% | 53% |
-| SAG | M | 2 | 40 | 4 | 13 | 7 | 60.0% (45%–74%) | 34% | 78% |
-| SAG | M | 3 | 40 | 6 | 9 | 10 | 62.5% (47%–76%) | 78% | 104% |
-| SAG | M | 4 | 40 | 3 | 4 | 5 | 30.0% (18%–45%) | 58% | 64% |
-| SAG | M | 5 | 40 | 0 | 4 | 4 | 20.0% (10%–35%) | 0% | 44% |
-| SAG | M | 6-9 | 156 | 1 | 4 | 10 | 9.6% (6%–15%) | 23% | 60% |
-| SAG | S | 1 | 21※ | 9 | 5 | 1 | 71.4% (50%–86%) | 58% | 78% |
-| SAG | S | 10+ | 25※ | 0 | 0 | 0 | 0.0% (0%–13%) | 0% | 0% |
-| SAG | S | 2 | 21※ | 7 | 6 | 1 | 66.7% (45%–83%) | 105% | 84% |
-| SAG | S | 3 | 21※ | 4 | 3 | 5 | 57.1% (37%–76%) | 142% | 90% |
-| SAG | S | 4 | 21※ | 0 | 2 | 6 | 38.1% (21%–59%) | 0% | 72% |
-| SAG | S | 5 | 21※ | 0 | 2 | 4 | 28.6% (14%–50%) | 0% | 102% |
-| SAG | S | 6-9 | 80 | 1 | 3 | 4 | 10.0% (5%–19%) | 109% | 69% |
+| SAG | M | 1 | 41 | 27 | 5 | 2 | 82.9% (69%–91%) | 93% | 91% |
+| SAG | M | 10+ | 83 | 0 | 1 | 2 | 3.6% (1%–10%) | 0% | 51% |
+| SAG | M | 2 | 41 | 4 | 14 | 7 | 61.0% (46%–74%) | 34% | 80% |
+| SAG | M | 3 | 41 | 6 | 9 | 10 | 61.0% (46%–74%) | 76% | 102% |
+| SAG | M | 4 | 41 | 3 | 4 | 5 | 29.3% (18%–44%) | 57% | 62% |
+| SAG | M | 5 | 41 | 0 | 4 | 5 | 21.9% (12%–37%) | 0% | 48% |
+| SAG | M | 6-9 | 160 | 1 | 4 | 10 | 9.4% (6%–15%) | 22% | 58% |
+| SAG | S | 1 | 22※ | 10 | 5 | 1 | 72.7% (52%–87%) | 64% | 79% |
+| SAG | S | 10+ | 26※ | 0 | 0 | 0 | 0.0% (0%–13%) | 0% | 0% |
+| SAG | S | 2 | 22※ | 7 | 7 | 1 | 68.2% (47%–84%) | 100% | 84% |
+| SAG | S | 3 | 22※ | 4 | 3 | 6 | 59.1% (39%–77%) | 136% | 90% |
+| SAG | S | 4 | 22※ | 0 | 2 | 6 | 36.4% (20%–57%) | 0% | 69% |
+| SAG | S | 5 | 22※ | 0 | 2 | 4 | 27.3% (13%–48%) | 0% | 97% |
+| SAG | S | 6-9 | 84 | 1 | 3 | 4 | 9.5% (5%–18%) | 104% | 66% |
 | SON | L | 1 | 4※ | 2 | 0 | 2 | 100.0% (51%–100%) | 72% | 118% |
 | SON | L | 10+ | 5※ | 0 | 0 | 0 | 0.0% (-0%–43%) | 0% | 0% |
 | SON | L | 2 | 4※ | 1 | 1 | 1 | 75.0% (30%–95%) | 105% | 115% |
@@ -286,9 +286,9 @@
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
 | venue=KSM / band=M / last_corner_pos(6=6+)=6 | 266 | 3.0% | 0.17 | 25% |
-| venue=KOC / band=S / last_corner_pos(6=6+)=6 | 65 | 3.1% | 0.23 | 0% |
+| venue=KOC / band=S / last_corner_pos(6=6+)=6 | 80 | 2.5% | 0.18 | 0% |
+| venue=KOC / band=M / last_corner_pos(6=6+)=6 | 47 | 4.3% | 0.24 | 0% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 137 | 4.4% | 0.25 | 0% |
-| venue=KOC / band=M / last_corner_pos(6=6+)=6 | 41 | 4.9% | 0.31 | 0% |
 | venue=SON / band=M / last_corner_pos(6=6+)=6 | 178 | 5.1% | 0.34 | 0% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 116 | 6.0% | 0.39 | 0% |
 | venue=SON / band=S / last_corner_pos(6=6+)=6 | 103 | 6.8% | 0.48 | 0% |
@@ -312,7 +312,7 @@
 |---|---|---|---|---|
 | venue=SON / distance=1400 / jockey=土方颯 | 31 | 9.7% | 0.57 | 60% |
 | venue=KSM / distance=1400 / jockey=藤原幹 | 31 | 16.1% | 0.62 | 11% |
-| venue=SAG / distance=1400 / jockey=竹吉徹 | 32 | 28.1% | 1.61 | 3% |
+| venue=SAG / distance=1400 / jockey=竹吉徹 | 33 | 27.3% | 1.61 | 3% |
 | venue=SON / distance=1400 / jockey=田野豊 | 43 | 20.9% | 0.68 | 19% |
 | venue=NGY / distance=1500 / jockey=大畑慧 | 35 | 20.0% | 0.69 | 14% |
 | venue=SON / distance=1400 / jockey=大山真 | 33 | 30.3% | 1.44 | 476% |
@@ -321,15 +321,15 @@
 | venue=SON / distance=1400 / jockey=廣瀬航 | 46 | 45.6% | 1.33 | 38% |
 | venue=NGY / distance=1500 / jockey=加藤聡 | 31 | 29.0% | 0.78 | 28% |
 | venue=SON / distance=1400 / jockey=小谷哲 | 32 | 25.0% | 1.25 | 123% |
-| venue=SAG / distance=1400 / jockey=出水拓 | 31 | 41.9% | 1.19 | 57% |
+| venue=SAG / distance=1400 / jockey=出水拓 | 31 | 41.9% | 1.18 | 57% |
 | venue=NGY / distance=1500 / jockey=木之葵 | 33 | 27.3% | 1.14 | 5% |
 | venue=NGY / distance=1500 / jockey=小笠羚 | 34 | 29.4% | 0.88 | 38% |
 | venue=SON / distance=1400 / jockey=下原理 | 31 | 41.9% | 0.88 | 61% |
 | venue=KNZ / distance=1400 / jockey=栗原大 | 32 | 37.5% | 0.93 | 54% |
 | venue=SON / distance=1400 / jockey=杉浦健 | 40 | 30.0% | 0.93 | 16% |
 | venue=KSM / distance=1400 / jockey=塚本征 | 34 | 58.8% | 1.08 | 70% |
+| venue=SAG / distance=1400 / jockey=飛田愛 | 36 | 52.8% | 0.93 | 42% |
 | venue=NGY / distance=1500 / jockey=大畑雅 | 32 | 21.9% | 1.07 | 50% |
-| venue=SON / distance=1400 / jockey=笹田知 | 30 | 36.7% | 1.05 | 38% |
 
 ## 上がり最速×4角位置（YouTube主張の検証用・未検証）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -340,21 +340,21 @@
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=6+ | 64 | 1.6% | 0.10 | 0% |
 | venue=MOR / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 73 | 1.4% | 0.11 | 0% |
 | venue=MOR / distance=1200 / fastest_last3f=False / last_corner_band=6+ | 31 | 3.2% | 0.17 | 0% |
+| venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=6+ | 73 | 2.7% | 0.20 | 0% |
 | venue=SON / distance=820 / fastest_last3f=False / last_corner_band=6+ | 42 | 2.4% | 0.21 | 0% |
 | venue=KNZ / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 74 | 4.0% | 0.24 | 0% |
-| venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=6+ | 59 | 3.4% | 0.26 | 0% |
 | venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 87 | 3.5% | 0.26 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 135 | 5.2% | 0.33 | 3% |
 | venue=MOR / distance=1600 / fastest_last3f=False / last_corner_band=6+ | 58 | 5.2% | 0.36 | 0% |
 | venue=SON / distance=1230 / fastest_last3f=False / last_corner_band=6+ | 57 | 7.0% | 0.43 | 0% |
+| venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=4-5 | 37 | 16.2% | 0.53 | 0% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 53 | 18.9% | 0.58 | 0% |
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=4-5 | 34 | 23.5% | 0.64 | 0% |
-| venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=1-3 | 37 | 73.0% | 1.55 | 202% |
+| venue=KOC / distance=1300 / fastest_last3f=False / last_corner_band=1-3 | 47 | 68.1% | 1.52 | 159% |
 | venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 110 | 66.4% | 1.45 | 77% |
 | venue=MOR / distance=1000 / fastest_last3f=False / last_corner_band=1-3 | 35 | 68.6% | 1.45 | 83% |
 | venue=KSM / distance=1580 / fastest_last3f=False / last_corner_band=1-3 | 41 | 61.0% | 1.37 | 328% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 102 | 60.8% | 1.35 | 219% |
-| venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=4-5 | 82 | 19.5% | 0.76 | 0% |
 
 ## クラス×4角位置→着順（佐賀CRZ-SAG／盛岡の検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -363,7 +363,7 @@
 | venue=SON / band=M / class=C2 / last_corner_pos(6=6+)=6 | 57 | 1.8% | 0.13 | 0% |
 | venue=KSM / band=M / class=OTHER / last_corner_pos(6=6+)=6 | 67 | 3.0% | 0.17 | 98% |
 | venue=KNZ / band=M / class=B2 / last_corner_pos(6=6+)=6 | 31 | 3.2% | 0.20 | 0% |
-| venue=KOC / band=S / class=C3 / last_corner_pos(6=6+)=6 | 65 | 3.1% | 0.23 | 0% |
+| venue=KOC / band=S / class=C3 / last_corner_pos(6=6+)=6 | 65 | 3.1% | 0.22 | 0% |
 | venue=KSM / band=M / class=C1 / last_corner_pos(6=6+)=6 | 77 | 5.2% | 0.29 | 0% |
 | venue=SON / band=M / class=C3 / last_corner_pos(6=6+)=6 | 60 | 5.0% | 0.34 | 0% |
 | venue=KNZ / band=M / class=C2 / last_corner_pos(6=6+)=6 | 30 | 6.7% | 0.36 | 0% |
