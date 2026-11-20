@@ -112,6 +112,77 @@ def cell_coverage(roles, exacta, trifecta):
             'breadth': len(first_two), 'depth': depth, 'exacta_zero_depth': zero_depth}
 
 
+MC_ORDER = ('NEW_HEAD_PATH', 'NEW_PAIR', 'NEW_SET', 'NEW_THIRD', 'NEW_ORDER', 'STRUCTURAL_PROTECTION', 'REDUNDANT')
+MC_JA = {'NEW_HEAD_PATH': '新しい1着', 'NEW_PAIR': '新しい1-2着の並び', 'NEW_SET': '新しい3頭の組',
+         'NEW_THIRD': '既存の並びに新しい3着', 'NEW_ORDER': '既存の3頭の新しい着順',
+         'STRUCTURAL_PROTECTION': '他券の保険', 'REDUNDANT': '他券で完全に重複'}
+
+
+def marginal(tickets):
+    """大井 v2.3-OHI 第326・329条（v2.0 第227条、v1.8 第150条 Portfolio Efficiency）の検算：
+    each delivered ticket is labelled by what it adds that the OTHER delivered tickets do not already hold
+    (NEW_HEAD_PATH / NEW_PAIR / NEW_SET / NEW_THIRD / NEW_ORDER / STRUCTURAL_PROTECTION / REDUNDANT), plus the
+    points per bet type (= capital share at the flat 100-yen stake).  REDUNDANT is strict: every finish the ticket
+    hits is already hit by other tickets (三連複 with all 6 三連単 orders, 馬連 with both 馬単 orders, a duplicate).
+    Evidence only — REDUNDANT is not forbidden and nothing is added, removed or re-weighted."""
+    items = [(kind, tuple(c)) for kind, combos in tickets for c in combos]
+    by_kind = {}
+    for kind, c in items:
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+    total = len(items)
+    out = []
+    seen = set()
+    for i, (kind, c) in enumerate(items):
+        others = items[:i] + items[i + 1:]
+        key = (kind, tuple(sorted(c)) if kind in ('三連複', '馬連', 'ワイド', '複勝') else c)
+        if key in seen:
+            out.append((kind, c, 'REDUNDANT'))
+            continue
+        seen.add(key)
+        o_heads = {x[0] for k, x in others if k in ORDERED or k == '単勝'}
+        o_pairs = {x[:2] for k, x in others if k in ORDERED and len(x) >= 2}
+        o_upairs = {frozenset(x[:2]) for k, x in others if len(x) >= 2 and k in ('馬連', 'ワイド')} | \
+                   {frozenset(p) for k, x in others if k == '三連複' for p in ((x[0], x[1]), (x[0], x[2]), (x[1], x[2]))}
+        o_sets = {frozenset(x) for k, x in others if len(x) == 3}
+        o_tri = {x for k, x in others if k == '三連単'}
+        o_ex = {x for k, x in others if k == '馬単'}
+        if kind == '三連複':
+            perms = {(a, b, d) for a in c for b in c for d in c if len({a, b, d}) == 3}
+            cls = 'REDUNDANT' if perms <= o_tri else ('NEW_SET' if frozenset(c) not in o_sets else 'STRUCTURAL_PROTECTION')
+        elif kind == '馬連':
+            a, b = c
+            cls = 'REDUNDANT' if {(a, b), (b, a)} <= o_ex else (
+                'NEW_PAIR' if frozenset(c) not in o_upairs and (a, b) not in o_pairs and (b, a) not in o_pairs
+                else 'STRUCTURAL_PROTECTION')
+        elif kind == '馬単':
+            a, b = c
+            cls = ('NEW_HEAD_PATH' if a not in o_heads else
+                   'NEW_PAIR' if (a, b) not in o_pairs and frozenset(c) not in o_upairs else 'STRUCTURAL_PROTECTION')
+        elif kind == '三連単':
+            a, b, d = c
+            cls = ('NEW_HEAD_PATH' if a not in o_heads else
+                   'NEW_PAIR' if (a, b) not in o_pairs else
+                   'NEW_ORDER' if frozenset(c) in o_sets else 'NEW_THIRD')
+        elif kind == '単勝':
+            cls = 'NEW_HEAD_PATH' if c[0] not in o_heads else 'STRUCTURAL_PROTECTION'
+        else:                                   # ワイド・複勝: wider hit sets, never strictly covered here
+            cls = 'STRUCTURAL_PROTECTION' if any(set(c) <= set(x) for k, x in others) else 'NEW_PAIR' if len(c) == 2 else 'NEW_HEAD_PATH'
+        out.append((kind, c, cls))
+    counts = {k: 0 for k in MC_ORDER}
+    for _, _, cls in out:
+        counts[cls] += 1
+    layer = {k: {'points': n, 'share': round(n / total, 3)} for k, n in by_kind.items()} if total else {}
+    return {'tickets': out, 'counts': counts, 'layer': layer, 'total': total}
+
+
+def marginal_line(m):
+    if not m['total']:
+        return '- 券ごとの追加分（大井 v2.3 第329条・検算のみ）：券なし'
+    lay = '／'.join(f"{k} {v['points']}点（{v['share'] * 100:.0f}%）" for k, v in m['layer'].items())
+    cnt = '／'.join(f"{MC_JA[k]} {m['counts'][k]}" for k in MC_ORDER if m['counts'][k])
+    return f'- 券種の配分と券ごとの追加分（大井 v2.3 第326・329条・検算のみ、買い目は変えない）：{lay}。{cnt}'
+
+
 def line(a):
     """One-line Japanese summary for the PAPER report details."""
     p = []

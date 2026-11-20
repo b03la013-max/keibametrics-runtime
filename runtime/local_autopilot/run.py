@@ -128,6 +128,7 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
     try:                                 # 地方 I2.2 Directional Exposure（検算のみ・買い目は変えない）
         from runtime.local_autopilot import exposure
         L.append(exposure.line(exposure.audit(exposure.roles_from_order(res['order']), [(k, c) for k, c, _ in tk])))
+        L.append(exposure.marginal_line(exposure.marginal([(k, c) for k, c, _ in tk])))   # 大井 v2.3 第326・329条
     except Exception as err:             # an audit failure must never break the delivery
         L.append(f'- 役割と券面の対応：検算不可（{type(err).__name__}）')
     L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | CCI | TRI | 印 | 展開 | p勝(暫定) | 役割 |',

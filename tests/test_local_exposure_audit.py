@@ -65,3 +65,29 @@ def test_cell_coverage_fnb_v20():
     s = ex.line(a)
     assert '並び 2/4' in s and '4→12' in s and '三連単の3着が無い：4→13' in s
     assert ex.audit(roles, [('三連複', [(4, 7, 13)])])['cells'] is None   # no ordered ticket → no cell check
+
+
+def test_marginal_contribution_ohi_v23():
+    # 大井 v2.3 第326・329条：券ごとに「他の券に無いもの」を分類し、券種別の点数配分を出す（検算のみ）
+    tickets = [('馬単', [(1, 2), (3, 1)]),
+               ('三連複', [(1, 2, 4), (1, 2, 5)]),
+               ('三連単', [(1, 2, 4), (1, 2, 6), (1, 4, 2), (2, 1, 4), (2, 4, 1), (4, 1, 2), (4, 2, 1)])]
+    m = ex.marginal(tickets)
+    lab = {(k, c): cls for k, c, cls in m['tickets']}
+    assert lab[('馬単', (1, 2))] == 'STRUCTURAL_PROTECTION'      # 1→2 also first two of 三連単
+    assert lab[('馬単', (3, 1))] == 'NEW_HEAD_PATH'              # 3 heads nothing else
+    assert lab[('三連複', (1, 2, 4))] == 'REDUNDANT'             # all 6 orders bought as 三連単
+    assert lab[('三連複', (1, 2, 5))] == 'NEW_SET'
+    assert lab[('三連単', (1, 2, 6))] == 'NEW_THIRD'             # 1→2 known, {1,2,6} new
+    assert lab[('三連単', (1, 2, 4))] == 'NEW_ORDER'             # {1,2,4} known from other tickets
+    assert m['layer']['三連単'] == {'points': 7, 'share': round(7 / 11, 3)}
+    assert sum(m['counts'].values()) == m['total'] == 11
+    s = ex.marginal_line(m)
+    assert '三連単 7点（64%）' in s and '他券で完全に重複 1' in s and '検算のみ' in s
+
+
+def test_marginal_quinella_and_empty():
+    m = ex.marginal([('馬連', [(1, 2), (3, 4)]), ('馬単', [(1, 2), (2, 1)])])
+    lab = {(k, c): cls for k, c, cls in m['tickets']}
+    assert lab[('馬連', (1, 2))] == 'REDUNDANT' and lab[('馬連', (3, 4))] == 'NEW_PAIR'
+    assert ex.marginal([])['total'] == 0 and '券なし' in ex.marginal_line(ex.marginal([]))
