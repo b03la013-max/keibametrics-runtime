@@ -165,6 +165,14 @@ def evaluate(root, prereg_path=PREREG):
         for cid, name in (('C13-FORMAL-MIX-P2BOX20', 'MIX_P2BOX20'), ('C14-FORMAL-P2BOX20-ONLY', 'P2BOX20_ONLY'),
                           ('C15-FORMAL-MIX-WAXIS-TRIO', 'MIX_WAXIS_TRIO')):
             out['candidates'][cid] = {'races': n, 'stage': _stage(n, p5['stages']), 'candidate': v.get(name), 'champion': v.get('R54_60')}
+    pre8 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261120_R8.json')
+    if pre8.exists():
+        from runtime.local_autopilot import formal_mix
+        p8 = json.loads(pre8.read_text())
+        ev = formal_mix.evaluate(root, since=datetime.fromisoformat(p8['first_eligible_post']))
+        v, n = ev['variants'], ev['races']
+        for cid, name in (('C22-KEEP-MEC-TRIO20', 'KEEP_MEC_TRIO20'), ('C23-THIRD3-BY-PAIR', 'THIRD3_BY_PAIR')):
+            out['candidates'][cid] = {'races': n, 'stage': _stage(n, p8['stages']), 'candidate': v.get(name), 'champion': v.get('R54_60')}
     pre6 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261119_R6.json')
     if pre6.exists():
         from runtime.local_autopilot import role_shadow
@@ -297,6 +305,9 @@ def md(o):
            f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
            f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',
                                                               'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
+        *([f"- {cid}（11/19反省P1-C）：{c[cid]['stage']}／最大1R除く回収率 {(c[cid]['candidate'] or {}).get('pfs_ex_top1')}% 対 正式60点 "
+           f"{(c[cid]['champion'] or {}).get('pfs_ex_top1')}%／的中赤字 {(c[cid]['candidate'] or {}).get('hit_but_loss')}R 対 "
+           f"{(c[cid]['champion'] or {}).get('hit_but_loss')}R" for cid in ('C22-KEEP-MEC-TRIO20', 'C23-THIRD3-BY-PAIR') if cid in c]),
         *([f"- C21 自前集計の血統指数BVI-L-R2：{c['C21-BVI-L-R2-TERTILE']['stage']}／3着内率 上位1/3 "
            f"{c['C21-BVI-L-R2-TERTILE']['top3_high']}% 対 下位1/3 {c['C21-BVI-L-R2-TERTILE']['top3_low']}%"] if 'C21-BVI-L-R2-TERTILE' in c else []),
         '', '### 競馬場別（Owner 2026-11-19：場ごとに形状・レベルが違うため、合算だけで判断しない）', '',

@@ -1,0 +1,23 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261120-R8",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-20T09:45:00+09:00",
+ "first_eligible_post": "2026-11-20T09:45:00+09:00",
+ "origin": "11/19 external review P1-C (6 hit tickets of the full MEC lost by the 60-point cap) and P1-3 (conditional third retention); Owner 2026-11-20 09:07「昨日の予想の失敗の改善はできていますか？」",
+ "extends": "R1-R7 unchanged",
+ "learning_races": "2026-11-16..19 formal SIGNED_FINAL 113R (formal_mix with the effective revision; R54_60 replay equals the settled formal result on 11/18 and 11/19, 72/72)",
+ "in_sample": {
+  "R54_60": {"pfs": 133.3, "hit_races": 45, "top1_share": 65.1, "pfs_ex_top1": 47.0, "hit_but_loss": 32},
+  "KEEP_MEC_TRIO20": {"pfs": 122.6, "hit_races": 48, "top1_share": 70.7, "pfs_ex_top1": 36.2, "hit_but_loss": 40},
+  "THIRD3_BY_PAIR": {"pfs": 133.4, "hit_races": 20, "top1_share": 78.1, "pfs_ex_top1": 29.4, "hit_but_loss": 10},
+  "note": "in-sample both are worse than the delivered 60 once the single largest race is removed; registered as controls so the review's suggestion is answered by future races, not by 11/19 alone"
+ },
+ "production_change": "NONE. Delivered formal tickets, MEC, cap 60, KRS, roles, capital unchanged.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "venue_rule": "same direction in >= 2 venues with >= 12 races each",
+ "candidates": [
+  {"id": "C22-KEEP-MEC-TRIO20", "hypothesis": "Keeping the first 20 三連複 tickets of the full MEC inside the 60 points raises PFS (excluding the top race) above the delivered 60.", "primary_metric": "PFS and PFS excluding the top-1 race vs R54_60, hit races, hit-but-loss races", "reject_if": "at 100 races PFS excluding the top-1 race is lower than R54_60", "promote_if": "report to the Owner (ticket policy change needs approval)"},
+  {"id": "C23-THIRD3-BY-PAIR", "hypothesis": "三連単 W->P2->best-3 thirds over more W/P2 pairs reduces hit-but-loss races without lowering PFS.", "primary_metric": "hit-but-loss races, PFS excluding the top-1 race vs R54_60", "reject_if": "at 100 races PFS excluding the top-1 race is lower than R54_60 by > 5 points", "promote_if": "report to the Owner"}
+ ]
+}
