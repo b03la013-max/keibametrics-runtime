@@ -50,3 +50,18 @@ def test_trio_order_divergence():
     assert '1→5' in ex.line(a)
     b = ex.audit(roles, [('三連複', [(1, 3, 5)])])     # no ordered ticket at all → nothing to compare
     assert b['trio_order_divergence'] == []
+
+
+def test_cell_coverage_fnb_v20():
+    # 船橋 v2.0 第307・311条：W×P2 の並び（Expected Cell）と、馬単で買った並びの三連単3着の深さ
+    roles = {'W': [4, 12], 'P2': [13], 'P3': [7]}
+    tickets = [('馬単', [(12, 4), (4, 13)]), ('三連単', [(12, 4, 13), (12, 4, 7)])]
+    a = ex.audit(roles, tickets)
+    c = a['cells']
+    assert c['expected'] == 4 and c['bought'] == 2
+    assert c['missing'] == [(4, 12), (12, 13)]
+    assert c['depth'][(12, 4)] == 2 and c['depth'][(4, 13)] == 0
+    assert c['exacta_zero_depth'] == [(4, 13)]
+    s = ex.line(a)
+    assert '並び 2/4' in s and '4→12' in s and '三連単の3着が無い：4→13' in s
+    assert ex.audit(roles, [('三連複', [(4, 7, 13)])])['cells'] is None   # no ordered ticket → no cell check

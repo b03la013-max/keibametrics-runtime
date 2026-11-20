@@ -83,9 +83,33 @@ def audit(roles, tickets):
     # I2.1 §9 TRI-CAPITAL-MONOCULTURE: several W, every 三連単 needs the same horse
     tri_common = set.intersection(*[set(c) for c in trifecta]) if len(trifecta) > 1 else set()
     tri_mono = sorted(tri_common) if (tri_common and len(roles.get('W', [])) > 1) else []
+    cells = cell_coverage(roles, exacta, trifecta)
     return {'exposure': ex, 'global_zero': global_zero, 'w_without_head': w_no_head,
             'pair_trio_gaps': gaps, 'hub': hub, 'extreme_hub': extreme_hub, 'tri_monoculture': tri_mono,
-            'trio_order_divergence': divergence}
+            'trio_order_divergence': divergence, 'cells': cells}
+
+
+def cell_coverage(roles, exacta, trifecta):
+    """船橋 v2.0-FNB 第302・307・308・311条（Execution Compiler の Expected Cell Set、Pair Breadth／Depth）の検算。
+    Expected pair cells = every W head × (P2 ∪ other W) second.  A cell is "bought" if some 馬単 or 三連単 has it as
+    its first two.  For every bought ordered pair, depth = number of role horses bought as its 三連単 third.
+    Evidence only: 『買わない』は許されるが『存在しない』は許されない — this lists the absent cells, it never adds one."""
+    W, P2, P3 = roles.get('W', []), roles.get('P2', []), roles.get('P3', [])
+    if not (exacta or trifecta):
+        return None
+    first_two = set(exacta) | {c[:2] for c in trifecta}
+    expected = [(a, b) for a in W for b in P2 + W if b != a]
+    expected = list(dict.fromkeys(expected))
+    missing = [c for c in expected if c not in first_two]
+    depth = {}
+    if trifecta:
+        role_set = set(W) | set(P2) | set(P3)
+        for a, b in sorted(first_two):
+            thirds = {c[2] for c in trifecta if c[:2] == (a, b)}
+            depth[(a, b)] = len(thirds & role_set)
+    zero_depth = [k for k, v in depth.items() if v == 0 and k in set(exacta)]
+    return {'expected': len(expected), 'bought': len(expected) - len(missing), 'missing': missing,
+            'breadth': len(first_two), 'depth': depth, 'exacta_zero_depth': zero_depth}
 
 
 def line(a):
@@ -106,4 +130,13 @@ def line(a):
                  + '／'.join('→'.join(map(str, g)) for g in a['trio_order_divergence'][:6]))
     if a.get('tri_monoculture'):
         p.append('三連単の全点に同じ馬（' + '・'.join(map(str, a['tri_monoculture'])) + '番、1着候補は複数）')
+    c = a.get('cells')
+    if c and c['expected']:
+        t = f"1着候補×2着候補の並び {c['bought']}/{c['expected']}"
+        if c['missing']:
+            t += '（無い並び：' + '／'.join('→'.join(map(str, m)) for m in c['missing'][:6]) + (
+                f" ほか{len(c['missing']) - 6}" if len(c['missing']) > 6 else '') + '）'
+        if c['exacta_zero_depth']:
+            t += '・馬単で買った並びに三連単の3着が無い：' + '／'.join('→'.join(map(str, m)) for m in c['exacta_zero_depth'][:6])
+        p.append(t)
     return '- 役割と券面の対応（I2.2 Directional Exposure・検算のみ、買い目は変えない）：' + '／'.join(p)
