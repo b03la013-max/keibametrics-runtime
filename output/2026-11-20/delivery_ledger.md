@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-20（19:17時点）
+# 地方版 配送台帳 2026-11-20（19:22時点）
 
 - 管理Race 36／発走済み 33
 - PAPER：凍結 36・Push検証 36・送信 34（発走前 34）・読み戻し一致 34・本人確認 0
@@ -6,7 +6,7 @@
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 33／重要変更 19／Revision 2署名 19
+- 10分前チェック：確認 34／重要変更 20／Revision 2署名 20
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -32,7 +32,7 @@
 | OHI_07 | 17:45 | POSTRESULT_DIAGNOSTIC | 17:03 | ○ | SIGNED_FINAL | 17:37 | ○ |  |
 | OHI_08 | 18:20 | POSTRESULT_DIAGNOSTIC | 17:40 | ○ | SIGNED_FINAL | 18:13 | ○ |  |
 | OHI_09 | 18:55 | POSTRESULT_DIAGNOSTIC | 18:15 | ○ | SIGNED_FINAL | 18:15 | ○ |  |
-| OHI_10 | 19:30 | PRESTART_PUSH_VERIFIED | 18:49 | ○ | SIGNED_FINAL | 18:51 | ○ |  |
+| OHI_10 | 19:30 | PRESTART_PUSH_VERIFIED | 18:49 | ○ | SIGNED_FINAL | 19:22 | ○ |  |
 | OHI_11 | 20:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_12 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_01 | 10:40 | POSTRESULT_DIAGNOSTIC | 09:59 | ○ | SIGNED_FINAL | 10:31 | ○ |  |
