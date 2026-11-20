@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-21（21:15時点）
+# 地方版 配送台帳 2026-11-21（21:24時点）
 
 - 管理Race 23／発走済み 0
-- PAPER：凍結 13・Push検証 6・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 20・Push検証 13・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -14,25 +14,25 @@
 | KOC_01 | 14:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_02 | 15:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_03 | 16:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KOC_04 | 16:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_05 | 17:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_06 | 17:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_07 | 18:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_08 | 18:45 | DISCOVERED |  | … | - | - | - |  |
-| KOC_09 | 19:20 | DISCOVERED |  | … | - | - | - |  |
-| KOC_10 | 19:50 | DISCOVERED |  | … | - | - | - |  |
+| KOC_04 | 16:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_05 | 17:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_06 | 17:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_07 | 18:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_08 | 18:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_09 | 19:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_10 | 19:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KOC_11 | 20:20 | DISCOVERED |  | … | - | - | - |  |
 | KOC_12 | 20:50 | DISCOVERED |  | … | - | - | - |  |
 | SAG_01 | 15:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_02 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_03 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SAG_04 | 17:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_05 | 17:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_06 | 18:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_07 | 18:40 | DISCOVERED |  | … | - | - | - |  |
-| SAG_08 | 19:10 | DISCOVERED |  | … | - | - | - |  |
-| SAG_09 | 19:40 | DISCOVERED |  | … | - | - | - |  |
-| SAG_10 | 20:10 | DISCOVERED |  | … | - | - | - |  |
+| SAG_04 | 17:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_05 | 17:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_06 | 18:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_07 | 18:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_08 | 19:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_09 | 19:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_10 | 20:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SAG_11 | 20:40 | DISCOVERED |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
