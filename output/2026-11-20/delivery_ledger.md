@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-20（14:59時点）
+# 地方版 配送台帳 2026-11-20（15:01時点）
 
 - 管理Race 36／発走済み 19
-- PAPER：凍結 36・Push検証 36・送信 23（発走前 23）・読み戻し一致 23・本人確認 0
+- PAPER：凍結 36・Push検証 35・送信 23（発走前 23）・読み戻し一致 23・本人確認 0
 - 正式：試行 23・Signed FINAL 23（NO-BET 0）・発走前送信 23・読み戻し一致 23・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 20／重要変更 12／Revision 2署名 12
+- 10分前チェック：確認 21／重要変更 12／Revision 2署名 12
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -21,7 +21,7 @@
 | KSM_08 | 14:00 | POSTRESULT_DIAGNOSTIC | 13:18 | ○ | SIGNED_FINAL | 13:52 | ○ |  |
 | KSM_09 | 14:35 | POSTRESULT_DIAGNOSTIC | 13:54 | ○ | SIGNED_FINAL | 13:55 | ○ |  |
 | KSM_10 | 15:10 | PRESTART_PUSH_VERIFIED | 14:28 | ○ | SIGNED_FINAL | 14:29 | ○ |  |
-| KSM_11 | 15:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_11 | 15:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KSM_12 | 16:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_01 | 14:30 | POSTRESULT_DIAGNOSTIC | 13:47 | ○ | SIGNED_FINAL | 14:22 | ○ |  |
 | OHI_02 | 15:02 | PRESTART_PUSH_VERIFIED | 14:19 | ○ | SIGNED_FINAL | 14:55 | ○ |  |
