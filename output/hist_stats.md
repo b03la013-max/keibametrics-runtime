@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-09', '2026-11-19'] ／ 459R・5010出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-09', '2026-11-20'] ／ 464R・5066出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -208,20 +208,20 @@
 | SON | L | 4 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | SON | L | 5 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | SON | L | 6-9 | 4※ | 0 | 1 | 0 | 25.0% (5%–70%) | 0% | 100% |
-| SON | M | 1 | 40 | 20 | 7 | 5 | 80.0% (65%–90%) | 85% | 89% |
-| SON | M | 10+ | 44 | 0 | 0 | 0 | 0.0% (0%–8%) | 0% | 0% |
-| SON | M | 2 | 40 | 12 | 13 | 4 | 72.5% (57%–84%) | 96% | 96% |
-| SON | M | 3 | 40 | 4 | 8 | 7 | 47.5% (33%–62%) | 39% | 74% |
-| SON | M | 4 | 40 | 1 | 5 | 4 | 25.0% (14%–40%) | 32% | 47% |
-| SON | M | 5 | 40 | 1 | 3 | 6 | 25.0% (14%–40%) | 46% | 66% |
-| SON | M | 6-9 | 153 | 2 | 4 | 14 | 13.1% (9%–19%) | 44% | 60% |
-| SON | S | 1 | 19※ | 7 | 5 | 3 | 79.0% (57%–91%) | 67% | 90% |
-| SON | S | 10+ | 35 | 0 | 1 | 0 | 2.9% (1%–15%) | 0% | 27% |
-| SON | S | 2 | 19※ | 6 | 3 | 3 | 63.2% (41%–81%) | 125% | 85% |
-| SON | S | 3 | 19※ | 2 | 3 | 4 | 47.4% (27%–68%) | 56% | 84% |
-| SON | S | 4 | 19※ | 2 | 5 | 4 | 57.9% (36%–77%) | 83% | 87% |
-| SON | S | 5 | 19※ | 1 | 2 | 2 | 26.3% (12%–49%) | 55% | 73% |
-| SON | S | 6-9 | 71 | 1 | 0 | 3 | 5.6% (2%–14%) | 26% | 36% |
+| SON | M | 1 | 44 | 22 | 7 | 5 | 77.3% (63%–87%) | 83% | 86% |
+| SON | M | 10+ | 52 | 0 | 1 | 0 | 1.9% (0%–10%) | 0% | 62% |
+| SON | M | 2 | 44 | 12 | 13 | 4 | 65.9% (51%–78%) | 87% | 88% |
+| SON | M | 3 | 44 | 4 | 9 | 8 | 47.7% (34%–62%) | 35% | 75% |
+| SON | M | 4 | 44 | 2 | 6 | 4 | 27.3% (16%–42%) | 46% | 53% |
+| SON | M | 5 | 44 | 1 | 4 | 8 | 29.5% (18%–44%) | 42% | 78% |
+| SON | M | 6-9 | 169 | 3 | 4 | 15 | 13.0% (9%–19%) | 79% | 75% |
+| SON | S | 1 | 20※ | 7 | 6 | 3 | 80.0% (58%–92%) | 64% | 91% |
+| SON | S | 10+ | 38 | 0 | 1 | 0 | 2.6% (0%–14%) | 0% | 24% |
+| SON | S | 2 | 20※ | 7 | 3 | 3 | 65.0% (43%–82%) | 140% | 88% |
+| SON | S | 3 | 20※ | 2 | 3 | 4 | 45.0% (26%–66%) | 54% | 80% |
+| SON | S | 4 | 20※ | 2 | 5 | 4 | 55.0% (34%–74%) | 79% | 83% |
+| SON | S | 5 | 20※ | 1 | 2 | 2 | 25.0% (11%–47%) | 52% | 70% |
+| SON | S | 6-9 | 75 | 1 | 0 | 4 | 6.7% (3%–15%) | 25% | 41% |
 
 ## 4角位置→着順：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -230,6 +230,8 @@
 | venue=KSM / band=M / last_corner_pos(6=6+)=6 | 59 | 5.1% | 0.26 | 111% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 45 | 4.4% | 0.31 | 0% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 45 | 6.7% | 0.33 | 0% |
+| venue=SON / band=M / last_corner_pos(6=6+)=6 | 50 | 6.0% | 0.43 | 0% |
+| venue=SON / band=S / last_corner_pos(6=6+)=6 | 32 | 6.2% | 0.44 | 0% |
 | venue=MON / band=S / last_corner_pos(6=6+)=6 | 70 | 7.1% | 0.50 | 15% |
 | venue=MOR / band=M / last_corner_pos(6=6+)=6 | 85 | 8.2% | 0.53 | 5% |
 
@@ -238,6 +240,7 @@
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
 | venue=NGY / distance=1500 / jockey=大畑慧 | 35 | 20.0% | 0.69 | 14% |
+| venue=SON / distance=1400 / jockey=廣瀬航 | 30 | 53.3% | 1.30 | 58% |
 | venue=NGY / distance=1500 / jockey=加藤聡 | 31 | 29.0% | 0.78 | 28% |
 | venue=NGY / distance=1500 / jockey=木之葵 | 33 | 27.3% | 1.14 | 5% |
 | venue=NGY / distance=1500 / jockey=小笠羚 | 34 | 29.4% | 0.88 | 38% |
@@ -249,9 +252,11 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
+| venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 40 | 2.5% | 0.16 | 0% |
 | venue=MOR / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 40 | 2.5% | 0.18 | 0% |
 | venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 35 | 2.9% | 0.23 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 53 | 7.5% | 0.51 | 0% |
+| venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 31 | 61.3% | 1.37 | 262% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 31 | 54.8% | 1.22 | 81% |
 
 ## クラス×4角位置→着順（佐賀CRZ-SAG／盛岡の検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
