@@ -9,7 +9,8 @@ C18 W+FAVORITE / C19 W+TOP2-POP: W ∪ market favourite / W ∪ the two shortest
     pre-start PAPER revision). C20 P2+TOP3-POP: P2 ∪ the three shortest-odds horses.
     Same-budget check: 馬単 with the same point count as the signed 馬単 set (heads = W order then added heads,
     seconds = P2 order then added; points split evenly over heads), settled on the official payout.
-The formal Full29 has no market input; in-sample 18 of 35 W-missed winners were in the top 3 of the market.
+Correction 2026-11-21: the formal Full29 DOES read the market (PRI, OPI-V move with the win odds; rev_audit.py), but
+value-style -- a horse backed late gets LOWER PRI/OPI-V. In-sample 18 of 35 W-missed winners were market top 3.
 Both read only the signed pre-race files (formal summary + full29 of the effective revision) and the result.
 """
 import json

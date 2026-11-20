@@ -1143,6 +1143,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     smz.write_daily(ROOT, out.name)   # per-day: allocation / NO-BET / ◎ vs 1番人気 / 危険な1番人気
                     from runtime.local_autopilot import formal_eval
                     formal_eval.write_daily(out)          # per-day: KRS improved/worsened, 60-point cap effect
+                    try:
+                        from runtime.local_autopilot import rev_audit
+                        rev_audit.write_daily(out)        # Rev2 audit + winner-outside-W diagnosis (evidence only)
+                    except Exception as e:
+                        log('REV_AUDIT_FAIL', f'{type(e).__name__}:{e}')
                     from runtime.local_autopilot import forward_oos
                     forward_oos.write(ROOT)               # pre-registered candidates, post-freeze races only
                     from runtime.local_autopilot import aki_audit
