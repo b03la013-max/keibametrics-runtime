@@ -120,6 +120,31 @@ def delivered_coverage(tickets, order, settle_row):
             'hit_but_loss': bool(0 < pay < eff)}
 
 
+# KMS v1.2 第9条（Static役割捕捉40点・選択性補正 SEL）と第10条（能力順位20点・RS）の配点表
+KMS_ROLE_PTS = {0: {'W': 16, 'P2': 8, 'P3': 3}, 1: {'P2': 13, 'W': 6, 'P3': 5}, 2: {'P3': 11, 'P2': 6, 'W': 3}}
+KMS_RANK_PTS = (9, 6, 5)
+
+
+def kms_static_parts(ranking, roles, order):
+    """ケイバメトリクス精度スコアリング規格 v1.2-KMS 第5・6・9・10条の式を、その Race の役割表と事前順位に当てる。
+    SEL(k,N)=(N-k)/(N-1)（役割を広げるほど捕捉点が下がる）、RS(r,N)=(N-r)/(N-1)。同じ馬が複数役割なら最も高い1つ。
+    返す値は role_40（0〜40）と rank_20（0〜20）。KRS 前 Static と KRS 後の区別はしない（runtime の役割表は1つ）ので
+    KMS 本体ではなく『KMS 第9・10条の式』の参考値。KMX・PFS には混ぜず、順位・役割・買い目・資金は変えない。"""
+    n = len(ranking)
+    if n < 2 or len(order) < 3:
+        return None
+    k = {r: sum(1 for h in ranking if r in roles.get(h, [])) for r in ('W', 'P2', 'P3')}
+    sel = {r: (n - k[r]) / (n - 1) for r in k}
+    rank = {h: i + 1 for i, h in enumerate(ranking)}
+    role_pts = 0.0
+    rank_pts = 0.0
+    for i, h in enumerate(order[:3]):
+        role_pts += max([KMS_ROLE_PTS[i][r] * sel[r] for r in roles.get(h, []) if r in KMS_ROLE_PTS[i]] or [0.0])
+        if h in rank:
+            rank_pts += KMS_RANK_PTS[i] * (n - rank[h]) / (n - 1)
+    return {'role_40': round(role_pts, 2), 'rank_20': round(rank_pts, 2), 'sel': {r: round(v, 3) for r, v in sel.items()}}
+
+
 def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
     """Common evaluation of one decision track (PAPER or FORMAL) against the official order."""
     pos = {h: i + 1 for i, h in enumerate(order)}
@@ -142,6 +167,7 @@ def _track(name, ranking, roles, tickets, order, settle_row, marks=None):
         # Coverage is reported with set size (Charter R1 §11 Coverage ≠ Discrimination; v5.0-SHADOW §10 role set)
         'role_set_size': {r: sum(1 for h in ranking if r in roles.get(h, [])) for r in ('W', 'P2', 'P3')},
         'field_size': len(ranking),
+        'kms_static_parts': kms_static_parts(ranking, roles, order),   # KMS v1.2 第9・10条（参考値）
     }
     st = settle_row or {}
     eff = st.get('effective_invest', st.get('invest'))
@@ -460,6 +486,10 @@ def _accuracy(reviews):
             f = flag.get(k, lambda e, k=k: e.get(k) is True)
             out[k] = round(100 * sum(1 for e in ev if f(e)) / len(ev), 1)
         out['mean_top3_capture'] = round(sum(e.get('top3_capture') or 0 for e in ev) / len(ev), 2)
+        kp = [e['kms_static_parts'] for e in ev if e.get('kms_static_parts')]
+        if kp:
+            out['kms_static_parts'] = {'races': len(kp), 'role_40': round(sum(x['role_40'] for x in kp) / len(kp), 2),
+                                       'rank_20': round(sum(x['rank_20'] for x in kp) / len(kp), 2)}
         rs = role_set_coverage(ev)
         if rs:
             out['role_set'] = rs
@@ -597,6 +627,11 @@ def _summary_md(title, s):
             L.append(f"- {label} 役割の頭数と的中（無作為＝頭数÷出走頭数）：" + '／'.join(
                 f"{r} 平均{v['mean_size']}頭 的中{v['coverage']}%（無作為{v['random_baseline']}%、差{v['lift']:+}）"
                 for r, v in rs.items()))
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        kp = ((acc.get(track) or {}).get('all') or {}).get('kms_static_parts')
+        if kp:
+            L.append(f"- {label} KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 {kp['role_40']}/40（選択性補正込み）"
+                     f"・能力順位 {kp['rank_20']}/20（{kp['races']}R平均）")
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")
