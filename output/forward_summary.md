@@ -4,6 +4,7 @@
 - 実効投資 177,500円／払戻 112,530円／**PFS 63.4%**（最大払戻 21,490円を除くと 51.3%）
 - 最大ドローダウン 64,970円／黒字Race率 0.152／Bet Coverage 1.0
 - W的中 69／P2一致 28／P3一致 28
+- 頑健性（影の計測）：上位2/3払戻を除くPFS 43.8%／40.8%・最長連敗 23R・Race別PFS中央値 0.0%・的中なのに収支マイナス率 0.553
 - 第一失敗の分布：{'WINNER_DISCOVERED_LOW': 47, 'P2_MISS': 31, 'W_WIDTH_OR_ROLE': 76, 'THIRD_MISS': 16, 'WINNER_NOT_DISCOVERED': 32, 'NONE': 19, 'TICKET_OR_CAPITAL': 3}
 
 | 日付 | Race | 締切前 | 精算 | 実効投資 | 払戻 | PFS |
