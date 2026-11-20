@@ -32,3 +32,12 @@ def test_roles_from_order_and_no_tickets():
     a = ex.audit(r, [])
     assert a['hub'] is None and len(a['global_zero']) == 2
     assert '検算のみ' in ex.line(a)
+
+
+def test_trifecta_monoculture():
+    roles = {'W': [1, 2], 'P2': [3], 'P3': [4]}
+    a = ex.audit(roles, [('三連単', [(1, 3, 4), (3, 1, 4), (1, 4, 3)])])
+    assert a['tri_monoculture'] == [1, 3, 4]
+    assert '三連単の全点に同じ馬' in ex.line(a)
+    b = ex.audit(roles, [('三連単', [(1, 3, 4), (2, 3, 5)])])
+    assert b['tri_monoculture'] == [3]
