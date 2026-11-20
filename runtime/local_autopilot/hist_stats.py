@@ -36,6 +36,13 @@ Tables
                (佐賀 第26条 MPA-SAG / 盛岡 MAI-MOR / 浦和 v1.7 第20条: 平均位置でなく最大進出履歴, q57/q63/q49)
   T12_DIRECT   venue x distance x (has an earlier win at the same venue and distance?) x last-start finish band
                (浦和 v1.7-URW-CANDIDATE 第26条 Direct Evidence vs Recent Reach Conflict / 佐賀 W1R-SAG, q49/q57)
+  T16_URW_FROM_FNB  URW starts whose previous start was at FNB: previous distance (1500/1800 or other) x previous
+               last-corner position (<=3 = front) x distance change (浦和 v1.6-URW 第21条 仮説「船橋1500m・1800mで先行して
+               粘った馬の浦和替わり」, q48). Hypothesis check only.
+  T17_AGED_FRONT_FAV  popularity 1-2 at 1500m+: age band (7+ / <=6) x previous start = front then faded (1角2番手以内
+               で4着以下) x days since last start (浦和 v1.6-URW 第26条・第28条14 高齢逃げ馬の短間隔＝危険人気, q48)
+  T18_FAV_FRAME  popularity 1-2: venue x distance x 枠 (浦和 第28条12「1500m・1600mの外枠人気馬」; every venue so the
+               claim can be compared with other courses). With A/E.
 T6-T9 are YouTube-claim checks (2026-11-19 Drive reading, q39-q55): unverified claims, evidence only.
 Pre-race inputs only for the "candidate" / "change" definitions: a horse's earlier starts (strictly earlier date).
 Rates are never multiplied together; a horse's matching cells are listed side by side (no additive score).
@@ -304,6 +311,8 @@ def starts(races):
                    'direct_win': (any(p['venue'] == race['venue'] and p['distance'] == race['distance'] and p.get('finish') == 1
                                       for p in prev) if prev else None),
                    'last_finish': last.get('finish') if last else None,
+                   'age': x.get('age'), 'prev_fc': last.get('fc') if last else None,
+                   'prev_lc': last.get('lc') if last else None,
                    # 出戻り (YouTube ゆっくり解説「見逃してるぜ？その穴馬」パターン1): came from another venue AND had run
                    # here before that move. NEW_MOVE = from another venue, never ran here before. SAME = last start here.
                    # Venues that share horses on a rotation (南関4場 / 岩手 / 兵庫) count as one circuit, so a
@@ -489,6 +498,24 @@ def build(races, source):
     # T15 出戻り馬: previous start at another venue, and whether the horse had run at this venue before that move.
     group('T15_RETURNEE', lambda r: None if r['move'] is None else (r['venue'], r['move'], finish_band(r['last_finish'])),
           ('venue', 'move', 'last_finish'))
+    # T16-T18: 浦和攻略条項 v1.6-URW（v1.5 全文継承部）の仮説・危険人気の検証表（2026-11-20 Drive 精読 q48）。Evidence only.
+    def fnb_prev(r):
+        if r['venue'] != 'URW' or r['prev_venue'] != 'FNB' or not r['prev_dist']:
+            return None
+        front = None if r['prev_lc'] is None else ('LC<=3' if r['prev_lc'] <= 3 else 'LC4+')
+        chg = None if not r['distance'] else ('SHORTER' if r['distance'] < r['prev_dist'] else 'NOT_SHORTER')
+        return (r['venue'], 'FNB1500/1800' if r['prev_dist'] in (1500, 1800) else 'FNB_OTHER', front, chg)
+    group('T16_URW_FROM_FNB', fnb_prev, ('venue', 'previous_fnb_distance', 'previous_last_corner', 'distance_change'))
+    def aged(r):
+        if not r['pop'] or r['pop'] > 2 or not r['distance'] or r['distance'] < 1500 or not r['age'] or r['prev_fc'] is None \
+                or r['last_finish'] is None or r['days_since'] is None:
+            return None
+        fade = r['prev_fc'] <= 2 and r['last_finish'] >= 4
+        return (r['venue'], '7+' if r['age'] >= 7 else '<=6', 'FRONT_FADED' if fade else 'OTHER',
+                '<=7d' if r['days_since'] <= 7 else '8-14d' if r['days_since'] <= 14 else '15d+')
+    group('T17_AGED_FRONT_FAV', aged, ('venue', 'age', 'previous_start', 'days_since_last'))
+    group('T18_FAV_FRAME', lambda r: None if not r['pop'] or r['pop'] > 2 else (r['venue'], r['distance'], r['frame']),
+          ('venue', 'distance', 'frame'))
     return {'profile': PROFILE, 'class': CLASS, 'source': source, 'period': per, 'races': len(by_race), 'starts': len(rows),
             'min_n': MIN_N, 'leakage_note': LEAK_NOTE, 'tables': dict(tables)}
 
@@ -552,7 +579,10 @@ def md(stats, top=20):
                         ('T7_LAST3F', '上がり最速×4角位置（YouTube主張の検証用・未検証）'),
                         ('T10_CRZ', 'クラス×4角位置→着順（佐賀CRZ-SAG／盛岡の検証用）'),
                         ('T11_MPA', '近5走の最大進出（1角→4角）（MPA-SAG／MAI-MORの検証用）'),
-                        ('T12_DIRECT', '同場同距離の勝利歴×前走着順（浦和v1.7候補 Direct Evidenceの検証用）')):
+                        ('T12_DIRECT', '同場同距離の勝利歴×前走着順（浦和v1.7候補 Direct Evidenceの検証用）'),
+                        ('T16_URW_FROM_FNB', '船橋→浦和替わり（浦和v1.6 第21条 仮説の検証用）'),
+                        ('T17_AGED_FRONT_FAV', '1・2番人気×高齢×前走先行失速×間隔（浦和 第28条14 危険人気の検証用）'),
+                        ('T18_FAV_FRAME', '1・2番人気×枠（浦和 第28条12 外枠人気馬の検証用）')):
         cs = [c for c in stats['tables'].get(name, []) if not c['small_sample'] and c.get('ae_top3')]
         if not cs:
             continue

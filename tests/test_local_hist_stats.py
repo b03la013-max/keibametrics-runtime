@@ -149,3 +149,37 @@ def test_pop_going_order_shuffle_and_returnee_tables():
     assert {c['conditions']['move'] for c in hs.build({'a': a, 'k': k2, 'b': b}, 'T')['tables']['T15_RETURNEE']} == {'NEW_MOVE', 'RETURN'}
     # 南関 rotation (OHI -> KAW -> OHI) is the same circuit, not a move
     assert {x['move'] for x in hs.starts({'a': a, 'k': k, 'b': b}) if x['no'] == 1} == {None, 'SAME'}
+
+
+def test_urw_v16_claim_tables_fnb_aged_fav_frame():
+    import copy
+    r = races()
+    a, b = r['OHI_20261001_R01'], r['OHI_20261015_R01']
+    f = copy.deepcopy(a)
+    f.update(race_id='FNB_20261001_R01', venue='FNB', distance=1500)
+    u = copy.deepcopy(b)
+    u.update(race_id='URW_20261015_R01', venue='URW', distance=1400)
+    for x in u['runners']:
+        if x['no'] == 1:
+            x['age'] = 8
+    st = hs.build({'f': f, 'u': u}, 'T')
+    t = st['tables']
+    fn = t['T16_URW_FROM_FNB']
+    assert {c['conditions']['previous_fnb_distance'] for c in fn} == {'FNB1500/1800'}
+    assert {c['conditions']['distance_change'] for c in fn} == {'SHORTER'}
+    assert sum(c['starts'] for c in fn) == 3                                 # scratched horse 3 is not a start
+    front = [c for c in fn if c['conditions']['previous_last_corner'] == 'LC<=3']
+    assert sum(c['starts'] for c in front) == 2                              # last corner 1,2,3,4 at FNB: 1 and 2 ran
+    ag = t.get('T17_AGED_FRONT_FAV', [])
+    # URW 1400m < 1500m -> not in T17
+    assert ag == []
+    u2 = copy.deepcopy(u)
+    u2['distance'] = 1500
+    ag = hs.build({'f': f, 'u': u2}, 'T')['tables']['T17_AGED_FRONT_FAV']
+    keys = {(c['conditions']['age'], c['conditions']['previous_start'], c['conditions']['days_since_last']) for c in ag}
+    # horse 1: age 8, pop 1, prev 1角1番手 1着 -> OTHER; horse 4: pop 2, age 5, prev 1角4番手 -> OTHER
+    assert keys == {('7+', 'OTHER', '8-14d'), ('<=6', 'OTHER', '8-14d')}
+    fr = t['T18_FAV_FRAME']
+    assert all(c['conditions']['venue'] in ('FNB', 'URW') for c in fr)
+    assert sum(c['starts'] for c in fr) == 4                                 # pop1-2 in two races
+    assert hs.md(st).startswith('# 地方 統計表')
