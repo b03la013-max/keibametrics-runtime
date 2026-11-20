@@ -1,8 +1,8 @@
-# 地方版 配送台帳 2026-11-20（14:38時点）
+# 地方版 配送台帳 2026-11-20（14:40時点）
 
 - 管理Race 36／発走済み 18
-- PAPER：凍結 36・Push検証 35・送信 21（発走前 21）・読み戻し一致 21・本人確認 0
-- 正式：試行 21・Signed FINAL 21（NO-BET 0）・発走前送信 21・読み戻し一致 21・本人確認 0
+- PAPER：凍結 36・Push検証 36・送信 22（発走前 22）・読み戻し一致 22・本人確認 0
+- 正式：試行 22・Signed FINAL 22（NO-BET 0）・発走前送信 22・読み戻し一致 22・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
@@ -44,7 +44,7 @@
 | SON_07 | 13:40 | POSTRESULT_DIAGNOSTIC | 12:57 | ○ | SIGNED_FINAL | 12:59 | ○ |  |
 | SON_08 | 14:10 | POSTRESULT_DIAGNOSTIC | 13:27 | ○ | SIGNED_FINAL | 14:03 | ○ |  |
 | SON_09 | 14:45 | PRESTART_PUSH_VERIFIED | 14:06 | ○ | SIGNED_FINAL | 14:38 | ○ |  |
-| SON_10 | 15:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_10 | 15:20 | PRESTART_PUSH_VERIFIED | 14:38 | ○ | SIGNED_FINAL | 14:40 | ○ |  |
 | SON_11 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_12 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 
