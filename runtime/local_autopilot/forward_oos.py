@@ -321,7 +321,7 @@ def md(o):
            f"{(c[cid]['champion'] or {}).get('pfs')}%／的中R {(c[cid]['candidate'] or {}).get('hit_races')} 対 "
            f"{(c[cid]['champion'] or {}).get('hit_races')}" for cid in ('C13-FORMAL-MIX-P2BOX20', 'C14-FORMAL-P2BOX20-ONLY',
                                                               'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
-        *([f"- {cid}（11/19反省P1-C）：{c[cid]['stage']}／最大1R除く回収率 {(c[cid]['candidate'] or {}).get('pfs_ex_top1')}% 対 正式60点 "
+        *([f"- {cid}（{'W＋人気上位2・同予算' if cid.startswith('C24') else '11/19反省P1-C'}）：{c[cid]['stage']}／最大1R除く回収率 {(c[cid]['candidate'] or {}).get('pfs_ex_top1')}% 対 正式60点 "
            f"{(c[cid]['champion'] or {}).get('pfs_ex_top1')}%／的中赤字 {(c[cid]['candidate'] or {}).get('hit_but_loss')}R 対 "
            f"{(c[cid]['champion'] or {}).get('hit_but_loss')}R" for cid in ('C22-KEEP-MEC-TRIO20', 'C23-THIRD3-BY-PAIR', 'C24-W-PLUS-TOP2POP-SAME-BUDGET') if cid in c]),
         *([f"- C21 自前集計の血統指数BVI-L-R2：{c['C21-BVI-L-R2-TERTILE']['stage']}／3着内率 上位1/3 "
