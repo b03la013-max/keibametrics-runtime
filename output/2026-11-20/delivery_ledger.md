@@ -1,6 +1,6 @@
-# 地方版 配送台帳 2026-11-20（16:38時点）
+# 地方版 配送台帳 2026-11-20（16:51時点）
 
-- 管理Race 36／発走済み 28
+- 管理Race 36／発走済み 29
 - PAPER：凍結 36・Push検証 36・送信 30（発走前 30）・読み戻し一致 30・本人確認 0
 - 正式：試行 30・Signed FINAL 30（NO-BET 0）・発走前送信 30・読み戻し一致 30・本人確認 0
 - 発走前PAPER配送なしで発走：なし
@@ -46,6 +46,6 @@
 | SON_09 | 14:45 | POSTRESULT_DIAGNOSTIC | 14:06 | ○ | SIGNED_FINAL | 14:38 | ○ |  |
 | SON_10 | 15:20 | POSTRESULT_DIAGNOSTIC | 14:38 | ○ | SIGNED_FINAL | 15:13 | ○ |  |
 | SON_11 | 15:55 | POSTRESULT_DIAGNOSTIC | 15:14 | ○ | SIGNED_FINAL | 15:14 | ○ |  |
-| SON_12 | 16:30 | PRESTART_PUSH_VERIFIED | 15:48 | ○ | SIGNED_FINAL | 16:21 | ○ |  |
+| SON_12 | 16:30 | POSTRESULT_DIAGNOSTIC | 15:48 | ○ | SIGNED_FINAL | 16:21 | ○ |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
