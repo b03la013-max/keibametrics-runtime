@@ -148,3 +148,14 @@ def test_quinella_one_way_needs_ordered_tickets():
     roles = {'W': [1, 2], 'P2': [3], 'P3': []}
     a = ex.audit(roles, [('馬連', [(1, 2)]), ('三連複', [(1, 2, 3)])])
     assert a['quinella_one_way'] == [] and a['p2_no_second'] == []
+
+
+def test_concentration_krs_v15_art85():
+    c = ex.concentration([0.25, 0.25, 0.25, 0.25])
+    assert abs(c['normalized_entropy_W'] - 1.0) < 1e-9 and abs(c['top1_share'] - 0.25) < 1e-9
+    c2 = ex.concentration([0.7, 0.1, 0.1, 0.1, None])
+    assert c2['n'] == 4 and abs(c2['top2_cumulative_share'] - 0.8) < 1e-9 and c2['normalized_entropy_W'] < 0.8
+    assert ex.concentration([1.0]) is None
+    s = ex.concentration_line(c2)
+    assert '第85条' in s and '最上位 70%' in s and '閾値なし' in s
+    assert '計算不可' in ex.concentration_line(None)

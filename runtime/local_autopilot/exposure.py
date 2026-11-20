@@ -9,6 +9,8 @@ Source: Drive 精読 2026-11-20 — 地方 I2.2 Executable Governance（第4〜6
   - Extreme Hub: more than one W but every ticket needs the same horse → hub_share 100%.
 Inputs: roles {'W': [no], 'P2': [no], 'P3': [no]} and tickets [(bet_type, [combo tuples])] as in ticket_tree.
 """
+import math
+
 ROLE_OF = {'1着候補': 'W', '2着候補': 'P2', '3着候補': 'P3'}
 ORDERED = {'馬単', '三連単'}
 
@@ -277,3 +279,25 @@ def line(a):
                 '→'.join(map(str, m)) for m in cp[:6]) + (f" ほか{len(cp) - 6}" if len(cp) > 6 else '')
         p.append(t)
     return '- 役割と券面の対応（I2.2 Directional Exposure・検算のみ、買い目は変えない）：' + '／'.join(p)
+
+
+def concentration(p_wins):
+    """KRS v1.5 第85条（KRS Concentration Audit）の式を p勝(暫定) に当てた参考値：
+    top1_share・top2_cumulative_share・normalized_entropy_W = -Σ s_i ln s_i / ln N。
+    本書どおり固定閾値は置かない（極端な集中は確信材料ではなく再監査のきっかけ）。
+    Evidence only — nothing is added, removed or re-weighted; not a probability statement."""
+    ps = [float(v) for v in p_wins if v is not None and v > 0]
+    n = len(ps)
+    if n < 2:
+        return None
+    tot = sum(ps)
+    s = sorted((v / tot for v in ps), reverse=True)
+    h = -sum(v * math.log(v) for v in s) / math.log(n)
+    return {'n': n, 'top1_share': s[0], 'top2_cumulative_share': s[0] + s[1], 'normalized_entropy_W': h}
+
+
+def concentration_line(c):
+    if not c:
+        return '- 1着の集中度（KRS 第85条の式・参考）：計算不可'
+    return (f"- 1着の集中度（KRS v1.5 第85条の式を p勝(暫定) に適用・参考、閾値なし）：最上位 {c['top1_share'] * 100:.0f}%"
+            f"／上位2頭 {c['top2_cumulative_share'] * 100:.0f}%／正規化エントロピー {c['normalized_entropy_W']:.2f}（{c['n']}頭、1.00＝横一線）")
