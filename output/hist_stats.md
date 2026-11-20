@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-09', '2026-11-20'] ／ 471R・5130出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-09', '2026-11-20'] ／ 478R・5198出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -68,20 +68,20 @@
 | KSM | L | 4 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
 | KSM | L | 5 | 1※ | 0 | 1 | 0 | 100.0% (21%–100%) | 0% | 190% |
 | KSM | L | 6-9 | 4※ | 0 | 0 | 1 | 25.0% (5%–70%) | 0% | 60% |
-| KSM | M | 1 | 22※ | 7 | 4 | 3 | 63.6% (43%–80%) | 50% | 75% |
-| KSM | M | 10+ | 31 | 0 | 0 | 1 | 3.2% (1%–16%) | 0% | 29% |
-| KSM | M | 2 | 22※ | 1 | 7 | 3 | 50.0% (31%–69%) | 11% | 71% |
-| KSM | M | 3 | 22※ | 4 | 2 | 1 | 31.8% (16%–53%) | 97% | 56% |
-| KSM | M | 4 | 22※ | 4 | 2 | 3 | 40.9% (23%–61%) | 244% | 89% |
-| KSM | M | 5 | 22※ | 0 | 3 | 2 | 22.7% (10%–43%) | 0% | 66% |
-| KSM | M | 6-9 | 87 | 6 | 4 | 9 | 21.8% (14%–32%) | 209% | 95% |
-| KSM | S | 1 | 1※ | 1 | 0 | 0 | 100.0% (21%–100%) | 150% | 110% |
+| KSM | M | 1 | 28※ | 12 | 5 | 3 | 71.4% (53%–85%) | 71% | 85% |
+| KSM | M | 10+ | 39 | 0 | 0 | 1 | 2.6% (0%–13%) | 0% | 23% |
+| KSM | M | 2 | 28※ | 2 | 9 | 4 | 53.6% (36%–70%) | 20% | 76% |
+| KSM | M | 3 | 28※ | 4 | 2 | 2 | 28.6% (15%–47%) | 76% | 51% |
+| KSM | M | 4 | 28※ | 4 | 3 | 4 | 39.3% (24%–58%) | 192% | 84% |
+| KSM | M | 5 | 28※ | 0 | 5 | 2 | 25.0% (13%–43%) | 0% | 71% |
+| KSM | M | 6-9 | 110 | 6 | 4 | 12 | 20.0% (14%–28%) | 165% | 85% |
+| KSM | S | 1 | 2※ | 1 | 1 | 0 | 100.0% (34%–100%) | 75% | 110% |
 | KSM | S | 10+ | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
-| KSM | S | 2 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
-| KSM | S | 3 | 1※ | 0 | 1 | 0 | 100.0% (21%–100%) | 0% | 130% |
-| KSM | S | 4 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
-| KSM | S | 5 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
-| KSM | S | 6-9 | 4※ | 0 | 0 | 1 | 25.0% (5%–70%) | 0% | 112% |
+| KSM | S | 2 | 2※ | 1 | 0 | 0 | 50.0% (9%–91%) | 100% | 60% |
+| KSM | S | 3 | 2※ | 0 | 1 | 0 | 50.0% (9%–91%) | 0% | 65% |
+| KSM | S | 4 | 2※ | 0 | 0 | 1 | 50.0% (9%–91%) | 0% | 0% |
+| KSM | S | 5 | 2※ | 0 | 0 | 0 | 0.0% (0%–66%) | 0% | 0% |
+| KSM | S | 6-9 | 6※ | 0 | 0 | 1 | 16.7% (3%–56%) | 0% | 75% |
 | MIZ | L | 1 | 1※ | 0 | 0 | 1 | 100.0% (21%–100%) | 0% | 130% |
 | MIZ | L | 10+ | 3※ | 1 | 0 | 0 | 33.3% (6%–79%) | 1303% | 193% |
 | MIZ | L | 2 | 1※ | 0 | 0 | 0 | 0.0% (0%–79%) | 0% | 0% |
@@ -227,7 +227,7 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=KSM / band=M / last_corner_pos(6=6+)=6 | 59 | 5.1% | 0.26 | 111% |
+| venue=KSM / band=M / last_corner_pos(6=6+)=6 | 89 | 5.6% | 0.29 | 74% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 45 | 4.4% | 0.31 | 0% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 45 | 6.7% | 0.33 | 0% |
 | venue=SON / band=S / last_corner_pos(6=6+)=6 | 39 | 5.1% | 0.34 | 0% |
@@ -257,6 +257,7 @@
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 58 | 3.5% | 0.22 | 0% |
 | venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 35 | 2.9% | 0.23 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 53 | 7.5% | 0.51 | 0% |
+| venue=KSM / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 37 | 59.5% | 1.36 | 132% |
 | venue=SON / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 44 | 61.4% | 1.36 | 193% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=1-3 | 31 | 54.8% | 1.22 | 81% |
 
@@ -264,6 +265,7 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
+| venue=KSM / band=M / class=OTHER / last_corner_pos(6=6+)=6 | 35 | 5.7% | 0.27 | 187% |
 | venue=MOR / band=M / class=C1 / last_corner_pos(6=6+)=6 | 46 | 4.3% | 0.29 | 9% |
 | venue=KNZ / band=M / class=C2 / last_corner_pos(6=6+)=6 | 30 | 6.7% | 0.35 | 0% |
 | venue=MON / band=S / class=C4 / last_corner_pos(6=6+)=6 | 40 | 5.0% | 0.41 | 0% |
