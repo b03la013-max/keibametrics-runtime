@@ -1,0 +1,42 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261121-MARKET",
+ "registered_at": "2026-11-21T02:00:00+09:00",
+ "registered_by": "Claude (LOCAL handoff 2026-11-21: market arms of #433 were not in the 2026-11-20 arms list)",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261120.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-21",
+ "evidence_rule": "same as the extended profile (frozen before result only; venue x surface; min cell 12R; stages 30/100/300; no significance claim below 100R). Known-result replay of #433 (249R) never counts.",
+ "budget_note": "These arms rebuild tickets with Production MEC, so their investment differs from Production. They are NOT the LOCAL C24 same-budget comparison; a same-budget variant needs its own registration before its first eligible card.",
+ "input_rule": "market = signed JRA official market observation captured before prediction_cutoff (jra_role_candidate_replay.market_ranking); races without it are excluded and counted as excluded.",
+ "pfs_sensitivity": {
+  "pfs_zero_max_payout": "(total payout - largest single-race payout) / total investment (existing pfs_excl_max_payout)",
+  "pfs_drop_max_race": "(total payout - that race payout) / (total investment - that race investment)",
+  "rule": "the excluded race is the arm's own largest-payout race, fixed by this rule; both are reported, neither replaces the primary metric"
+ },
+ "arms": [
+  {
+   "id": "W_PLUS_MARKET1",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "metric": "net profit change vs frozen Production tickets; report investment change",
+   "promote_if": "at 300R net profit change > 0, PFS (both sensitivities) not lower than Production, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R net profit change < 0 and PFS excl. max payout lower"
+  },
+  {
+   "id": "W_PLUS_MARKET_TOP3",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "metric": "net profit change; must beat W_PLUS_STATIC_SAME_COUNT_CONTROL to credit the market signal (not width)",
+   "promote_if": "at 300R beats Production and W_PLUS_STATIC_SAME_COUNT_CONTROL on net profit and PFS excl. max payout, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R not better than W_PLUS_STATIC_SAME_COUNT_CONTROL"
+  },
+  {
+   "id": "W_PLUS_STATIC_SAME_COUNT_CONTROL",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CONTROL",
+   "metric": "net profit change",
+   "promote_if": "control arm; promotion only by a separate Owner decision",
+   "reject_if": "n/a"
+  }
+ ]
+}
