@@ -38,3 +38,15 @@ def test_new_variants_and_rev2_effective(tmp_path):
     assert rs[0]['KEEP_MEC_TRIO20'][1] == 500
     ev = _fm.evaluate(tmp_path)['variants']['R54_60']
     assert 'pfs_ex_top1' in ev and 'hit_but_loss' in ev
+
+
+def test_w_plus_market_same_budget():
+    from runtime.local_autopilot import formal_mix as _fm
+    base = [('EXACTA', [1, n]) for n in range(2, 62)]
+    summ = {'_market_order': [9, 1, 2]}
+    out = _fm.w_plus_market(summ, base, [1, 2, 3, 9], [1], [2, 3, 9])
+    assert len(out) == 60
+    added = [t for t in out if t[1][0] == 9]
+    assert len(added) == 9                    # share 30, capped by the combinations a 4-horse field offers (3 exacta + 3x2 trifecta)
+    assert out[:51] == base[:51]              # only the LAST delivered tickets are replaced
+    assert _fm.w_plus_market({'_market_order': [1]}, base, [1], [1], [2]) == base[:60]

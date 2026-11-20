@@ -1,0 +1,63 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261120-R9",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-20T10:10:00+09:00",
+ "first_eligible_post": "2026-11-20T10:10:00+09:00",
+ "origin": "Largest first failure (winner outside W: 48 of 113 formal races; 25 of those winners were market top-3). ChatGPT 11/20: drive one improvement through fix -> forward test -> decision -> post-adoption tracking, with SAME budget. Owner 2026-11-20 09:46「どうしますか？」.",
+ "extends": "R1-R8 unchanged; C18/C19 (exacta part only) stay as they are",
+ "change_under_test": "W' = W + the two shortest-odds horses at the latest pre-start PAPER revision. The added heads get 60 x added/|W'| points (三連単 head->P2->best-2 thirds after 3 馬単 head->P2), replacing the LAST delivered formal tickets. Total stays 60 points / 6,000 yen. The added share is capped by the combinations available; unused share stays delivered tickets.",
+ "learning_races": "2026-11-16..19 formal 113R (in-sample: designed after seeing these races)",
+ "in_sample": {
+  "R54_60": {
+   "pfs": 133.3,
+   "pfs_ex_top1": 47.0,
+   "hit_races": 45,
+   "hit_but_loss": 32
+  },
+  "W_PLUS_TOP2POP_60": {
+   "pfs": 143.1,
+   "pfs_ex_top1": 56.9,
+   "hit_races": 58,
+   "hit_but_loss": 41
+  },
+  "by_venue_pfs_champion_vs_candidate": {
+   "KNZ": [
+    44,
+    57
+   ],
+   "KSM": [
+    460,
+    460
+   ],
+   "MIZ": [
+    22,
+    61
+   ],
+   "OHI": [
+    47,
+    58
+   ],
+   "SON": [
+    53,
+    54
+   ]
+  }
+ },
+ "production_change": "NONE until the Owner decides.",
+ "stages": [
+  30,
+  100,
+  300
+ ],
+ "decision_stage": 100,
+ "venue_rule": "same direction in >= 2 venues with >= 12 races each; no venue with >= 12 races clearly worse (> 10 points)",
+ "candidates": [
+  {
+   "id": "C24-W-PLUS-TOP2POP-SAME-BUDGET",
+   "hypothesis": "With the same 60 points, giving the two market favourites a W share raises PFS excluding the top-1 race and the number of hit races versus the delivered formal tickets.",
+   "primary_metric": "PFS excluding the top-1 race (paired by race), hit races, hit-but-loss races, per venue",
+   "promote_if": "at 100 races: PFS excluding top-1 higher than R54_60 AND hit races higher AND the venue rule holds -> decision packet to the Owner; if adopted, track the same metrics for the next 100 races after adoption (post-adoption check) and revert if PFS excluding top-1 falls below R54_60 replay",
+   "reject_if": "at 100 races PFS excluding top-1 is not higher than R54_60, or the venue rule fails"
+  }
+ ]
+}

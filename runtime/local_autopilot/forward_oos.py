@@ -173,6 +173,22 @@ def evaluate(root, prereg_path=PREREG):
         v, n = ev['variants'], ev['races']
         for cid, name in (('C22-KEEP-MEC-TRIO20', 'KEEP_MEC_TRIO20'), ('C23-THIRD3-BY-PAIR', 'THIRD3_BY_PAIR')):
             out['candidates'][cid] = {'races': n, 'stage': _stage(n, p8['stages']), 'candidate': v.get(name), 'champion': v.get('R54_60')}
+    pre9 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261120_R9.json')
+    if pre9.exists():
+        from runtime.local_autopilot import formal_mix
+        p9 = json.loads(pre9.read_text())
+        since9 = datetime.fromisoformat(p9['first_eligible_post'])
+        ev = formal_mix.evaluate(root, since=since9)
+        rows = formal_mix.races(root, since=since9)
+        byv = {}
+        for r in rows:
+            a = byv.setdefault(r['key'].split('_')[0], [0, 0, 0, 0, 0])
+            a[0] += r['R54_60'][0]; a[1] += r['R54_60'][1]; a[2] += r['W_PLUS_TOP2POP_60'][0]; a[3] += r['W_PLUS_TOP2POP_60'][1]; a[4] += 1
+        out['candidates']['C24-W-PLUS-TOP2POP-SAME-BUDGET'] = {
+            'races': ev['races'], 'stage': _stage(ev['races'], p9['stages']),
+            'candidate': ev['variants'].get('W_PLUS_TOP2POP_60'), 'champion': ev['variants'].get('R54_60'),
+            'by_venue': {k: {'races': a[4], 'pfs_champion': round(100 * a[1] / a[0], 1) if a[0] else None,
+                             'pfs_candidate': round(100 * a[3] / a[2], 1) if a[2] else None} for k, a in sorted(byv.items())}}
     pre6 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261119_R6.json')
     if pre6.exists():
         from runtime.local_autopilot import role_shadow
@@ -307,7 +323,7 @@ def md(o):
                                                               'C15-FORMAL-MIX-WAXIS-TRIO') if cid in c]),
         *([f"- {cid}（11/19反省P1-C）：{c[cid]['stage']}／最大1R除く回収率 {(c[cid]['candidate'] or {}).get('pfs_ex_top1')}% 対 正式60点 "
            f"{(c[cid]['champion'] or {}).get('pfs_ex_top1')}%／的中赤字 {(c[cid]['candidate'] or {}).get('hit_but_loss')}R 対 "
-           f"{(c[cid]['champion'] or {}).get('hit_but_loss')}R" for cid in ('C22-KEEP-MEC-TRIO20', 'C23-THIRD3-BY-PAIR') if cid in c]),
+           f"{(c[cid]['champion'] or {}).get('hit_but_loss')}R" for cid in ('C22-KEEP-MEC-TRIO20', 'C23-THIRD3-BY-PAIR', 'C24-W-PLUS-TOP2POP-SAME-BUDGET') if cid in c]),
         *([f"- C21 自前集計の血統指数BVI-L-R2：{c['C21-BVI-L-R2-TERTILE']['stage']}／3着内率 上位1/3 "
            f"{c['C21-BVI-L-R2-TERTILE']['top3_high']}% 対 下位1/3 {c['C21-BVI-L-R2-TERTILE']['top3_low']}%"] if 'C21-BVI-L-R2-TERTILE' in c else []),
         '', '### 競馬場別（Owner 2026-11-19：場ごとに形状・レベルが違うため、合算だけで判断しない）', '',

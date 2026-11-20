@@ -53,7 +53,34 @@ def variants(summary):
                 continue
             third += [('TRIFECTA', [a, b, c]) for c in [x for x in rank if x not in (a, b)][:3]]
     return {'R54_60': base[:CAP], 'MIX_P2BOX20': fill(box), 'P2BOX20_ONLY': box, 'MIX_WAXIS_TRIO': fill(wax),
-            'KEEP_MEC_TRIO20': fill(mec_trio), 'THIRD3_BY_PAIR': third[:CAP]}
+            'KEEP_MEC_TRIO20': fill(mec_trio), 'THIRD3_BY_PAIR': third[:CAP],
+            'W_PLUS_TOP2POP_60': w_plus_market(summary, base, rank, w, p2)}
+
+
+def w_plus_market(summary, base, rank, w, p2, add=2):
+    """C24 (same budget, full ticket): W' = W + the `add` shortest-odds horses (pre-race odds of the latest PAPER
+    revision, stored by forward_oos as summary['_market_order']). The added heads get a share of the 60 points
+    proportional to their number among W'; those points replace the LAST delivered tickets. Added tickets:
+    3 馬単 head -> P2 first, then 三連単 head -> P2 (ranking order) -> best-2 thirds; capped by the combinations
+    available (small fields give the added heads fewer points; the rest stays delivered tickets)."""
+    pops = summary.get('_market_order') or []
+    added = [h for h in pops[:add] if h not in w]
+    if not added:
+        return base[:CAP]
+    k = round(CAP * len(added) / (len(w) + len(added)))
+    extra = []
+    per = [k // len(added) + (1 if i < k % len(added) else 0) for i in range(len(added))]
+    for h, n in zip(added, per):
+        seconds = [b for b in (p2 + rank) if b != h]
+        seconds = list(dict.fromkeys(seconds))
+        mine = []
+        for b in seconds:
+            for c in [x for x in rank if x not in (h, b)][:2]:
+                mine.append(('TRIFECTA', [h, b, c]))
+        mine = [('EXACTA', [h, b]) for b in seconds[:3]] + mine
+        extra += mine[:n]
+    keep = [t for t in base if t not in extra][:max(0, CAP - len(extra))]
+    return keep + extra
 
 
 def races(root, since=None):
@@ -80,6 +107,7 @@ def races(root, since=None):
                 continue
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
         row = {'day': row_day, 'key': key}
+        summ['_market_order'] = _market_order(Path(root) / row_day, key)
         for name, t in variants(summ).items():
             i, p, h = sm.settle(t, res['payouts'], ns)
             row[name] = (i, p, h, len(t))
@@ -87,10 +115,18 @@ def races(root, since=None):
     return out
 
 
+def _market_order(day_dir, key):
+    try:
+        from runtime.local_autopilot import role_shadow
+        return role_shadow._pops(day_dir, key)
+    except Exception:
+        return []
+
+
 def evaluate(root, since=None):
     rs = races(root, since)
     agg = {}
-    for name in ('R54_60', 'MIX_P2BOX20', 'P2BOX20_ONLY', 'MIX_WAXIS_TRIO', 'KEEP_MEC_TRIO20', 'THIRD3_BY_PAIR'):
+    for name in ('R54_60', 'MIX_P2BOX20', 'P2BOX20_ONLY', 'MIX_WAXIS_TRIO', 'KEEP_MEC_TRIO20', 'THIRD3_BY_PAIR', 'W_PLUS_TOP2POP_60'):
         v = [r[name] for r in rs]
         inv, pay = sum(x[0] for x in v), sum(x[1] for x in v)
         top = max((x[1] for x in v), default=0)
