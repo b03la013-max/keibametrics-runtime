@@ -31,7 +31,7 @@ from runtime.local_autopilot import settle
 
 PROFILE = 'KM-LOCAL-HISTORICAL-BACKFILL-v1.0-20261119'
 CLASS = 'HISTORICAL_BACKFILL_LEARNING (not Forward OOS)'
-WINDOW_START = '2026-08-01'
+WINDOW_START = '2026-11-01'   # 2026-11-20: Aug-Oct come from the Owner's NAR CSVs; keep Rakuten load minimal
 DISCOVERY_PROBE = 3
 NIGHT = ((21, 30), (8, 30))
 ROOT = Path(os.environ.get('KM_LOCAL_AUTOPILOT_OUT') or Path(__file__).resolve().parent / 'output')

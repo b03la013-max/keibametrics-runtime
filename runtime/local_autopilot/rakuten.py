@@ -130,6 +130,10 @@ class Client:
         except urllib.error.HTTPError as e:
             if e.code in (403, 429, 503):  # access refused / throttled: back off 30 min, no retry
                 self.state['hold_until_epoch'] = time.time() + 1800
+                ev = {'at': time.time(), 'code': e.code, 'path': url.replace(ORIGIN, ''),
+                      'retry_after': e.headers.get('Retry-After') if e.headers else None,
+                      'server': e.headers.get('Server') if e.headers else None}
+                self.state['refusals'] = (self.state.get('refusals') or [])[-29:] + [ev]   # diagnosis only
             self._save()
             raise SourceStop(f'HTTP_{e.code}:{url}') from e
         except OSError as e:
