@@ -255,11 +255,15 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=6 | 30 | 20.0% | 1.44 | 0% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=7 | 42 | 26.2% | 0.79 | 9% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 46 | 34.8% | 1.26 | 65% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=7 | 30 | 20.0% | 0.85 | 28% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=8 | 40 | 42.5% | 1.13 | 354% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=8 | 30 | 30.0% | 1.12 | 52% |
 | venue=KSM / distance=1580 / going=DRY / field_band=F9-11 / frame=8 | 30 | 30.0% | 0.93 | 172% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=7 | 35 | 25.7% | 1.01 | 15% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=5 | 30 | 30.0% | 0.99 | 32% |
 
 ## 距離変更：A/E の偏りが大きい区分（30出走以上、上位20）
 
