@@ -431,6 +431,21 @@ def freeze(root: Path, date8: str) -> dict:
     return {"frozen": n}
 
 
+def official_top3(root: Path, rid: str):
+    """Official top 3 for a race: the Static Owner result evaluation when present, else the signed
+    official result (runtime/results). The Static Owner evaluations stopped after 2026-11-14, which left
+    every Challenger with 0 eligible races although 137 pre-race freezes existed (fixed 2026-11-21)."""
+    ev = root / "runtime/jra_static_owner_forward_oos" / rid / "result_evaluation.json"
+    if ev.exists():
+        return [str(x) for x in json.loads(ev.read_text())["top3"]]
+    rp = root / "runtime/results" / f"{rid}.json"
+    if rp.exists():
+        o = json.loads(rp.read_text()).get("official_result") or {}
+        fo = o.get("finish_order") or o.get("top3") or []
+        return [str(x) for x in fo[:3]] if len(fo) >= 3 else None
+    return None
+
+
 def evaluate_forward(root: Path) -> dict:
     p = registry_path(root)
     if not p.exists():
@@ -442,10 +457,9 @@ def evaluate_forward(root: Path) -> dict:
         diffs, n = [], 0
         for pp in pres:
             pre = json.loads(Path(pp).read_text())
-            ev = root / "runtime/jra_static_owner_forward_oos" / pre["race_id"] / "result_evaluation.json"
-            if not ev.exists():
+            top3 = official_top3(root, pre["race_id"])
+            if not top3:
                 continue
-            top3 = [str(x) for x in json.loads(ev.read_text())["top3"]]
             def tmr(order):
                 rank = {h: i + 1 for i, h in enumerate(order)}
                 return sum(rank.get(t, len(order) + 1) for t in top3) / 3
