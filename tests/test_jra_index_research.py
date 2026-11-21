@@ -88,3 +88,22 @@ def test_walkforward_trains_only_on_earlier_dates(tmp_path):
     wf = R.walkforward(rows)
     assert [f["test_date"] for f in wf["folds"]] == ["20261102"]
     assert wf["folds"][0]["train_races"] == R.MIN_TRAIN_RACES
+
+
+def test_forward_evaluation_falls_back_to_signed_official_result(tmp_path):
+    # Static Owner result evaluations stopped after 2026-11-14; the signed official result must count.
+    fp, d = _root(tmp_path, rid="KM-JRA-TKY-20261121-R11")
+    rid = d["race_id"]
+    runners = list(d["final_prediction_package"]["index_provenance_replay"]["runners"])
+    row = R.reflect_one(tmp_path, fp)
+    shutil.rmtree(tmp_path / "runtime/jra_static_owner_forward_oos" / rid)
+    c = R.generate_candidates([row] * R.MIN_TRAIN_RACES, ["20261101", "20261114"])[0]
+    c.update(status="SHADOW", forward_from_race_date="20261115", registered_at="2000-01-01T00:00:00+00:00")
+    R.registry_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    R.registry_path(tmp_path).write_text(json.dumps({"candidates": [c]}))
+    assert R.freeze(tmp_path, "20261121")["frozen"] == 1
+    assert R.evaluate_forward(tmp_path)[c["candidate_id"]]["eligible_races"] == 0   # no result yet
+    (tmp_path / "runtime/results").mkdir(parents=True)
+    (tmp_path / f"runtime/results/{rid}.json").write_text(json.dumps({"official_result": {"finish_order": runners[:3]}}))
+    assert R.official_top3(tmp_path, rid) == [str(x) for x in runners[:3]]
+    assert R.evaluate_forward(tmp_path)[c["candidate_id"]]["eligible_races"] == 1
