@@ -82,13 +82,107 @@ def race_review(out, key, r):
               'evidence': {'trio_stake': trio_st, 'trio_return': trio_ret, 'exact_stake': ex_st, 'exact_return': ex_ret}})
     if near:
         P.append({'id': 'P2:OUTSIDE_ROLE_RANK', 'level': 'P2', 'what': '役割外だった着順馬の順位', 'evidence': near})
-    return {'key': key, 'order': res['order'][:3], 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
+    shadow = shadow_metrics(out, key, eff, res, rec)
+    # 変換ファネル（FNB 第227条ほか）: 勝ち馬をWに → 1-2着の組 → 三連複 → 三連単 → 収支プラス
+    w_, s_, t_ = res['order'][:3]
+    funnel = {'winner_in_W': fin['1']['in_role'],
+              'pair_in_tickets': any(len(x) == 3 and x[0] == w_ and x[1] == s_ for x in tk['exact'])
+              or any({w_, s_} <= set(x) for x in tk['trio']),
+              'trio_bought': trio_ret > 0, 'exact_bought': ex_ret > 0, 'profit': (res['return'] or 0) > (res['stake'] or 0)}
+    # 着順馬ごとの経路（Formal Post-Race Review 16〜18節の簡易版）: 役割 → 三連複に入ったか → 三連単に入ったか
+    for k, f in fin.items():
+        n_ = f['no']
+        f['in_trio_tickets'] = any(n_ in x for x in tk['trio'])
+        f['in_exact_tickets'] = any(n_ in x for x in tk['exact'])
+        f['xdi'] = bool((rows.get(str(n_)) or {}).get('xdi'))
+    # 一極集中（園田 第559-561条・exposure）: 最多出現馬の三連複占有率、その馬が3着外なら残る点数
+    cnt = {}
+    for x in tk['trio']:
+        for n_ in x:
+            cnt[n_] = cnt.get(n_, 0) + 1
+    hub = max(cnt, key=cnt.get) if cnt else None
+    hub_share = round(cnt[hub] / len(tk['trio']), 2) if hub else None
+    exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
+                'hub_failed': bool(hub and hub not in res['order'][:3])}
+    if (res['return'] or 0) > 0 and (res['return'] or 0) < (res['stake'] or 0):
+        P.append({'id': 'P2:HIT_BUT_LOSS', 'level': 'P2', 'what': '的中したが投資割れ（点数の広さ・低配当）',
+                  'evidence': {'stake': res['stake'], 'return': res['return'], 'points': tk['points']}})
+    xdi_miss = [f for f in fin.values() if f['xdi']]
+    if xdi_miss:
+        P.append({'id': 'P1:XDI_FINISHER', 'level': 'P1', 'what': '水分ボンバー上位3頭なのに内部下位半分だった馬が3着内',
+                  'evidence': xdi_miss})
+    return {'key': key, 'order': res['order'][:3], 'shadow': shadow, 'funnel': funnel, 'exposure': exposure,
+            'refund': res.get('refund'),
+            'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
             'rev_audit': res.get('rev_audit'), 'paper': res.get('paper'), 'finishers': fin,
             'honmei': ev.get('honmei'), 'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
+
+
+def shadow_metrics(out, key, eff, res, rec):
+    """Same yardsticks for BASE and every pre-registered challenger (challengers.PREREG)."""
+    sh = _j(out / f'R{key}{eff}.shadow.json')
+    if not sh:
+        return None
+    w, s, t = res['order'][:3]
+    pay = res['payouts']
+    m = {}
+    for cid, c in sh['candidates'].items():
+        if 'error' in c:
+            m[cid] = {'error': c['error']}
+            continue
+        wo, po = c['win_order'], c['place_order']
+        tr = sum(pay.get('TRIO', {}).get('-'.join(map(str, x)), 0) for x in c['trio'])
+        ex = sum(pay.get('TRIFECTA', {}).get('-'.join(map(str, x)), 0) for x in c['exact'])
+        m[cid] = {'winner_win_rank': wo.index(w) + 1 if w in wo else None,
+                  'top3_in_place5': sum(1 for n in (w, s, t) if n in po[:5]),
+                  'honmei_top3': c['honmei'] in (w, s, t),
+                  'trio_hit': tr > 0, 'exact_hit': ex > 0,
+                  'stake': c['points'] * 100, 'return': tr + ex}
+    return m
+
+
+def shadow_table(revs):
+    """Aggregate challenger metrics over races where both BASE and the candidate exist."""
+    from statistics import mean
+    agg = {}
+    for x in revs:
+        for cid, m in (x.get('shadow') or {}).items():
+            if 'error' not in m:
+                agg.setdefault(cid, []).append((m, x.get('moisture_band')))
+    rows = []
+    for cid, L in agg.items():
+        ms = [m for m, _ in L]
+        n = len(ms)
+        st, rt = sum(m['stake'] for m in ms), sum(m['return'] for m in ms)
+        top = max((m['return'] for m in ms), default=0)
+        wr = [m['winner_win_rank'] for m in ms if m['winner_win_rank']]
+        band = {}
+        for m, b in L:
+            band.setdefault(b, []).append(m['winner_win_rank'] or 9)
+        rows.append({'id': cid, 'n': n, 'winner_rank_mean': round(mean(wr), 2) if wr else None,
+                     'winner_top1': sum(1 for v in wr if v == 1), 'winner_top3': sum(1 for v in wr if v <= 3),
+                     'top3_in_place5_mean': round(mean(m['top3_in_place5'] for m in ms), 2),
+                     'honmei_top3': sum(m['honmei_top3'] for m in ms), 'trio_hit': sum(m['trio_hit'] for m in ms),
+                     'exact_hit': sum(m['exact_hit'] for m in ms), 'stake': st, 'return': rt, 'pfs': _pct(rt, st),
+                     'pfs_ex_top1': _pct(rt - top, st), 'winner_rank_by_band': {k: round(mean(v), 2) for k, v in band.items()}})
+    return sorted(rows, key=lambda r: (r['id'] != 'BASE', r['id']))
+
+
+def _shadow_md(rows):
+    import challengers
+    C = challengers.PREREG['candidates']
+    L = ['| 候補 | 内容 | 状態 | R | 勝ち馬の評価順位(平均) | 1位 | 3位内 | 3着内馬の複順位5位内(平均) | ◎3着内 | 三連複 | 三連単 | PFS | 最高1本除く |',
+         '|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    for r in rows:
+        c = C.get(r['id'], {})
+        L.append(f"| {r['id']} | {c.get('what', '')} | {c.get('status', '')} | {r['n']} | {r['winner_rank_mean']} | {r['winner_top1']} | "
+                 f"{r['winner_top3']} | {r['top3_in_place5_mean']} | {r['honmei_top3']} | {r['trio_hit']} | {r['exact_hit']} | "
+                 f"{r['pfs']} | {r['pfs_ex_top1']} |")
+    return '\n'.join(L) + '\n'
 
 
 def _pct(a, b):
@@ -118,7 +212,12 @@ def summarize(revs, missed):
             'winner_in_W': sum(x['finishers']['1']['in_role'] for x in revs),
             'second_in_P2': sum(x['finishers']['2']['in_role'] for x in revs),
             'third_in_P3': sum(x['finishers']['3']['in_role'] for x in revs),
-            'ffl': dict(ffl), 'cause': dict(cause), 'p0p1': dict(p), 'rev_audit': a}
+            'ffl': dict(ffl), 'cause': dict(cause), 'p0p1': dict(p), 'rev_audit': a,
+            'funnel': {k: sum(1 for x in revs if (x.get('funnel') or {}).get(k)) for k in
+                       ('winner_in_W', 'pair_in_tickets', 'trio_bought', 'exact_bought', 'profit')},
+            'hit_but_loss': sum(1 for x in revs if 0 < x['return'] < x['stake']),
+            'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
+            'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed'))}
 
 
 def _md(title, s, revs=None):
@@ -128,6 +227,9 @@ def _md(title, s, revs=None):
          f"- 三連複 的中 {s['trio_hit']}R・PFS {s['trio_pfs']}%／三連単 的中 {s['exact_hit']}R・PFS {s['exact_pfs']}%",
          f"- ◎ 1着 {s['honmei_win']}・3着内 {s['honmei_top3']}／勝ち馬∈W {s['winner_in_W']}・2着∈P2 {s['second_in_P2']}・3着∈P3 {s['third_in_P3']}",
          f"- 最初の断線: {s['ffl']}／原因コード: {s['cause']}",
+         f"- 変換ファネル: 勝ち馬∈W {s['funnel']['winner_in_W']} → 1-2着の組 {s['funnel']['pair_in_tickets']} → 三連複 {s['funnel']['trio_bought']}"
+         f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
+         f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
     if s['rev_audit']:
         a = s['rev_audit']
@@ -184,3 +286,12 @@ def period(root):
     note = (f"\n**判断段階 R{stage} に到達**：P1件数・券種別PFS・Rev1/Rev2・仮の基準（derive.CUTS）を Owner に提示する。\n"
             if stage else f"\n次の判断段階まであと {min(k for k in DECISION_STAGES if k > n) - n}R。\n")
     (Path(root) / 'review_period_summary.md').write_text(_md(head, s) + note)
+    sh = shadow_table(revs)
+    if sh:
+        import challengers
+        (Path(root) / 'forward_oos_ban.json').write_text(json.dumps({'prereg': challengers.PREREG, 'table': sh},
+                                                                   ensure_ascii=False, indent=1))
+        (Path(root) / 'forward_oos_ban.md').write_text(
+            f"# ばんえい 影の候補式の比較（未知のレース・発走前に固定）\n\n{days[0]}〜{days[-1]}・{n}R。"
+            f"登録 {challengers.PREREG['registered_at']}。{challengers.PREREG['decision']}\n\n" + _shadow_md(sh)
+            + "\n勝ち馬の評価順位は小さいほど良い。PFSは高配当1本で大きく動くため、R100未満では順位の物差しを主に見る。\n")

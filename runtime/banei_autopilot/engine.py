@@ -14,6 +14,7 @@ from statistics import mean
 BSI_W = {'recent': 0.40, 'track': 0.35, 'avg': 0.25}          # Owner 2026-11-19: provisional
 SBO_SHARE = 0.30                                              # Owner 2026-11-18: 水分ボンバー 30% start
 MID = lambda lo, hi: (lo + hi) / 2.0                          # Owner 2026-11-19: midpoint of ranges
+MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
 RULESET = 'KM-BAN-v4.0-static-r1'
 
@@ -222,6 +223,7 @@ def evaluate(race):
                      # evidence only (not in TPI): 馬体重の増減率・好走体重レンジの出所・NAR過去走数
                      'body_delta_pct': h.get('body_delta_pct'), 'good_bw_src': h.get('good_bw_src'),
                      'nar_starts': h.get('nar_starts'), 'jbr_hits': h.get('jbr_hits'),
+                     '_sbo_avg': _f((h.get('idx_sbo') or {}).get('avg')),
                      'front_type': h.get('front_type'), 'fades_after_barrier': h.get('fades_after_barrier'),
                      'promoted': h.get('promoted'), 'win_streak': h.get('win_streak'),
                      'bwl_signals': [k for k in ('state_bad', 'comment_weak', 'consecutive_loss') if h.get(k)],
@@ -251,6 +253,11 @@ def _rank(rows, race):
     for key, name in (('win_score', 'win_rank'), ('place_score', 'place_rank'), ('hole_score', 'hole_rank')):
         for i, r in enumerate(sorted(rows, key=lambda x: -x[key])):
             r[name] = i + 1
+    if MARKET_W and all(r['pop'] for r in rows):              # shadow: rank-average of model and market (人気)
+        for name in ('win_rank', 'place_rank'):
+            blend = sorted(rows, key=lambda x: (1 - MARKET_W) * x[name] + MARKET_W * x['pop'])
+            for i, r in enumerate(blend):
+                r[name] = i + 1
     n = len(rows)
     for r in rows:
         # roles (spec 3-3). Hard EXCL only with explicit evidence flag, never from rank alone.
@@ -272,6 +279,13 @@ def _rules(rows, race):
     same_type = sum(1 for r in rows if r['front_type'])
     dry = moisture_band(race.get('moisture')) == 'DRY'
     bsi_sorted = sorted([r['bsi'] for r in rows if r['bsi'] is not None], reverse=True)
+    # XDI-G (司令部 情報源台帳): 外部指数(水分ボンバー平均)上位3頭なのに内部で下位半分 -> 再点検フラグ（証拠のみ）
+    sb = sorted([r for r in rows if r.get('_sbo_avg') is not None], key=lambda r: -r['_sbo_avg'])
+    for i, r in enumerate(sb):
+        r['sbo_rank'] = i + 1
+    for r in rows:
+        r['xdi'] = bool(r.get('sbo_rank') and r['sbo_rank'] <= 3 and r['win_rank'] > n / 2)
+        r.pop('_sbo_avg', None)
     for r in rows:
         f = r['_flags']
         hits52 = sum([(r['age'] or 0) >= 8, (r['load'] or 0) >= 690, (f.get('body_delta') or 0) <= -15,
