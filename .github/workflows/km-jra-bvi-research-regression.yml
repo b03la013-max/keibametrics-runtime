@@ -1,0 +1,83 @@
+name: JRA BVI Research Regression
+
+on:
+  pull_request:
+    paths:
+      - 'research/jra_bvi_next/**'
+      - 'tests/test_jra_bvi_next_candidate.py'
+      - '.github/workflows/km-jra-bvi-research-regression.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/jra_bvi_next/**'
+      - 'tests/test_jra_bvi_next_candidate.py'
+      - '.github/workflows/km-jra-bvi-research-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q pytest cryptography beautifulsoup4
+      - name: Test qualification, unknown uncertainty and research boundaries offline
+        run: >-
+          python -m pytest -q
+          tests/test_jra_bvi_next_candidate.py
+          research/jra_bvi_next/test_identity_label_audit.py
+          research/jra_bvi_next/test_identity_label_times.py
+          research/jra_bvi_next/test_environment_quality.py
+          research/jra_bvi_next/test_partition_integrity.py
+          research/jra_bvi_next/test_role_chain_sensitivity.py
+          research/jra_bvi_next/test_forward_preflight.py
+
+      - name: Audit retained JRA harvest going observations (not a signed SOURCE Reader)
+        run: >-
+          python research/jra_bvi_next/environment_quality.py
+          --repository .
+          --output "${RUNNER_TEMP}/bvi_env_retained_harvest_quality.json"
+      - name: Reconcile historical train-disjoint model diagnostics without refit
+        run: >-
+          python research/jra_bvi_next/partition_integrity.py
+          --input research/jra_bvi_next/evidence/current_corpus_evaluation.json
+          --output "${RUNNER_TEMP}/bvi_historical_partition_integrity.json"
+      - name: Measure historical BVI-to-registered-AKI role boundaries read-only
+        run: >-
+          python research/jra_bvi_next/role_chain_sensitivity.py
+          --repository .
+          --output "${RUNNER_TEMP}/bvi_role_chain_sensitivity.json"
+      - name: Audit 10/31 research readiness, never register or dispatch
+        run: >-
+          python research/jra_bvi_next/forward_preflight.py
+          --repository .
+          --output "${RUNNER_TEMP}/bvi_20261031_research_preflight.json"
+      - name: Save read-only unregistered future research preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-20261031-research-unregistered-preflight
+          path: ${{ runner.temp }}/bvi_20261031_research_preflight.json
+          if-no-files-found: error
+      - name: Save non-Production role-chain diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-registered-aki-scalar-role-chain
+          path: ${{ runner.temp }}/bvi_role_chain_sensitivity.json
+          if-no-files-found: error
+      - name: Save non-Production heldout aggregate audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-historical-heldout-aggregate-audit
+          path: ${{ runner.temp }}/bvi_historical_partition_integrity.json
+          if-no-files-found: error
+      - name: Save non-Production retained-harvest quality evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-retained-harvest-going-quality
+          path: ${{ runner.temp }}/bvi_env_retained_harvest_quality.json
+          if-no-files-found: error
