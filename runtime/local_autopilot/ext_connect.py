@@ -225,7 +225,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
         if no in vmi:
             fixed['VMI'] = (vmi[no], '水分ボンバー')
         if kbx.get('tm') is not None:
-            fixed['TMI'] = (float(kbx['tm']), '競馬ブック TM印')
+            fixed['TMI'] = (float(kbx['tm']), '競馬ブック TM印' if kbx.get('src') != 'tesio' else '勝ちそーチャンネル 予想印')
         ab = [y for y in (kbx.get('rt'), kbx.get('cpu')) if y is not None]
         if ab:
             fixed['KBA'] = (sum(ab) / len(ab), '競馬ブック 能力表')
@@ -331,6 +331,9 @@ def prepare(r, head, active, day_dir, deadline, sbo_fetch=None, now=None):
     now = now or datetime.now(deadline.tzinfo)
     sbo_t, sbo_m = sbo_for(r, deadline, sbo_fetch)
     kb, kb_m = kb_for(day_dir, r, deadline)
+    if not kb and r['venue_id'] in ('MIZ', 'MOR') and os.environ.get('KM_TESIO', '1') != '0':
+        from runtime.capture import tesio_marks           # 岩手 free paper (Owner 22:41 無料でやりなさい)
+        kb, kb_m = tesio_marks.for_race(private_dir(), day, r['venue_id'], r['race_no'], deadline)
     db = day_bias(day_dir, r['venue_id'], min(now, deadline))
     wx = weather_now(r['venue_id'], min(now, deadline))
     race = {'venue_id': r['venue_id'], 'distance': head.get('distance'), 'going': head.get('going'),
