@@ -74,7 +74,15 @@ def check():
                                               {'kb': {2: {'tm': 60.0, 'rt': 56.0, 'cpu': 60.0, 'pace': '逃げ'}}})['rows']}
     base2 = {x['no']: x for x in engine.predict(race, runners, odds, date(2026, 11, 16))['rows']}[2]
     assert e[2]['PACE'] == '逃げ' and e[2]['EVI'] > base2['EVI'] and e[2]['KBA'] == 58.0, e[2]
-    print('SELFTEST_OK 10/10')
+    # 11) 2026-11-16 水沢1R: both favorites round to F3S 66.4 and have
+    # no market odds; raw F3S, not card number, must break the residual tie.
+    near = [{'no': 6, 'F3S': 66.36071380121577, 'win': None},
+            {'no': 9, 'F3S': 66.44349778353482, 'win': None}]
+    assert [x['no'] for x in engine.rank_f3s(near)] == [9, 6]
+    # Published odds still take priority within the existing rounded band.
+    near[0]['win'], near[1]['win'] = 2.0, 3.0
+    assert [x['no'] for x in engine.rank_f3s(near)] == [6, 9]
+    print('SELFTEST_OK 11/11')
 
 
 if __name__ == '__main__':
