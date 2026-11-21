@@ -1,7 +1,7 @@
 # 地方版 週次 2026-W47（自動・推薦試算・実購入なし）
 
-- 反省済みRace 191／PAPER PFS 54.9%／正式推薦 PFS 110.8%
-- 第一失敗：{'NONE': 27, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 38, 'PREDICTION_ROLE_W': 63, 'PREDICTION_ROLE_P2': 26, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 192／PAPER PFS 55.1%／正式推薦 PFS 110.3%
+- 第一失敗：{'NONE': 27, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 39, 'PREDICTION_ROLE_W': 63, 'PREDICTION_ROLE_P2': 26, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -10,19 +10,19 @@
 | KSM | 36 | 50.0 | 317.6 | {'PREDICTION_ROLE_W': 15, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 7} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 60 | 73.8 | 55.4 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 10, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 8, 'PREDICTION_ROLE_W': 22, 'CAPITAL_EFFICIENCY': 11, 'EXACT_ORIENTATION': 2} |
-| SAG | 5 | 2.1 | 0.0 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1} |
+| SAG | 6 | 11.7 | 8.8 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1, 'CAPITAL_EFFICIENCY': 1} |
 | SON | 36 | 23.6 | 56.9 | {'PREDICTION_ROLE_W': 16, 'CAPITAL_EFFICIENCY': 10, 'PREDICTION_ROLE_P2': 6, 'NONE': 4} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 191 | 34.6% | 69.1% | 34.6% | 16.8% | 12.6% | 12.0% | 24.1% | 1.55 |
-| 正式推薦 | 153 | 33.3% | 58.8% | 58.8% | 72.5% | 100.0% | 58.8% | 26.8% | 1.35 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.6%（無作為9.7%、差+28.8）／P2 平均1.0頭 的中18.1%（無作為9.7%、差+8.4）／P3 平均1.0頭 的中10.8%（無作為9.7%、差+1.1）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中63.2%（無作為28.9%、差+34.2）／P2 平均6.0頭 的中72.4%（無作為57.9%、差+14.5）／P3 平均10.72頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 14.73/40（選択性補正込み）・能力順位 14.49/20（11R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.25/40（選択性補正込み）・能力順位 13.75/20（4R平均）
+| PAPER | 192 | 34.4% | 69.3% | 34.4% | 16.7% | 13.0% | 12.0% | 24.5% | 1.56 |
+| 正式推薦 | 154 | 33.8% | 59.1% | 59.1% | 72.7% | 100.0% | 59.1% | 27.3% | 1.36 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.1%（無作為9.7%、差+28.4）／P2 平均1.0頭 的中17.9%（無作為9.7%、差+8.1）／P3 平均1.0頭 的中11.9%（無作為9.7%、差+2.2）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中63.6%（無作為28.9%、差+34.7）／P2 平均6.0頭 的中72.7%（無作為57.8%、差+14.9）／P3 平均10.73頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.58/40（選択性補正込み）・能力順位 14.79/20（12R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.66/40（選択性補正込み）・能力順位 14.66/20（5R平均）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -31,18 +31,18 @@
 | P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 5 | 3,540 | RECURRING |
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 87 | 403,330 | RECURRING |
-| P1:HIT_BUT_LOSS | P1 | 49 | 180,760 | RECURRING |
+| P1:HIT_BUT_LOSS | P1 | 50 | 185,180 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 35 | 168,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 191 | 737,060 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 192 | 741,480 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 4 | 22,410 | RECURRING |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
 
 # 地方版 月次 2026-11（自動・推薦試算・実購入なし）
 
-- 反省済みRace 191／PAPER PFS 54.9%／正式推薦 PFS 110.8%
-- 第一失敗：{'NONE': 27, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 38, 'PREDICTION_ROLE_W': 63, 'PREDICTION_ROLE_P2': 26, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 192／PAPER PFS 55.1%／正式推薦 PFS 110.3%
+- 第一失敗：{'NONE': 27, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 39, 'PREDICTION_ROLE_W': 63, 'PREDICTION_ROLE_P2': 26, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -51,19 +51,19 @@
 | KSM | 36 | 50.0 | 317.6 | {'PREDICTION_ROLE_W': 15, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 7} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 60 | 73.8 | 55.4 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 10, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 8, 'PREDICTION_ROLE_W': 22, 'CAPITAL_EFFICIENCY': 11, 'EXACT_ORIENTATION': 2} |
-| SAG | 5 | 2.1 | 0.0 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1} |
+| SAG | 6 | 11.7 | 8.8 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1, 'CAPITAL_EFFICIENCY': 1} |
 | SON | 36 | 23.6 | 56.9 | {'PREDICTION_ROLE_W': 16, 'CAPITAL_EFFICIENCY': 10, 'PREDICTION_ROLE_P2': 6, 'NONE': 4} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 191 | 34.6% | 69.1% | 34.6% | 16.8% | 12.6% | 12.0% | 24.1% | 1.55 |
-| 正式推薦 | 153 | 33.3% | 58.8% | 58.8% | 72.5% | 100.0% | 58.8% | 26.8% | 1.35 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.6%（無作為9.7%、差+28.8）／P2 平均1.0頭 的中18.1%（無作為9.7%、差+8.4）／P3 平均1.0頭 的中10.8%（無作為9.7%、差+1.1）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中63.2%（無作為28.9%、差+34.2）／P2 平均6.0頭 的中72.4%（無作為57.9%、差+14.5）／P3 平均10.72頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 14.73/40（選択性補正込み）・能力順位 14.49/20（11R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.25/40（選択性補正込み）・能力順位 13.75/20（4R平均）
+| PAPER | 192 | 34.4% | 69.3% | 34.4% | 16.7% | 13.0% | 12.0% | 24.5% | 1.56 |
+| 正式推薦 | 154 | 33.8% | 59.1% | 59.1% | 72.7% | 100.0% | 59.1% | 27.3% | 1.36 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.1%（無作為9.7%、差+28.4）／P2 平均1.0頭 的中17.9%（無作為9.7%、差+8.1）／P3 平均1.0頭 的中11.9%（無作為9.7%、差+2.2）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中63.6%（無作為28.9%、差+34.7）／P2 平均6.0頭 的中72.7%（無作為57.8%、差+14.9）／P3 平均10.73頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.58/40（選択性補正込み）・能力順位 14.79/20（12R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.66/40（選択性補正込み）・能力順位 14.66/20（5R平均）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -72,10 +72,10 @@
 | P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 5 | 3,540 | RECURRING |
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 87 | 403,330 | RECURRING |
-| P1:HIT_BUT_LOSS | P1 | 49 | 180,760 | RECURRING |
+| P1:HIT_BUT_LOSS | P1 | 50 | 185,180 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 35 | 168,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 191 | 737,060 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 192 | 741,480 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 4 | 22,410 | RECURRING |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
