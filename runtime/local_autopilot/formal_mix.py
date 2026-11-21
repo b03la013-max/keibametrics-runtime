@@ -56,7 +56,51 @@ def variants(summary):
             third += [('TRIFECTA', [a, b, c]) for c in [x for x in rank if x not in (a, b)][:3]]
     return {'R54_60': base[:CAP], 'MIX_P2BOX20': fill(box), 'P2BOX20_ONLY': box, 'MIX_WAXIS_TRIO': fill(wax),
             'KEEP_MEC_TRIO20': fill(mec_trio), 'THIRD3_BY_PAIR': third[:CAP],
-            'W_PLUS_TOP2POP_60': w_plus_market(summary, base, rank, w, p2)}
+            'W_PLUS_TOP2POP_60': w_plus_market(summary, base, rank, w, p2),
+            'CORE_LAYER_60': core_layer(summary, base, w, p2),
+            'NOBET_LOWINFO': [] if low_info(summary) else base[:CAP]}
+
+
+LOW_INFO_SPD_SHARE = 0.5
+
+
+def low_info(summary):
+    """C27 (KAW 第382条 arm B, Owner 2026-11-21 23:57): the race is information-poor when fewer than half of the
+    field has an own NAR speed figure (EXT status spd_horses / field). Unknown before EXT (11/22) -> not low."""
+    st = ((summary.get('ext_connection') or {}).get('status') or {})
+    n = len(summary.get('ranking') or [])
+    if not n or st.get('spd_horses') is None:
+        return False
+    return st['spd_horses'] / n < LOW_INFO_SPD_SHARE
+
+
+def core_layer(summary, base, w, p2):
+    """C28 (FNB 第313〜315条 3層Capital / OHI 第331条 Capital 4層, Owner 2026-11-21 23:57): the same 60 points
+    re-drawn from the signed full MEC (pre-cap) by layer: 1) head in W and second in the top-3 P2 (Core-Pair Deep),
+    2) head in W and second in P2 (Head-local Wide), 3) the rest in MEC order (Peripheral Thin). Stable within a
+    layer (MEC order). Falls back to the delivered tickets when the MEC is not stored."""
+    mec = [(t['bet_type'], [int(x) for x in t['selection']]) for t in summary.get('signed_final_tickets') or []]
+    if not mec:
+        return base[:CAP]
+    core2 = set(p2[:3])
+
+    def layer(t):
+        sel = t[1]
+        if t[0] in ('TRIO', 'QUINELLA', 'WIDE'):
+            hw = bool(set(sel) & set(w))
+            return 0 if hw and len(set(sel) & core2) >= 1 else 1 if hw else 2
+        head, second = sel[0], sel[1] if len(sel) > 1 else None
+        if head in w and second in core2:
+            return 0
+        return 1 if head in w and second in p2 else 2
+    order = sorted(range(len(mec)), key=lambda i: (layer(mec[i]), i))
+    out = []
+    for i in order:
+        if mec[i] not in out:
+            out.append(mec[i])
+        if len(out) >= CAP:
+            break
+    return out
 
 
 def w_plus_market(summary, base, rank, w, p2, add=2):
@@ -128,7 +172,8 @@ def _market_order(day_dir, key):
 def evaluate(root, since=None):
     rs = races(root, since)
     agg = {}
-    for name in ('R54_60', 'MIX_P2BOX20', 'P2BOX20_ONLY', 'MIX_WAXIS_TRIO', 'KEEP_MEC_TRIO20', 'THIRD3_BY_PAIR', 'W_PLUS_TOP2POP_60'):
+    for name in ('R54_60', 'MIX_P2BOX20', 'P2BOX20_ONLY', 'MIX_WAXIS_TRIO', 'KEEP_MEC_TRIO20', 'THIRD3_BY_PAIR', 'W_PLUS_TOP2POP_60',
+                 'CORE_LAYER_60', 'NOBET_LOWINFO'):
         v = [r[name] for r in rs]
         inv, pay = sum(x[0] for x in v), sum(x[1] for x in v)
         top = max((x[1] for x in v), default=0)

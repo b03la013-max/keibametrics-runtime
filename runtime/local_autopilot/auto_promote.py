@@ -4,7 +4,7 @@
 Rules (fixed before any decision; changing them needs the Owner):
   * Only PRE-REGISTERED candidates that are complete same-budget ticket sets built from the signed formal
     summary are eligible (formal_mix variants: C13 MIX_P2BOX20, C15 MIX_WAXIS_TRIO, C22 KEEP_MEC_TRIO20,
-    C24 W_PLUS_TOP2POP_60). Same races, same 60 points, official payouts.
+    C24 W_PLUS_TOP2POP_60, C28 CORE_LAYER_60 from 2026-11-22). Same races, same 60 points, official payouts.
   * PROMOTE when, on >= 100 races after the candidate's first eligible post (and after any earlier demotion):
       candidate PFS > champion PFS, candidate PFS without the single largest payout > champion's,
       candidate hit races >= champion's, and in >= 2 venues with >= 12 races each the candidate PFS is higher
@@ -35,6 +35,7 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C15-FORMAL-MIX-WAXIS-TRIO': ('MIX_WAXIS_TRIO', 'KM_LOCAL_FORWARD_OOS_PREREG_20261118_R5.json'),
     'C22-KEEP-MEC-TRIO20': ('KEEP_MEC_TRIO20', 'KM_LOCAL_FORWARD_OOS_PREREG_20261120_R8.json'),
     'C24-W-PLUS-TOP2POP-SAME-BUDGET': ('W_PLUS_TOP2POP_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261120_R9.json'),
+    'C28-CORE-LAYER-60': ('CORE_LAYER_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261122_R12.json'),
 }
 
 
@@ -116,7 +117,7 @@ def decide(root, today, rows_fn=None):
             except (OSError, ValueError):
                 continue
             start = max(p['first_eligible_post'][:10], st.get('blocked_until', {}).get(cid, '0000-00-00'))
-            rows = rows_fn(root, datetime.fromisoformat(start + 'T00:00:00+09:00'))
+            rows = [r for r in rows_fn(root, datetime.fromisoformat(start + 'T00:00:00+09:00')) if variant in r]
             cmpd = compare(rows, variant, CHAMPION)
             rec.setdefault('evaluated', {})[cid] = {'races': len(rows), 'passes': cmpd['passes'], 'checks': cmpd['checks'],
                                                     'candidate': cmpd['candidate'], 'champion': cmpd['champion'],

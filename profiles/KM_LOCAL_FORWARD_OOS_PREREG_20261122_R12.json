@@ -1,0 +1,33 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261122-R12",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-22T00:05:00+09:00",
+ "first_eligible_post": "2026-11-22T00:05:00+09:00",
+ "origin": "Drive精読の Owner判断待ち（KAW v2.6 第382条 未知未来6アーム、FNB v2.0 第313〜315条 3層Capital、OHI v2.3 第331条 Capital 4層、Formal Pre-Race・FROZEN OOS の見送り基準）を Owner 2026-11-21 23:57「進めてください」で事前登録。",
+ "extends": "R1-R11 unchanged",
+ "candidates": {
+  "C27-NOBET-LOWINFO": {
+   "variant": "NOBET_LOWINFO (formal_mix)",
+   "rule": "出走頭数のうち自前のNARスピード指数を持つ馬が半数未満（EXT status spd_horses / 頭数 < 0.5）のレースは推薦券面を空にする。それ以外は正式60点のまま。",
+   "kind": "EVIDENCE_ONLY (投資額が変わるため auto_promote の同予算条件の対象外)",
+   "decision": "100R到達時に、見送ったレースの正式60点の損益（見送りで避けた損失／逃した払戻）、残りレースのPFSと最大払戻除外PFS、場別を Owner に提示。採用は Owner 判断。",
+   "kaw_382_arm": "B（情報量不足NO-BET）"
+  },
+  "C28-CORE-LAYER-60": {
+   "variant": "CORE_LAYER_60 (formal_mix)",
+   "rule": "署名済みの完全MEC（上限前）から同じ60点を層順に引き直す：1) 頭がW・2番目がP2上位3頭、2) 頭がW・2番目がP2、3) 残りをMEC順。三連複・ワイド等はWを含みP2上位3頭を含むものを1層。",
+   "kind": "AUTO_PROMOTION (auto_promote.CANDIDATES、条件は KM-LOCAL-AUTO-PROMOTION-v1.0 のまま：100R・PFS・最大払戻除外PFS・的中R・2場以上)",
+   "kaw_382_arm": "E（Core-Hit Capital）",
+   "in_sample_reference": {
+    "note": "結果を知った上の再計算（2026-11-16〜21 正式165R）。参考値で判断に使わない。",
+    "R54_60": {"pfs": 107.2, "pfs_ex_top1": 48.1, "hit_races": 70},
+    "CORE_LAYER_60": {"pfs": 70.4, "pfs_ex_top1": 48.2, "hit_races": 56}
+   }
+  }
+ },
+ "not_registered": {
+  "KAW 382 arm A": "Frozen = 現行の正式60点（対照）",
+  "KAW 382 arm C/D/F": "W/P2 Evidence Diversity・条件付きKRS Rescue・券種別Bridge Integrity は発走前に機械で定義できる規則が条項に無いため研究扱い（gap_tracker B1/B5 の記録が揃ってから定義）"
+ },
+ "unchanged": "29指数・KRS・MEC・60点上限・購入方針（推薦のみ）・三布告 v1.1・昇格条件"
+}
