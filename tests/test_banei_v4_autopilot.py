@@ -154,3 +154,10 @@ def test_check10_keeps_rev1_when_nothing_changes_and_revises_on_change(tmp_path,
     assert r['check10']['decision'].startswith('REVISION_2') and r['effective'] == 'rev2'
     assert '出走馬の変更（取消・除外）' in r['check10']['reasons']
     assert (out / 'R01.json').exists() and (out / 'R01.rev2.json').exists()
+
+
+def test_first_failure_with_json_string_keys():
+    tk = {'terminal': {'5': 'HEAD-PURCHASED'}, 'trio': [[5, 7, 9]], 'exact': [[5, 7, 9]]}
+    assert run.first_failure(tk, [5, 7, 3]) == 'PAIR-P3-TERMINAL'
+    assert run.first_failure(tk, [5, 7, 9]) == 'NONE'
+    assert run.first_failure(tk, [8, 7, 9]) == 'ROLE'

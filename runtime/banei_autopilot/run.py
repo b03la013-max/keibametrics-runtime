@@ -221,7 +221,7 @@ def deliver(q, key, out, rev=1, reasons=None):
 def first_failure(tk, order):
     w, s, t = order[:3]
     tri = tuple(sorted((w, s, t)))
-    if w not in [n for n in tk['terminal']]:
+    if str(w) not in {str(n) for n in tk['terminal']}:          # JSON keys are strings
         return 'ROLE'
     if tri not in set(map(tuple, tk['trio'])):
         return 'PAIR-P3-TERMINAL' if any(set((w, s)) <= set(x) for x in tk['trio']) else 'HEAD-P2-TERMINAL'
