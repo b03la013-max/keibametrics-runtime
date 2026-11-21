@@ -89,3 +89,24 @@ def test_kintaro_sample_if_present():
     d = kintaro.parse(p)
     assert d and all('grades' in v for v in d.values())
     assert any(x['barrier_sec'] for v in d.values() for x in v['past'])
+
+
+def test_sbo_ban_table_and_blend():
+    import engine
+    html = ('<p>馬場: 2.7%</p><table id="table"><tr><th>馬番</th></tr>'
+            '<tr><td>1</td><td>A</td><td>t</td><td>715</td><td>j</td><td></td><td>92(5)</td><td>62(4)</td><td>81</td></tr>'
+            '<tr><td>2</td><td>B</td><td>t</td><td>705</td><td>j</td><td></td><td>-(0)</td><td>70(1)</td><td>75</td></tr></table>')
+    t, m = source.parse_sbo_ban(html)
+    assert m == 2.7 and t[1] == {'recent': 92.0, 'track': 62.0, 'avg': 81.0, 'n_recent': 5, 'n_track': 4}
+    assert t[2]['recent'] is None
+    idx, src = engine.base_indices({'idx_sbo': t[1], 'own_past': [{'idx': 80, 'moisture': 2.7}]}, 2.7)
+    assert src['recent'] == 'SBO+OWN' and idx['recent'] == round(0.3 * 92 + 0.7 * 80, 2)
+    idx, src = engine.base_indices({'idx_sbo': t[1]}, 2.7)
+    assert idx == {'recent': 92.0, 'track': 62.0, 'avg': 81.0} and set(src.values()) == {'SBO'}
+
+
+def test_cci_band():
+    assert source.cci_band('上位争い', '本来の姿に戻って') == 'VERY_STRONG'
+    assert source.cci_band('ここも様子見', '追走いっぱい') == 'CAUTION'
+    assert source.cci_band('障害次第') == 'NEUTRAL'          # conditional is not weak (v2.3 第63条)
+    assert source.cci_band(None) is None

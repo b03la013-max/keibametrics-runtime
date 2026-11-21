@@ -85,6 +85,16 @@ def predict(reader, q, key, out, hist):
     hdr = RK.parse_header(html)
     moisture = source.moisture_from_header(html)
     feeds = {k: source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], k) for k in ('kintaro', 'sbo', 'keibabook')}
+    sbo_meta = None
+    try:                                                  # 水分ボンバー: 3 indices + 当日馬場水分 for every race
+        import sbo as SBOMOD
+        sb = source.sbo_race(SBOMOD.Client(out.parent / 'sbo_state.json'), q['day'], r['no'])
+        feeds['sbo'] = {str(r['no']): {'table': sb['table']}}
+        sbo_meta = {'sha256': sb['sha256'], 'horses': len(sb['table']), 'moisture': sb['moisture']}
+        if moisture is None:
+            moisture = sb['moisture']
+    except Exception as e:                                # SBO hold / layout change -> own index only
+        log(out, 'SBO_FAIL', key, f'{type(e).__name__}:{str(e)[:80]}')
     if not feeds['kintaro'].get(str(r['no'])):
         cache = Path(os.environ.get('KM_BAN_CACHE', out.parent / '.cache'))
         links = source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], 'kintaro_links')
@@ -107,9 +117,14 @@ def predict(reader, q, key, out, hist):
     text, total = render.render(label, ev, tk, paper=False)
     frozen = now_jst().isoformat()
     sha = hashlib.sha256(json.dumps([tk['trio'], tk['exact']]).encode()).hexdigest()
-    rec = {'race': r, 'header': hdr, 'moisture': moisture, 'feeds_present': feeds_present, 'frozen_at': frozen,
+    rec = {'race': r, 'header': hdr, 'moisture': moisture, 'sbo': sbo_meta, 'feeds_present': feeds_present, 'frozen_at': frozen,
            'ticket_sha256': sha, 'evaluation': ev, 'tickets': tk, 'text': text}
-    dump(out / f'R{key}.json', rec)
+    # full ledger (SBO / キンタロー derived numbers) stays private on the Mac; the public file keeps composites only
+    cache = Path(os.environ.get('KM_BAN_CACHE', out.parent / '.cache'))
+    dump(cache / q['day'] / f'R{key}.full.json', rec)
+    PRIVATE = ('idx', 'idx_src', 'bsi', 'isv', 'barrier_mean_sec')
+    pub = dict(rec, evaluation=dict(ev, rows=[{k: v for k, v in x.items() if k not in PRIVATE} for x in ev['rows']]))
+    dump(out / f'R{key}.json', pub)
     (out / f'R{key}.md').write_text(text + '\n')
     r.update(state='PREDICTION_COMPLETE', frozen_at=frozen, ticket_sha256=sha, points=total,
              formality=tk['formality'], moisture=moisture)

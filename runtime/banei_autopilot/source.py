@@ -138,6 +138,65 @@ def moisture_from_header(html):
     return float(m[1]) if m else None
 
 
+# ------------------------------------------------------------------ 水分ボンバー (SBO) 帯広 = venue code 3
+SBO_CODE = 3
+
+
+def parse_sbo_ban(html):
+    """帯広 table.html: 馬番, 馬名, 調教師, 負担重量, 騎手, 馬体重, 近走指数(n), 馬場指数(n), 平均指数.
+    Returns ({no: {'recent','track','avg','n_recent','n_track'}}, moisture %)."""
+    def num(cell):
+        m = re.match(r'\s*(\d+(?:\.\d+)?)\s*(?:\((\d+)\))?', cell)
+        if not m:
+            return None, 0
+        n = int(m[2]) if m[2] is not None else 1
+        return (float(m[1]) if n > 0 else None), n
+    mo = re.search(r'馬場\s*[:：]\s*(\d\.\d)\s*%', RK.nfkc(re.sub(r'<[^>]+>', ' ', html)))
+    t = re.search(r'<table id="table">(.*?)</table>', html, re.S)
+    out = {}
+    for tr in re.findall(r'<tr>(.*?)</tr>', t[1] if t else '', re.S):
+        tds = [RK.nfkc(re.sub(r'<[^>]+>', ' ', td)).strip() for td in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S)]
+        if len(tds) < 9 or not tds[0].isdigit():
+            continue
+        rec, n1 = num(tds[6])
+        trk, n2 = num(tds[7])
+        avg, _ = num(tds[8])
+        out[int(tds[0])] = {'recent': rec, 'track': trk, 'avg': avg, 'n_recent': n1, 'n_track': n2}
+    return out, (float(mo[1]) if mo else None)
+
+
+def sbo_race(client, day, race_no):
+    """Fetch via the LOCAL SBO client (robots, >=10 s spacing, 30 min hold on 403/429/503).
+    Raw page / SBO numbers stay out of the public repo: only SHA-256 + derived values are written."""
+    import hashlib
+    path = f"/{day.replace('-', '')}/{SBO_CODE}/{race_no}/table.html"
+    html = client.get(path)
+    table, moist = parse_sbo_ban(html)
+    return {'path': path, 'sha256': hashlib.sha256(html.encode()).hexdigest(), 'table': table, 'moisture': moist}
+
+
+# ------------------------------------------------------------------ 競馬ブック comments -> CCI-B band
+CCI_STRONG = ('好勝負', 'チャンス', '力上位', '上位争い', '本来の姿', '一変', '巻き返し', '勝ち負け', '好調', 'デキはいい')
+CCI_COND = ('展開', '障害次第', 'ひと腰なら', '流れに乗れば', '軽馬場なら', '修正でき', 'すんなり')
+CCI_CAUTION = ('様子見', '追走いっぱい', '決め手欠く', '強気には', '厳しい', '手を出せない', 'どうか')
+
+
+def cci_band(*texts):
+    """攻略条項 4-12/4-13 + v2.3 第63条: meaning bands, never a single weak word alone."""
+    t = ' '.join(x for x in texts if x)
+    if not t:
+        return None
+    s = sum(k in t for k in CCI_STRONG)
+    c = sum(k in t for k in CCI_CAUTION)
+    if s >= 2 and c == 0:
+        return 'VERY_STRONG'
+    if s > c:
+        return 'STRONG'
+    if c >= 2 and s == 0:
+        return 'CAUTION'
+    return 'NEUTRAL'
+
+
 # ------------------------------------------------------------------ NAR ledger + feeds
 def nar_history(nar_dir):
     """{horse_name: [ {date, idx, moisture}, ... newest first]} from the Owner's NAR extract (optional)."""
@@ -195,8 +254,11 @@ def build_horses(card, moisture, race_date, hist, feeds, race_no):
         seen = {z['date'] for z in nar}
         own = sorted(nar + [z for z in own if z['date'] not in seen], key=lambda z: z['date'], reverse=True)
         k = kin.get(str(r['no']), {})
-        out.append({**r, 'own_past': own, 'sbo_past': sbo.get(str(r['no']), []),
+        kbh = kb.get(str(r['no']), {})
+        sb = (sbo.get('table') or {}).get(r['no']) or (sbo.get('table') or {}).get(str(r['no']))
+        out.append({**r, 'own_past': own, 'idx_sbo': sb,
                     'kintaro_past': k.get('past', []), 'front_ok': k.get('front_ok'),
-                    'barrier_stable': k.get('barrier_stable'), 'cci': kb.get(str(r['no']), {}).get('cci'),
+                    'barrier_stable': k.get('barrier_stable'),
+                    'cci': kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point')),
                     'body_stable': r['body_delta'] is not None and abs(r['body_delta']) < 16})
     return out

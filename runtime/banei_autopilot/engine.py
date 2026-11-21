@@ -55,6 +55,15 @@ def base_indices(h, moisture):
         for k, v in (('recent', rec), ('track', trk), ('avg', avg)):
             if v is not None and k not in out:
                 out[k] = (round(v, 2), src)
+    sbo = h.get('idx_sbo') or {}
+    for k in BSI_W:                                 # Owner: 水分ボンバー first, blended at SBO_SHARE with own
+        sv = _f(sbo.get(k))
+        if sv is None:
+            continue
+        if k in out and out[k][1] in ('OWN',):
+            out[k] = (round(SBO_SHARE * sv + (1 - SBO_SHARE) * out[k][0], 2), 'SBO+OWN')
+        elif k not in out:
+            out[k] = (round(sv, 2), 'SBO')
     for k, v in (pre or {}).items():
         if k in BSI_W and k not in out and v is not None and v == v:
             out[k] = (round(float(v), 2), 'OWN-NAR')
