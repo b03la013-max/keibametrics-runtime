@@ -730,6 +730,7 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
         st = ec.get('status') or {}
         lines += ['', '<sub>外部情報の接続：' + '／'.join([
             f"水分ボンバー {st.get('sbo_horses', 0)}頭", f"競馬ブック {st.get('kb_horses', 0)}頭",
+            f"自前スピード指数 {st.get('spd_horses', 0)}頭", f"29指数の空き部品へ入力 {st.get('full29_slots', 0)}件",
             ('NAR公式＋楽天結果 ' + '〜'.join(st.get('tables_period') or []) if st.get('tables') else 'NAR表 未準備'),
             '接続前の上位3頭 ' + '・'.join((sm.get('ranking_base') or [])[:3])
             + ('（入れ替わりあり）' if ec.get('changed_top3') else '（同じ）')]) + '</sub>']
@@ -951,7 +952,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
     try:   # NAR / backfill tables for the formal EXT connection, once per race day (private cache, ~1 min)
         from runtime.local_autopilot import ext_connect
         if FORMAL and ext_connect.enabled(day):
-            ext_connect.ensure(ROOT, day)
+            ext_connect.ensure(ROOT, day, refit=False)
     except Exception as exc:
         log('EXT_TABLES_FAIL', day, f'{type(exc).__name__}:{str(exc)[:160]}')
     try:

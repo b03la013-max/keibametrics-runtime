@@ -44,6 +44,8 @@ def build(race, runners, html_sha, fetched_at):
             'odds': r.get('win_odds'), 'popularity': r.get('popularity'),
             'race_card_fetched_at': fetched_at, 'race_card_source_id': 'RAKUTEN-' + race['rid'],
             'race_card_snapshot_sha256': html_sha}
+        if r.get('external_evidence'):    # Owner 2026-11-21: measured NAR / 競馬ブック evidence for neutral slots
+            raw[rid]['external_evidence'] = r['external_evidence']
     src = {'normalized_evidence': {'track_condition': {'value': race.get('going') or ''}},
            'source_freeze_at': fetched_at, 'source_snapshot_sha256': html_sha}
     req = {'race': {'venue_id': race['venue_id'], 'race_date': race['race_date'], 'distance': race.get('distance') or 0,

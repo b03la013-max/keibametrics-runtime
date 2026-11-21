@@ -166,6 +166,12 @@ jobs:
             # Historical result backfill (Owner approval 2026-11-19; learning data, not Forward OOS): only when no
             # race work is due within 12 min and at night; same Rakuten client / 61 s spacing as the race worker.
             BF=0
+            # Weekly re-estimation of the EXT weights on NAR (adopted only if the hold-out weeks improve; Owner
+            # 2026-11-21「常に改善させなさい」). Night only, no race work due; checks its own 7-day interval.
+            if [ "$PENDING" = 0 ] && [ -z "$RACE_DATE" ] && { [ "$HM" -ge 2200 ] || [ "$HM" -lt 600 ]; }; then
+              T2=$(python -c "import datetime as d; print((d.datetime.now(d.timezone(d.timedelta(hours=9))) + d.timedelta(days=1)).date())")
+              python -m runtime.local_autopilot.ext_connect --refit --day "$T2" || echo "ext refit exit $?"
+            fi
             if [ "$PENDING" = 0 ] && [ -z "$RACE_DATE" ]; then
               if [ "$RUNNER_CHOICE" = "mac" ] && [ -d "$HOME/Downloads" ]; then export KM_BACKFILL_PROBE_DIR="$HOME/Downloads/km_probe"; fi
               if python -m runtime.local_autopilot.backfill --budget 420 | tee /dev/stderr | grep -q '^BACKFILL '; then BF=1; fi

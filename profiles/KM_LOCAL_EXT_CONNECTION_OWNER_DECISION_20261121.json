@@ -5,8 +5,41 @@
  "context": "Claude reported at 12:58 that (a) 水分ボンバー and 競馬ブック fed only the PAPER engine (corrected 13:1x: an earlier reply wrongly said the formal indices), (b) NAR official CSVs and the Rakuten backfill fed statistics tables only, (c) Drive-reading findings were evidence/shadow only.",
  "implementation": "runtime/local_autopilot/ext_connect.py (KM-LOCAL-EXT-CONNECTION-v1.0-20261121), hooked in formal_rakuten between the Full29 numerical ranking and Static",
  "effective_from": "2026-11-22 (race day, morning edition)",
- "unchanged": ["Production 29-index registry and values", "KRS Engine / parameter_map", "MEC R3", "60-ticket cap", "purchase policy (recommendation only, no purchase)", "三布告 v1.1"],
+ "unchanged": [
+  "Production 29-index registry and values",
+  "KRS Engine / parameter_map",
+  "MEC R3",
+  "60-ticket cap",
+  "purchase policy (recommendation only, no purchase)",
+  "三布告 v1.1"
+ ],
  "changed": "order of runners handed to Static (W 3 / P2 6 / P3 9), hence MEC input roles and the cap order",
  "monitoring": "profiles/KM_LOCAL_FORWARD_OOS_PREREG_20261121_R11.json (C26, connected vs base ranking on the same races)",
- "rollback": "set KM_EXT_CONNECTION=0 in the autopilot workflow env (base ranking, same day) or revert the commit"
+ "rollback": "set KM_EXT_CONNECTION=0 in the autopilot workflow env (base ranking, same day) or revert the commit",
+ "second_order": {
+  "at": "2026-11-21T13:32:00+09:00",
+  "owner_words": "１２３全て始めなさい／指数に接続できていないのは接続させなさい。自前で計算しているのに記録だけのものも指数に接続させなさい／むしろ全てを指数に接続させ常に改善させなさい",
+  "implementation": "EXT v2.0: ext_model.py + ext_connect.py; local_nar_evidence_candidate external_evidence (neutral components only, plus DCR.training_comment_trial coverage); weekly hold-out-gated beta refit",
+  "changed_now": [
+   "Full29 component values for slots that were canonical-neutral (registry / mapping / weights unchanged)",
+   "KRS input (follows Full29)",
+   "formal ranking (EXT layer)"
+  ],
+  "still_unchanged": [
+   "Production evidence registry and mapping files",
+   "KRS Engine / parameter_map",
+   "MEC R3",
+   "60-ticket cap",
+   "purchase policy",
+   "三布告 v1.1"
+  ],
+  "not_connectable": {
+   "競馬ブック パドック": "published only just before the post; no pre-cutoff capture",
+   "競馬ブック ポイント": "not published in a readable form so far",
+   "競馬ブック 結果・対戦・当該・血統表": "same past races as the Rakuten card / NAR CSV, which are connected",
+   "NAR 馬主・生産牧場": "not on the race card at prediction time",
+   "pop_structures (1番人気頭の三連単2点)": "a ticket structure, not a horse index",
+   "Drive past-race ledger": "past KeibaMetrics predictions (system review), not horse information"
+  }
+ }
 }

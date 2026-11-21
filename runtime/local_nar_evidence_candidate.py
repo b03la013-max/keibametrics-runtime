@@ -377,6 +377,9 @@ def _same_venue_name(historical: str, current: str) -> bool:
     return c and c in h
 
 
+EXTERNAL_OVERRIDE = {"DCR.training_comment_trial"}
+
+
 def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dict[str, Any],
                        reg: Dict[str, Any], field_size: int) -> Dict[str, Any]:
     race = request.get("race") or {}
@@ -401,9 +404,20 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     features: Dict[str, Any] = {}
     missing_components: List[str] = []
 
+    external = raw.get("external_evidence") or {}
+
     def put(index: str, comp: str, score: float | None, fact: str, *, coverage=1.0, raw_metric=None,
             extra_refs: List[str] | None = None, force_missing=False):
         rule = _candidate_rule(reg, index, comp)
+        ext = external.get(f"{index}.{comp}")
+        # Owner 2026-11-21「全てを指数に接続」: a component that is canonical-neutral for lack of a source takes the
+        # measured external evidence (NAR tables / 競馬ブック bands) attached by the provider; DCR's coverage
+        # slot for training/comment/trial is also set when that source is present. Observed values are kept.
+        if ext and (force_missing or score is None or f"{index}.{comp}" in EXTERNAL_OVERRIDE):
+            score, coverage, force_missing = float(ext["score"]), float(ext.get("coverage", 1.0)), False
+            fact = f"{fact} | EXTERNAL: {ext.get('fact')}"
+            raw_metric = {"external_ref": ext.get("ref"), "previous": raw_metric}
+            extra_refs = (extra_refs or []) + [ext.get("ref")]
         miss = force_missing or score is None
         if miss:
             missing_components.append(f"{index}.{comp}")
@@ -785,6 +799,17 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
                 if key in c["candidate_missing_components"]:
                     c["candidate_missing_components"].remove(key)
                     c["candidate_missing_count"] -= 1
+
+    for c in compiled:   # external field-relative speed when no comparable official time exists on the card
+        feat = c["evidence_features"]["class_relative_time"]
+        ext = (c["raw_candidate_evidence"].get("external_evidence") or {}).get("NCI.class_relative_time")
+        if feat.get("missing") and ext:
+            feat.update(score=round(_clamp(float(ext["score"])), 6), missing=False, coverage=1.0,
+                        source_fact=f"EXTERNAL: {ext.get('fact')}", raw_metric={"external_ref": ext.get("ref")})
+            key = "NCI.class_relative_time"
+            if key in c["candidate_missing_components"]:
+                c["candidate_missing_components"].remove(key)
+                c["candidate_missing_count"] -= 1
 
     for c in compiled:
         c["candidate_feature_coverage_ratio"] = round(

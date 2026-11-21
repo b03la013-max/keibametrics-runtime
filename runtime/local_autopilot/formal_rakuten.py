@@ -336,6 +336,22 @@ def run_formal(r, out_dir, deadline):
              universe_sha256=art['official_runner_universe_sha256'])
         guard('NUMERICAL_MATERIALIZATION')
         head = art['rakuten_card_header']
+        # Owner 2026-11-21 13:09 / 13:32「全てを指数に接続し常に改善」: measured NAR / 競馬ブック / 水分ボンバー values,
+        # attached to the card rows BEFORE Full29 (neutral slots get evidence) and kept for the ranking layer.
+        from runtime.local_autopilot import ext_connect
+        ext_pre, ext_pre_error = None, None
+        if ext_connect.enabled(r['race_date']):
+            try:
+                def _sbo_fetch():
+                    from runtime.local_autopilot import sbo
+                    snap = sbo.snapshot(sbo.Client(Path(out_dir).parent / 'sbo_state.json'), r['race_date'], r['venue_id'], r['race_no'])
+                    return snap, _now().astimezone(JST).isoformat()
+                ext_pre = ext_connect.prepare(r, head, active, out_dir, deadline, _sbo_fetch, _now())
+            except Exception as exc:
+                ext_pre_error = f'PREPARE:{type(exc).__name__}:{str(exc)[:200]}'
+                for x in active:
+                    x.pop('external_evidence', None)
+        guard('NUMERICAL_MATERIALIZATION')
         try:
             sh = shadow29.run_production({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
                                           'race_date': r['race_date'], 'distance': head.get('distance'),
@@ -364,27 +380,20 @@ def run_formal(r, out_dir, deadline):
         if num_pred:
             arts['numerical_prediction'] = num_pred
         num_rank_base = num_rank
-        from runtime.local_autopilot import ext_connect
-        if num_pred and ext_connect.enabled(r['race_date']):
-            # Owner 2026-11-21 13:09「水分ボンバー・NAR・ドライブ精読を接続しなさい」: external information re-orders the
-            # numerical ranking before Static (Production 29 registry / KRS / MEC / cap / purchase policy unchanged).
+        if num_pred and ext_pre is not None:
             try:
-                def _sbo_fetch():
-                    from runtime.local_autopilot import sbo
-                    snap = sbo.snapshot(sbo.Client(Path(out_dir).parent / 'sbo_state.json'), r['race_date'], r['venue_id'], r['race_no'])
-                    return snap, _now().astimezone(JST).isoformat()
-                guard('STATIC_FREEZE')
-                conn = ext_connect.connect(r, head, active, num_pred, out_dir, deadline, _sbo_fetch)
+                conn = ext_connect.connect(ext_pre, num_pred)
                 arts['ext_connection'] = conn
                 num_rank = conn['ranking']
                 mark('EXT_CONNECTION', profile=conn['profile'], sbo=conn['sbo'].get('status'),
                      keibabook=conn['keibabook'].get('status'), nar_tables=conn['status']['tables'],
-                     changed_top3=conn['changed_top3'], ranking_base=conn['ranking_base'], ranking=conn['ranking'])
-            except FormalStop:
-                raise
+                     full29_slots=conn['status']['full29_slots'], changed_top3=conn['changed_top3'],
+                     ranking_base=conn['ranking_base'], ranking=conn['ranking'])
             except Exception as exc:   # the connection must never block the formal prediction
                 arts['ext_connection'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
                 mark('EXT_CONNECTION', status='ERROR_BASE_RANKING_USED')
+        elif ext_pre_error:
+            arts['ext_connection'] = {'status': 'ERROR', 'error': ext_pre_error}
         req, ledger = build_static(race, src, active, numerical, policy, _now(), ranked_override=num_rank, consumer=consumer)
         arts['static_ledger'] = ledger
         mark('STATIC_FREEZE', ledger_sha256=ledger['sha256'], ranking=req['static_prediction']['ranking'])
@@ -518,6 +527,17 @@ def run_formal(r, out_dir, deadline):
                        krs_input_mode=kin['keibametrics_input_authority']['input_mode'],
                        learning_state_bindings=[b['state_id'] for b in bindings])
         stages['SIGNED_FINAL'] = _now().isoformat()
+        if ext_pre is not None:   # C26 comparison base: the same card WITHOUT any external evidence (record only)
+            try:
+                plain = [{k: v for k, v in x.items() if k != 'external_evidence'} for x in active]
+                sh0 = shadow29.run_production({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
+                                               'race_date': r['race_date'], 'distance': head.get('distance'),
+                                               'surface': head.get('surface'), 'going': head.get('going'),
+                                               'race_name': head.get('race_name'), 'post_current': r['post_current'],
+                                               'rid': r['rid']}, plain, html, snap['fetched_at'])
+                summary['ranking_no_external'] = numerical_ranking(sh0)[0]
+            except Exception as exc:
+                summary['ranking_no_external_error'] = f'{type(exc).__name__}:{str(exc)[:160]}'
     except FormalStop as e:
         summary.update(status='HOLD', first_failed_stage=e.stage, error=str(e.detail)[:400])
     except Exception as e:  # never break the autopilot

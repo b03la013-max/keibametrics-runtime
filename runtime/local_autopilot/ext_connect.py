@@ -1,240 +1,110 @@
-"""External-information connection layer for the LOCAL formal ranking (Owner order 2026-11-21 13:09 JST
-「水分ボンバーオンラインもNARの資料もGoogleドライブの精読も接続しなさい」).
+"""External-information connection for the LOCAL formal prediction (Owner orders 2026-11-21 13:09
+「水分ボンバーオンラインもNARの資料もGoogleドライブの精読も接続しなさい」 and 13:32「１２３全て始めなさい／
+…全てを指数に接続させ常に改善させなさい」).
 
-Where it acts: formal_rakuten, between the Production Full29 numerical ranking (local_krs_bridge_candidate,
-`overall` = mean of the W / P2 / P3 role scores) and the Static freeze. The Production 29-index registry, the
-KRS Engine, parameter_map, MEC, the 60-ticket cap and the purchase policy are NOT changed. Only the order of the
-runners handed to Static (roles 3/6/9, MEC input roles, cap order) changes:
-
-    overall' = (1 - EXT_SHARE) * overall + EXT_SHARE * EXT,      EXT_SHARE = 0.30 (same share as VMI-L, 11/15)
-    EXT      = 52 + sum_k  W[k] * (score_k - 52)                  (fixed weights, sum 1; a missing source = 52)
-
-Components (0-100, 52 neutral; fixed priors, never fitted to the race being predicted):
-  VMI   水分ボンバー: 0.40 近走 + 0.20 距離 + 0.15 馬場 + 0.25 平均 (available columns renormalised),
-        in-race deviation 52 + 2 x (value - race mean)
-  CCI / TRI / TMI / KBA / PACE   競馬ブック bands (same mapping as the PAPER engine)
-  BVI   NAR sire (0.6) + damsire (0.4)    \
-  JKY   NAR jockey x venue                 |  A/E of top-3 against the popularity x field-size expectation of the
-  TRN   NAR trainer x venue                |  same venue, shrunk toward 1 with M pseudo-starts, from every NAR
-  FRM   NAR venue x distance x frame band  |  official start (2023-01 ..) + the Rakuten result backfill strictly
-  HRS   NAR the horse's own record         |  BEFORE the race day. score = 52 + 20 log2(A/E), clipped 30..75
-  PAT   Drive-reading patterns (mean)     /   labels below; their strength is measured on NAR, not taken
-        MOVE  出戻り/転入/同場 x 前走着順帯   (ゆっくり解説「見逃してるぜ？その穴馬」, T15)    from the documents
-        DIRECT 同場同距離の勝ち歴 x 前走着順帯 (浦和 v1.7 / 佐賀 v1.2 W1R, T12)
-        LEAD  前走逃げ・先行型               (川崎・高知 YouTube, T8)
-        GOROT 馬場 x 距離ローテ x 前走位置     (地方競馬向け・複勝軸選定と穴馬激走パターン)
-        LAYOFF 長期休養明け / AGED 高齢×中5日以内 (浦和 v1.6 第26条)
-Every value used is recorded in the formal artifact (ext_connection) together with the base ranking, so the
-connected ranking is compared with the unconnected one on the same races (prereg C26).
-Raw 水分ボンバー numbers and NAR tables stay in the private cache on the runner (not in Git).
+Two outlets, both from the formal race card at SOURCE time, before cutoff:
+ 1. Full29: measured NAR / 競馬ブック evidence fills the components that were canonical-neutral for lack of a
+    source (ext_model.full29_evidence -> local_nar_evidence_candidate external_evidence): BVIg-L (7 parts),
+    JTI-L stable_combo, CSI-L stable/comment/training, BWI-L weight-change/age/season, DCR training coverage,
+    NCI class_relative_time (own NAR speed figure). The 29 values, the numerical ranking and the KRS input move.
+ 2. Ranking layer: overall' = (1 - EXT_SHARE) overall + EXT_SHARE EXT,
+      EXT = 52 + sum_fixed W_k (s_k - 52) + sum_measured beta_k (s_k - 52)
+    fixed (no history to measure): VMI 水分ボンバー 4 columns, TMI / KBA / PACE 競馬ブック; measured: SPD (own NAR speed
+    figure, half weight when 水分ボンバー is present), JKY, FRM, HRS, PAT (every pattern label: Drive reading, class move,
+    day trend, weather, 危険な1番人気, 亀谷, YouTube sire rules ...). beta is refit weekly on NAR (ext_model.fit_weights)
+    and adopted only when the hold-out weeks improve ("常に改善").
+Production 29 registry/mapping, KRS Engine, MEC, the 60-ticket cap and the purchase policy are unchanged.
+Raw 水分ボンバー numbers, NAR tables and histories stay in the private cache on the runner (never in Git).
 """
 from __future__ import annotations
 
 import json
-import math
 import os
-import re
 import time
-import unicodedata
-from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-PROFILE = 'KM-LOCAL-EXT-CONNECTION-v1.0-20261121'
-EXT_FROM = '2026-11-22'          # first race day (morning edition) on which the connection is applied
+from runtime.local_autopilot import ext_model as em
+
+PROFILE = 'KM-LOCAL-EXT-CONNECTION-v2.0-20261121'
+EXT_FROM = '2026-11-22'
 EXT_SHARE = 0.30
 NEUTRAL = 52.0
-W = {'VMI': 0.25,
-     'CCI': 0.06, 'TRI': 0.06, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.02,
-     'BVI': 0.10, 'JKY': 0.08, 'TRN': 0.07, 'FRM': 0.04, 'HRS': 0.08,
-     'PAT': 0.12}
+FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
+MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD']
+# first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
+# 0.44788); refit weekly by ensure(refit=True)
+DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8}
+SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
+FIT_NAMES = list(MEASURED)
+REFIT_DAYS = 7
 SBO_COLS = {'recent': 0.40, 'dist': 0.20, 'going': 0.15, 'avg': 0.25}
-BAND_SCORE = {'VERY_STRONG': 66.0, 'STRONG': 59.0, 'NEUTRAL': 52.0, 'CAUTION': 45.0}
 PACE_TARGET = {'逃げ': 82.0, '好位': 66.0, '中位': 52.0, '後方': 38.0}
-MIN_N, M = 30, 30                 # group cells
-H_MIN, H_M = 3, 8                 # the horse's own record
-TABLE_VERSION = 1
-CIRCUIT = {'OHI': 'NANKAN', 'FNB': 'NANKAN', 'KAW': 'NANKAN', 'URW': 'NANKAN', 'MIZ': 'IWATE', 'MOR': 'IWATE',
-           'SON': 'HYOGO', 'HMJ': 'HYOGO'}
-VENUE_NAME = {'盛岡': 'MOR', '水沢': 'MIZ', '浦和': 'URW', '船橋': 'FNB', '大井': 'OHI', '川崎': 'KAW', '金沢': 'KNZ',
-              '笠松': 'KSM', '名古屋': 'NGY', '園田': 'SON', '姫路': 'HMJ', '高知': 'KOC', '佐賀': 'SAG', '門別': 'MON'}
+W = dict(FIXED_W, **{k: DEFAULT_BETA[k] for k in MEASURED})    # kept for reporting
 
 
 def private_dir():
     return Path(os.environ.get('KM_PRIVATE_CACHE') or (Path.home() / '.km_private_cache'))
 
 
-def key(s):
-    s = unicodedata.normalize('NFKC', str(s or '')).strip()
-    return re.sub(r'[\s☆▲△◇★▽()（）]', '', s) or None
+def enabled(race_date):
+    return str(race_date) >= EXT_FROM and os.environ.get('KM_EXT_CONNECTION', '1') != '0'
 
 
-def circ(v):
-    return CIRCUIT.get(v, v)
+# ---------------------------------------------------------------- tables / weights (once per race day)
+def _paths(day):
+    d = private_dir() / 'ext'
+    return d / f'tables_v{em.TABLE_VERSION}_{day}.json', d / f'history_v{em.TABLE_VERSION}_{day}.json', d / 'weights.json'
 
 
-def going_class(g):
-    g = str(g or '')
-    return 'WET' if ('不' in g or '重' in g) and '稍' not in g else 'DAMP' if '稍' in g else 'DRY' if '良' in g else 'UNKNOWN'
-
-
-def dist_band(d):
-    d = int(d or 0)
-    return 'UNKNOWN' if not d else 'S' if d <= 1300 else 'M' if d <= 1700 else 'L'
-
-
-def field_band(n):
-    n = n or 0
-    return 'F<=8' if n <= 8 else 'F9-11' if n <= 11 else 'F12+'
-
-
-def frame_band(f):
-    return None if not f else 'IN' if f <= 2 else 'OUT' if f >= 7 else 'MID'
-
-
-def fin_band(f):
-    return None if not f else '1-3' if f <= 3 else '4-6' if f <= 6 else '7+'
-
-
-def score(ae):
-    return max(30.0, min(75.0, NEUTRAL + 20.0 * math.log2(max(ae, 1e-6))))
-
-
-# ---------------------------------------------------------------- pattern labels (Drive reading)
-def labels(cur, hist):
-    """cur: {'date','venue','distance','going','age'}; hist: the horse's earlier starts, oldest first,
-    each {'date','venue','distance','finish','early'} (early = first-corner ratio 0 front .. 1 rear)."""
-    if not hist:
-        return [('DEBUT', 'Y')]
-    last = hist[-1]
-    out = []
-    lf = fin_band(last.get('finish')) or 'NA'
-    if circ(last['venue']) == circ(cur['venue']):
-        mv = 'SAME'
-    elif any(circ(p['venue']) == circ(cur['venue']) for p in hist[:-1]):
-        mv = 'RETURN'
-    else:
-        mv = 'NEW_MOVE'
-    out.append(('MOVE', f"{mv}|{'7+' if lf == '7+' else 'ELSE'}"))
-    dw = any(p['venue'] == cur['venue'] and p.get('distance') == cur.get('distance') and p.get('finish') == 1 for p in hist)
-    out.append(('DIRECT', f"{'Y' if dw else 'N'}|{lf}"))
-    ear = [p['early'] for p in hist[-5:] if p.get('early') is not None]
-    if last.get('early') is not None and last['early'] <= 0.0 and len(ear) >= 2 and sum(ear) / len(ear) <= 0.25:
-        out.append(('LEAD', 'REPEAT'))
-    if cur.get('distance') and last.get('distance'):
-        ch = 'SHORT' if cur['distance'] < last['distance'] else 'LONG' if cur['distance'] > last['distance'] else 'SAME'
-        pos = 'NA' if last.get('early') is None else 'FRONT' if last['early'] <= 0.33 else 'BACK'
-        out.append(('GOROT', f"{going_class(cur.get('going'))}|{ch}|{pos}"))
+def weights():
     try:
-        days = (date.fromisoformat(cur['date']) - date.fromisoformat(last['date'])).days
-    except (TypeError, ValueError):
-        days = None
-    if days is not None and days >= 180:
-        out.append(('LAYOFF', 'LONG'))
-    if days is not None and days <= 6 and (cur.get('age') or 0) >= 7:
-        out.append(('AGED', 'SHORT'))
-    return out
+        w = json.loads(_paths('x')[2].read_text())
+        return dict(DEFAULT_BETA, **w['current'])
+    except (OSError, ValueError, KeyError):
+        return dict(DEFAULT_BETA)
 
 
-# ---------------------------------------------------------------- training rows from NAR + backfill
-def _rows(races):
-    """One row per start (horse ran), with the pre-race pattern labels from the horse's earlier starts."""
+def ensure(root, day, refit=True):
+    """Build the NAR + backfill tables for `day` (data strictly before it) and, weekly, refit beta."""
     from runtime.local_autopilot import hist_stats as hs
-    hist = defaultdict(list)
-    out = []
-    for race in sorted(races.values(), key=lambda r: (r['date'], r['venue'], r['race_no'] or 0)):
-        field = race.get('field') or sum(1 for x in race['runners'] if x['status'] != 'SCRATCH')
-        cur = {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'), 'going': race.get('going')}
-        done = []
-        for x in race['runners']:
-            if x['status'] == 'SCRATCH' or not x.get('no'):
-                continue
-            hk = key(x.get('name')) or x.get('horse_key')
-            prev = hist.get(hk, [])
-            fc = race['first_corner'].get(x['no'])
-            early = (fc - 1) / max(1, field - 1) if fc else None
-            if x['status'] == 'RAN' and x.get('pop'):
-                out.append({'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
-                            'band': dist_band(race.get('distance')), 'going': going_class(race.get('going')),
-                            'fband': field_band(field), 'pop': x['pop'], 'top3': bool(x.get('finish') and x['finish'] <= 3),
-                            'sire': key(x.get('sire')), 'damsire': key(x.get('damsire')), 'jockey': key(x.get('jockey')),
-                            'trainer': key(x.get('trainer')), 'frame': frame_band(x.get('frame')), 'horse': hk,
-                            'labels': labels(dict(cur, age=x.get('age')), prev)})
-            done.append((hk, {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
-                              'finish': x.get('finish'), 'early': early}))
-        for hk, h in done:
-            hist[hk].append(h)
-    return out, hist
-
-
-def cell_keys(r):
-    v, b, g, d = r['venue'], r['band'], r['going'], r['distance']
-    ks = []
-    if r['sire']:
-        ks += [('S', r['sire'], v, b, g), ('S', r['sire'], v), ('S', r['sire'], b), ('S', r['sire'])]
-    if r['damsire']:
-        ks += [('D', r['damsire'], v), ('D', r['damsire'], b), ('D', r['damsire'])]
-    if r['jockey']:
-        ks += [('J', r['jockey'], v), ('J', r['jockey'])]
-    if r['trainer']:
-        ks += [('T', r['trainer'], v), ('T', r['trainer'])]
-    if r['frame']:
-        ks += [('F', v, d, r['frame'], r['fband']), ('F', v, d, r['frame'])]
-    if r['horse']:
-        ks += [('H', r['horse'], v, d), ('H', r['horse'], v), ('H', r['horse'])]
-    for name, val in r['labels']:
-        ks += [('P', name, val, circ(v)), ('P', name, val)]
-    return ks
-
-
-def build_tables(races, before_day, with_history=False):
-    rows, hist = _rows({k: v for k, v in races.items() if v['date'] < before_day})
-    base = defaultdict(lambda: [0, 0])
-    for r in rows:
-        k = (r['venue'], min(r['pop'], 10), r['fband'])
-        base[k][0] += 1
-        base[k][1] += r['top3']
-    exp = {k: v[1] / v[0] for k, v in base.items() if v[0]}
-    cells = defaultdict(lambda: [0, 0, 0.0])
-    for r in rows:
-        e = exp.get((r['venue'], min(r['pop'], 10), r['fband']))
-        if e is None:
-            continue
-        for k in cell_keys(r):
-            c = cells[k]
-            c[0] += 1
-            c[1] += r['top3']
-            c[2] += e
-    out = {'version': TABLE_VERSION, 'before_day': before_day, 'starts': len(rows),
-            'period': [min((r['date'] for r in rows), default=None), max((r['date'] for r in rows), default=None)],
-            'cells': {json.dumps(k, ensure_ascii=False): [n, a, round(e, 4)] for k, (n, a, e) in cells.items()}}
-    if with_history:   # last 20 starts per horse are enough for every label
-        return out, {h: v[-20:] for h, v in hist.items()}
-    return out
-
-
-def ensure(root, day, budget_s=None):
-    """Build (once per race day) the NAR tables and horse histories from every source dated before `day`.
-    Returns the tables or None. Kept in the private cache, never in the data branch."""
-    p = private_dir() / 'ext' / f'tables_{day}.json'
-    h = private_dir() / 'ext' / f'history_{day}.json'
-    if p.exists() and h.exists():
-        return p
-    from runtime.local_autopilot import hist_stats as hs
-    t0 = time.time()
-    races, src = hs.load_sources(root, os.environ.get('KM_NAR_ROOT'))
-    if not races:
-        return None
-    t, hist = build_tables(races, day, with_history=True)
-    t['source'] = src
-    t['build_seconds'] = round(time.time() - t0, 1)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    h.write_text(json.dumps(hist, ensure_ascii=False, separators=(',', ':')))
-    p.write_text(json.dumps(t, ensure_ascii=False, separators=(',', ':')))
-    for old in sorted(p.parent.glob('*_20*.json')):   # keep the last 3 days
-        if old.stem.split('_')[-1] < (date.fromisoformat(day) - timedelta(days=3)).isoformat():
-            old.unlink()
-    return p
+    tp, hp, wp = _paths(day)
+    if tp.exists() and hp.exists() and not refit:
+        return tp
+    races = None
+    if not (tp.exists() and hp.exists()):
+        t0 = time.time()
+        races, src = hs.load_sources(root, os.environ.get('KM_NAR_ROOT'))
+        if not races:
+            return None
+        t, hist = em.build(races, day)
+        t.update(source=src, build_seconds=round(time.time() - t0, 1))
+        tp.parent.mkdir(parents=True, exist_ok=True)
+        hp.write_text(json.dumps(hist, ensure_ascii=False, separators=(',', ':')))
+        tp.write_text(json.dumps(t, ensure_ascii=False, separators=(',', ':')))
+        for old in tp.parent.glob('*_20*.json'):          # keep the last 3 days
+            if old.stem.split('_')[-1] < (date.fromisoformat(day) - timedelta(days=3)).isoformat():
+                old.unlink()
+    if refit:
+        try:
+            wdoc = json.loads(wp.read_text())
+        except (OSError, ValueError):
+            wdoc = {'current': dict(DEFAULT_BETA), 'history': []}
+        last = (wdoc.get('history') or [{}])[-1].get('day') if wdoc.get('history') else None
+        if not last or (date.fromisoformat(day) - date.fromisoformat(last)).days >= REFIT_DAYS:
+            if races is None:
+                races, _ = hs.load_sources(root, os.environ.get('KM_NAR_ROOT'))
+            r = em.fit_weights(races, day, FIT_NAMES, dict(DEFAULT_BETA, **wdoc['current']))
+            r['day'] = day
+            wdoc['current'] = {k: round(v, 4) for k, v in r['weights'].items()}
+            wdoc['history'] = (wdoc.get('history') or [])[-50:] + [{k: v for k, v in r.items() if k != 'weights'}]
+            wp.parent.mkdir(parents=True, exist_ok=True)
+            wp.write_text(json.dumps(wdoc, ensure_ascii=False, indent=1))
+            try:   # public summary (weights and hold-out log-loss only) for the Owner / review
+                (Path(root) / 'ext_weights.json').write_text(json.dumps(wdoc, ensure_ascii=False, indent=1) + '\n')
+            except OSError:
+                pass
+    return tp
 
 
 _LOADED = {}
@@ -243,31 +113,19 @@ _LOADED = {}
 def load(day):
     if day in _LOADED:
         return _LOADED[day]
-    p = private_dir() / 'ext' / f'tables_{day}.json'
-    h = private_dir() / 'ext' / f'history_{day}.json'
-    if not (p.exists() and h.exists()):
+    tp, hp, _ = _paths(day)
+    if not (tp.exists() and hp.exists()):
         return None
-    t = json.loads(p.read_text())
+    t = json.loads(tp.read_text())
     cells = {tuple(json.loads(k)): v for k, v in t.pop('cells').items()}
+    t.pop('standards', None)
     _LOADED.clear()
-    _LOADED[day] = (t, cells, json.loads(h.read_text()))
+    _LOADED[day] = (t, cells, json.loads(hp.read_text()))
     return _LOADED[day]
-
-
-def ae_of(cells, keys, min_n=MIN_N, m=M):
-    """Most specific cell with >= min_n starts -> (score, key, n, A/E raw)."""
-    for k in keys:
-        c = cells.get(k)
-        if c and c[0] >= min_n and c[2] > 0:
-            pbar = c[2] / c[0]
-            ae = (c[1] + m * pbar) / (c[2] + m * pbar)
-            return score(ae), k, c[0], round(c[1] / c[2], 3)
-    return None, None, 0, None
 
 
 # ---------------------------------------------------------------- current race
 def card_history(r, race_day):
-    """The runner's Rakuten card starts (newest first on the card) -> oldest-first history entries."""
     out = []
     for s in r.get('starts') or []:
         try:
@@ -275,19 +133,28 @@ def card_history(r, race_day):
             dt = date(2000 + int(y), int(m_), int(d)).isoformat()
         except (KeyError, ValueError, AttributeError):
             continue
-        v = next((c for n, c in VENUE_NAME.items() if n in str(s.get('venue') or '')), None)
+        v = next((c for n, c in em.VENUE_NAME.items() if n in str(s.get('venue') or '')), None)
         if not v or dt >= race_day:
             continue
         pos = s.get('content_positions') or []
         fs = s.get('field_size')
         out.append({'date': dt, 'venue': v, 'distance': s.get('distance'), 'finish': s.get('finish'),
-                    'early': (pos[0] - 1) / (fs - 1) if pos and fs and fs > 1 else None})
+                    'early': (pos[0] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
+                    'late': (pos[-1] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
+                    'cls': em.class_code(s.get('race_name')), 'jockey': s.get('ride_jockey'),
+                    'field': fs, 'pos': pos[0] if pos else None, 'bw': s.get('ride_body_weight')})
     return sorted(out, key=lambda x: x['date'])
 
 
 def merged_history(nar_hist, card_hist):
-    seen = {(h['date'], h['venue']) for h in card_hist}
-    return sorted([h for h in nar_hist if (h['date'], h['venue']) not in seen] + card_hist, key=lambda x: x['date'])
+    by = {(h['date'], h['venue']): dict(h) for h in nar_hist}
+    for h in card_hist:
+        k = (h['date'], h['venue'])
+        if k in by:
+            by[k].update({a: b for a, b in h.items() if b is not None})
+        else:
+            by[k] = dict(h, fig=None, f3best=None)
+    return sorted(by.values(), key=lambda x: x['date'])
 
 
 def sbo_vmi(table, active):
@@ -305,73 +172,81 @@ def sbo_vmi(table, active):
     return {no: max(0.0, min(100.0, NEUTRAL + 2.0 * (v - mu))) for no, v in comp.items()}, comp
 
 
-def race_ext(race, runners, day, sbo_table=None, kb=None):
-    """Per-runner EXT components and EXT. `race`: venue_id, distance, going, race_date; `runners`: parsed card
-    rows (horse_no, name, sire, damsire, current_jockey, trainer, frame_no, age, starts)."""
+def day_bias(day_dir, venue_id, at):
+    try:
+        from runtime.local_autopilot import day_trend
+        t = day_trend.build(day_dir, venue_id, at)
+        if t.get('n', 0) >= 3 and t.get('winner_front_share') is not None:
+            s = t['winner_front_share']
+            return 'FRONT' if s >= 0.6 else 'BACK' if s <= 0.15 else 'NEUTRAL'
+    except Exception:
+        pass
+    return None
+
+
+def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=None, beta=None):
+    """race: venue_id, distance, going, race_name; runners: parsed card rows. -> (per runner, status)."""
     loaded = load(day)
     t, cells, hist = loaded if loaded else (None, {}, {})
+    beta = beta or weights()
     active = [x['horse_no'] for x in runners]
     vmi, _ = sbo_vmi(sbo_table, active)
     kb = kb or {}
     v, d = race['venue_id'], race.get('distance')
-    b, g = dist_band(d), going_class(race.get('going'))
+    from runtime.local_autopilot import hist_stats as hs
     field = len(runners)
-    out = {}
+    odds_rank = {x['horse_no']: i + 1 for i, x in enumerate(sorted((x for x in runners if x.get('win_odds')), key=lambda x: x['win_odds']))}
+    rows = {}
     for x in runners:
-        no = x['horse_no']
-        comp, src = {}, {}
-        if no in vmi:
-            comp['VMI'] = vmi[no]
+        hk = em.key(x.get('name'))
+        hh = merged_history(hist.get(hk) or [], card_history(x, day))
+        pop = x.get('popularity') or odds_rank.get(x['horse_no'])
+        cur = {'date': day, 'venue': v, 'distance': d, 'going': race.get('going'), 'age': x.get('age'),
+               'sex': (x.get('sex_age') or '')[:1] or None, 'pop': pop, 'frame_no': x.get('frame_no'),
+               'jockey': x.get('current_jockey'), 'cls': hs.class_code(race.get('race_name')), 'weather': weather,
+               'special': hs.special_flag(v, race.get('race_name')), 'daybias': daybias,
+               'sire': x.get('sire'), 'damsire': x.get('damsire')}
+        rows[x['horse_no']] = {'venue': v, 'band': em.dist_band(d), 'going': em.going_class(race.get('going')),
+                               'distance': d, 'fband': em.field_band(field), 'sire': em.key(x.get('sire')),
+                               'damsire': em.key(x.get('damsire')), 'jockey': em.key(x.get('current_jockey')),
+                               'trainer': em.key(x.get('trainer')), 'frame': em.frame_band(x.get('frame_no')), 'horse': hk,
+                               'sex': cur['sex'], 'age': x.get('age'), 'bwchg': em.chg_band(x.get('current_body_weight_change')),
+                               'season': em.season(day), 'spd': em.spd_of(hh), 'labels': em.labels(cur, hh)}
+    sp = [r['spd'] for r in rows.values() if r['spd'] is not None]
+    mu = sum(sp) / len(sp) if len(sp) >= 2 else None
+    out = {}
+    for no, r in rows.items():
+        r['spd_band'] = em.spd_band(None if mu is None or r['spd'] is None else r['spd'] - mu)
+        comp = em.components(cells, r) if cells else {}
         kbx = kb.get(no) or kb.get(str(no)) or {}
-        if kbx:
-            comp['CCI'] = BAND_SCORE.get(kbx.get('cci'), NEUTRAL)
-            comp['TRI'] = BAND_SCORE.get(kbx.get('tri'), NEUTRAL)
-            if kbx.get('tm') is not None:
-                comp['TMI'] = float(kbx['tm'])
-            ab = [y for y in (kbx.get('rt'), kbx.get('cpu')) if y is not None]
-            if ab:
-                comp['KBA'] = sum(ab) / len(ab)
-            if kbx.get('pace') in PACE_TARGET:
-                comp['PACE'] = PACE_TARGET[kbx['pace']]
-        if cells:
-            s_, d_ = key(x.get('sire')), key(x.get('damsire'))
-            ss = ae_of(cells, [('S', s_, v, b, g), ('S', s_, v), ('S', s_, b), ('S', s_)]) if s_ else (None,) * 4
-            ds = ae_of(cells, [('D', d_, v), ('D', d_, b), ('D', d_)]) if d_ else (None,) * 4
-            if ss[0] is not None or ds[0] is not None:
-                comp['BVI'] = (0.6 * (ss[0] if ss[0] is not None else NEUTRAL) + 0.4 * (ds[0] if ds[0] is not None else NEUTRAL))
-                src['BVI'] = {'sire': ss[1:], 'damsire': ds[1:]}
-            j = key(x.get('current_jockey'))
-            js = ae_of(cells, [('J', j, v), ('J', j)]) if j else (None,) * 4
-            if js[0] is not None:
-                comp['JKY'], src['JKY'] = js[0], js[1:]
-            tr = key(x.get('trainer'))
-            ts = ae_of(cells, [('T', tr, v), ('T', tr)]) if tr else (None,) * 4
-            if ts[0] is not None:
-                comp['TRN'], src['TRN'] = ts[0], ts[1:]
-            fb = frame_band(x.get('frame_no'))
-            fs = ae_of(cells, [('F', v, d, fb, field_band(field)), ('F', v, d, fb)]) if fb else (None,) * 4
-            if fs[0] is not None:
-                comp['FRM'], src['FRM'] = fs[0], fs[1:]
-            hk = key(x.get('name'))
-            hs_ = ae_of(cells, [('H', hk, v, d), ('H', hk, v), ('H', hk)], H_MIN, H_M) if hk else (None,) * 4
-            if hs_[0] is not None:
-                comp['HRS'], src['HRS'] = hs_[0], hs_[1:]
-            hh = merged_history(hist.get(hk) or [], card_history(x, day))
-            labs = labels({'date': day, 'venue': v, 'distance': d, 'going': race.get('going'), 'age': x.get('age')}, hh)
-            ps = [(lab, ae_of(cells, [('P', lab[0], lab[1], circ(v)), ('P', lab[0], lab[1])])) for lab in labs]
-            ps = [(lab, a) for lab, a in ps if a[0] is not None]
-            if ps:
-                comp['PAT'] = sum(a[0] for _, a in ps) / len(ps)
-                src['PAT'] = [{'label': f'{lab[0]}={lab[1]}', 'score': round(a[0], 1), 'n': a[2], 'ae': a[3]} for lab, a in ps]
-        ext = NEUTRAL + sum(W[k] * (comp[k] - NEUTRAL) for k in comp)
-        out[no] = {'EXT': round(ext, 2), 'components': {k: round(val, 1) for k, val in comp.items()}, 'cells': src}
+        fixed = {}
+        if no in vmi:
+            fixed['VMI'] = (vmi[no], '水分ボンバー')
+        if kbx.get('tm') is not None:
+            fixed['TMI'] = (float(kbx['tm']), '競馬ブック TM印')
+        ab = [y for y in (kbx.get('rt'), kbx.get('cpu')) if y is not None]
+        if ab:
+            fixed['KBA'] = (sum(ab) / len(ab), '競馬ブック 能力表')
+        if kbx.get('pace') in PACE_TARGET:
+            fixed['PACE'] = (PACE_TARGET[kbx['pace']], '競馬ブック 展開')
+        ext = NEUTRAL + sum(FIXED_W[k] * (s - NEUTRAL) for k, (s, _) in fixed.items()) \
+            + sum(beta.get(k, 0.0) * (SPD_WITH_SBO if k == 'SPD' and 'VMI' in fixed else 1.0) * (comp[k][0] - NEUTRAL)
+                  for k in MEASURED if k in comp)
+        evidence = em.full29_evidence(comp, kbx, comp['SPD'][0] if 'SPD' in comp and r['spd'] is not None else None)
+        out[no] = {'EXT': round(max(0.0, min(100.0, ext)), 2),
+                   'ranking_components': {k: round(s, 1) for k, (s, _) in fixed.items()}
+                   | {k: round(comp[k][0], 1) for k in MEASURED if k in comp},
+                   'labels': [f'{a}={b}' for a, b in r['labels']],
+                   'pattern_detail': comp.get('PAT', (None, []))[1],
+                   'full29_evidence': evidence}
     status = {'tables': bool(cells), 'tables_period': (t or {}).get('period'), 'tables_starts': (t or {}).get('starts'),
-              'sbo_horses': len(vmi), 'kb_horses': sum(1 for x in runners if kb.get(x['horse_no']) or kb.get(str(x['horse_no'])))}
+              'sbo_horses': len(vmi), 'kb_horses': sum(1 for x in runners if kb.get(x['horse_no']) or kb.get(str(x['horse_no']))),
+              'spd_horses': sum(1 for r in rows.values() if r['spd'] is not None), 'daybias': daybias, 'weather': weather,
+              'beta': beta, 'full29_slots': sum(len(o['full29_evidence']) for o in out.values())}
     return out, status
 
 
 def apply(ranking_scores, ext):
-    """ranking_scores: candidate runner_scores (runner_id, overall). Returns (new ranking, rows)."""
     rows = []
     for r in ranking_scores:
         no = int(r['runner_id'])
@@ -383,10 +258,6 @@ def apply(ranking_scores, ext):
 
 
 # ---------------------------------------------------------------- formal hook
-def enabled(race_date):
-    return str(race_date) >= EXT_FROM and os.environ.get('KM_EXT_CONNECTION', '1') != '0'
-
-
 def sbo_cache_path(race_date, venue_id, race_no):
     return private_dir() / 'sbo' / race_date / f'{venue_id}_{int(race_no):02d}.json'
 
@@ -442,21 +313,44 @@ def kb_for(day_dir, r, deadline):
     return kb, {'status': 'USED' if kb else 'NOT_PROVIDED', 'captured_at': doc.get('captured_at'), 'horses': len(kb)}
 
 
-def connect(r, head, active, num_pred, day_dir, deadline, sbo_fetch=None):
-    """-> connection record with the connected ranking. Never changes num_pred."""
+def weather_now(venue_id, at):
+    try:
+        from runtime.local_autopilot import weather
+        w = weather.observe(venue_id, at, Path(os.environ.get('RUNNER_TEMP') or '/tmp') / 'km_weather_cache')
+        p = (w.get('observation') or {}).get('precipitation_1h_mm')
+        return None if p is None else ('雨' if p >= 0.5 else '晴')
+    except Exception:
+        return None
+
+
+def prepare(r, head, active, day_dir, deadline, sbo_fetch=None, now=None):
+    """Before Full29: compute every external value and attach Full29 evidence to the card rows (in place)."""
     day = r['race_date']
+    now = now or datetime.now(deadline.tzinfo)
     sbo_t, sbo_m = sbo_for(r, deadline, sbo_fetch)
     kb, kb_m = kb_for(day_dir, r, deadline)
-    race = {'venue_id': r['venue_id'], 'distance': head.get('distance'), 'going': head.get('going'), 'race_date': day}
-    ext, st = race_ext(race, active, day, sbo_t, kb)
-    ranking, rows = apply(num_pred['runner_scores'], ext)
-    rec = {'profile': PROFILE, 'owner_order': '2026-11-21 13:09 JST 接続しなさい', 'ext_share': EXT_SHARE, 'weights': W,
-           'sbo_columns': SBO_COLS, 'status': st, 'sbo': sbo_m, 'keibabook': kb_m,
-           'ranking_base': list(num_pred['ranking']), 'ranking': ranking, 'rows': rows,
-           'runners': {str(k): v for k, v in ext.items()},
-           'changed_top3': list(num_pred['ranking'][:3]) != ranking[:3],
-           'changed_top6': sorted(num_pred['ranking'][:6]) != sorted(ranking[:6])}
-    return rec
+    db = day_bias(day_dir, r['venue_id'], min(now, deadline))
+    wx = weather_now(r['venue_id'], min(now, deadline))
+    race = {'venue_id': r['venue_id'], 'distance': head.get('distance'), 'going': head.get('going'),
+            'race_name': head.get('race_name')}
+    ext, st = race_ext(race, active, day, sbo_t, kb, db, wx)
+    for x in active:
+        ev = (ext.get(x['horse_no']) or {}).get('full29_evidence')
+        if ev:
+            x['external_evidence'] = ev
+    return {'ext': ext, 'status': st, 'sbo': sbo_m, 'keibabook': kb_m}
+
+
+def connect(pre, num_pred):
+    """-> connection record with the connected ranking. Never changes num_pred."""
+    ranking, rows = apply(num_pred['runner_scores'], pre['ext'])
+    return {'profile': PROFILE, 'owner_order': '2026-11-21 13:09 / 13:32 JST 全てを指数に接続し常に改善',
+            'ext_share': EXT_SHARE, 'fixed_weights': FIXED_W, 'beta': pre['status']['beta'], 'sbo_columns': SBO_COLS,
+            'status': pre['status'], 'sbo': pre['sbo'], 'keibabook': pre['keibabook'],
+            'ranking_base': list(num_pred['ranking']), 'ranking': ranking, 'rows': rows,
+            'runners': {str(k): v for k, v in pre['ext'].items()},
+            'changed_top3': list(num_pred['ranking'][:3]) != ranking[:3],
+            'changed_top6': sorted(num_pred['ranking'][:6]) != sorted(ranking[:6])}
 
 
 # ---------------------------------------------------------------- C26 comparison (connected vs base, same races)
@@ -480,7 +374,8 @@ def audit(root, days):
             if len(order) < 3:
                 continue
             rows.append({'day': day, 'race': k, 'venue': k.split('_')[0], 'order': order,
-                         'base': [str(x) for x in sm['ranking_base']], 'conn': [str(x) for x in sm['ranking']]})
+                         'base': [str(x) for x in (sm.get('ranking_no_external') or sm['ranking_base'])],
+                         'conn': [str(x) for x in sm['ranking']]})
 
     def m(rs, col):
         n = len(rs)
@@ -500,3 +395,25 @@ def audit(root, days):
             'changed_W3': sum(sorted(r['base'][:3]) != sorted(r['conn'][:3]) for r in rows),
             'gained': [r['race'] for r in rows if r['order'][0] in r['conn'][:3] and r['order'][0] not in r['base'][:3]],
             'lost': [r['race'] for r in rows if r['order'][0] in r['base'][:3] and r['order'][0] not in r['conn'][:3]]}
+
+
+def main():
+    """python -m runtime.local_autopilot.ext_connect --refit [--day D]: weekly beta refit (night, no race work due)."""
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--refit', action='store_true')
+    ap.add_argument('--day')
+    a = ap.parse_args()
+    from runtime.local_autopilot.run import ROOT
+    day = a.day or (datetime.now().astimezone() + timedelta(hours=0)).date().isoformat()
+    p = ensure(ROOT, day, refit=a.refit)
+    try:
+        h = json.loads(_paths(day)[2].read_text())['history'][-1]
+    except (OSError, ValueError, KeyError, IndexError):
+        h = None
+    print('EXT_ENSURE', day, bool(p), json.dumps(h, ensure_ascii=False)[:400] if h else '')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
