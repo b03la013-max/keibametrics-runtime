@@ -188,3 +188,33 @@ def test_review_writes_race_and_daily_summary(tmp_path, monkeypatch):
     rv = json.loads((out / 'review' / 'R01.review.json').read_text())
     assert any(p['id'] == 'P2:COMPONENT_PFS' for p in rv['proposals'])
     assert (tmp_path / 'review_period_summary.md').exists()
+
+
+def test_shadow_challengers_saved_and_base_matches_production(tmp_path, monkeypatch):
+    import challengers
+    import engine
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    post = datetime.fromisoformat(q['races']['01']['post'])
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=20))
+    run.tick(day, out, rd, {})
+    sh = json.loads((out / 'R01.shadow.json').read_text())['candidates']
+    prod = json.loads((out / 'R01.json').read_text())['tickets']
+    assert set(sh) == set(challengers.PREREG['candidates'])
+    assert sh['BASE']['trio'] == prod['trio'] and sh['BASE']['exact'] == prod['exact']
+    assert all('error' not in v for v in sh.values())
+    assert engine.MARKET_W == 0.0 and engine.SBO_SHARE == 0.30      # patches restored after the shadow run
+
+
+def test_shadow_metrics_table():
+    import review
+    revs = [{'shadow': {'BASE': {'winner_win_rank': 1, 'top3_in_place5': 3, 'honmei_top3': True, 'trio_hit': True,
+                                  'exact_hit': False, 'stake': 2800, 'return': 1500},
+                         'MKT50': {'winner_win_rank': 3, 'top3_in_place5': 2, 'honmei_top3': False, 'trio_hit': False,
+                                   'exact_hit': False, 'stake': 2800, 'return': 0}}, 'moisture_band': 'WET'}]
+    t = {r['id']: r for r in review.shadow_table(revs)}
+    assert t['BASE']['winner_top1'] == 1 and t['MKT50']['winner_top3'] == 1 and t['BASE']['pfs'] == 53.6
+    assert review._shadow_md(review.shadow_table(revs)).count('|') > 20

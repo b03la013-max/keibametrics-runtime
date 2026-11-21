@@ -118,6 +118,9 @@ def predict(reader, q, key, out, hist, rev=1):
             'young': '2歳' in name or '２歳' in name, 'horses': horses, 'pace': derive.race_pace(horses)}
     ev = engine.evaluate(race)
     tk = tickets.compile_race(ev)
+    import challengers
+    shadow = challengers.run_all(race, lambda: source.build_horses(
+        card, moisture, q['day'], hist, feeds, r['no'], race_name=name, skilled=derive.jockey_stats(hist)[1]))
     feeds_present = [k for k, v in feeds.items() if v]
     if not feeds['kintaro'].get(str(r['no'])):                 # barrier evidence missing -> not FORMAL (spec 5-3)
         tk['formality'] = 'REFERENCE-RENDERED'
@@ -136,6 +139,8 @@ def predict(reader, q, key, out, hist, rev=1):
     pub = dict(rec, evaluation=dict(ev, rows=[{k: v for k, v in x.items() if k not in PRIVATE} for x in ev['rows']]))
     dump(out / f'R{key}{sfx}.json', pub)
     (out / f'R{key}{sfx}.md').write_text(text + '\n')
+    dump(out / f'R{key}{sfx}.shadow.json', {'frozen_at': frozen, 'prereg': challengers.PREREG['registered_at'],
+                                            'candidates': shadow})
     if rev != 1:
         return pub
     r.update(state='PREDICTION_COMPLETE', frozen_at=frozen, ticket_sha256=sha, points=total,

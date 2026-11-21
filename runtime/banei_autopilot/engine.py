@@ -14,6 +14,7 @@ from statistics import mean
 BSI_W = {'recent': 0.40, 'track': 0.35, 'avg': 0.25}          # Owner 2026-11-19: provisional
 SBO_SHARE = 0.30                                              # Owner 2026-11-18: 水分ボンバー 30% start
 MID = lambda lo, hi: (lo + hi) / 2.0                          # Owner 2026-11-19: midpoint of ranges
+MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
 RULESET = 'KM-BAN-v4.0-static-r1'
 
@@ -251,6 +252,11 @@ def _rank(rows, race):
     for key, name in (('win_score', 'win_rank'), ('place_score', 'place_rank'), ('hole_score', 'hole_rank')):
         for i, r in enumerate(sorted(rows, key=lambda x: -x[key])):
             r[name] = i + 1
+    if MARKET_W and all(r['pop'] for r in rows):              # shadow: rank-average of model and market (人気)
+        for name in ('win_rank', 'place_rank'):
+            blend = sorted(rows, key=lambda x: (1 - MARKET_W) * x[name] + MARKET_W * x['pop'])
+            for i, r in enumerate(blend):
+                r[name] = i + 1
     n = len(rows)
     for r in rows:
         # roles (spec 3-3). Hard EXCL only with explicit evidence flag, never from rank alone.
