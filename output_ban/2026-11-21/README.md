@@ -9,10 +9,10 @@
 | 5 | 16:15 | MISSED_DEADLINE |  |  |  |  |  |  |
 | 6 | 16:55 | SETTLED | 29 | FORMAL | 済 | 変更なし | 98.3 | ROLE |
 | 7 | 17:25 | SETTLED | 27 | FORMAL | 済 | 修正版 | 83.0 | ROLE |
-| 8 | 18:00 | PREDICTION_COMPLETE | 29 | FORMAL | 済 | 修正版 |  |  |
+| 8 | 18:00 | SETTLED | 29 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 9 | 18:30 | PREDICTION_COMPLETE | 29 | FORMAL | 済 |  |  |  |
 | 10 | 19:00 | DISCOVERED |  |  |  |  |  |  |
 | 11 | 19:30 | DISCOVERED |  |  |  |  |  |  |
 | 12 | 20:00 | DISCOVERED |  |  |  |  |  |  |
 
-投資 11,200円／払戻 5,970円／回収率 53.3%（100円均等・未較正）
+投資 14,100円／払戻 5,970円／回収率 42.3%（100円均等・未較正）
