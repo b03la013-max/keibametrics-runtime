@@ -1,0 +1,96 @@
+name: LOCAL Source Enrichment Production Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-source-enrichment-production-acceptance.yml'
+      - 'profiles/**'
+      - 'governance/**'
+  workflow_dispatch:
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify deployed Rev.5 and signed SOURCE enrichment
+        env:
+          ENDPOINT: https://witnessstrictimage-production.up.railway.app
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          endpoint=os.environ["ENDPOINT"].rstrip("/")
+          def get(path):
+              with urllib.request.urlopen(endpoint+path,timeout=60) as r:
+                  return json.loads(r.read().decode())
+          def post(path,payload,timeout=180):
+              b=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              req=urllib.request.Request(endpoint+path,data=b,headers={"Content-Type":"application/json"},method="POST")
+              with urllib.request.urlopen(req,timeout=timeout) as r:
+                  return json.loads(r.read().decode())
+
+          health=get("/health")
+          assert health["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.5-20260924-OFFICIAL-AUXILIARY-EVIDENCE", health
+          assert health["nar_auxiliary_evidence_profile"]=="KM-LOCAL-NAR-AUXILIARY-EVIDENCE-v1.0-20260924"
+          assert health.get("nar_auxiliary_evidence_sha256")
+          caps=set(health.get("capabilities") or [])
+          assert {"SOURCE_NAR_ENTITY_PROFILES","SOURCE_SAME_DAY_POSITION_BIAS"}.issubset(caps)
+
+          base={
+            "family_id":"LOCAL",
+            "race_id":"KCH-20260913-R03-PROD-AUX",
+            "venue_id":"KCH",
+            "race_date":"2026-09-13",
+            "race_no":3,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":True,
+            "include_odds":True,
+          }
+          manifest=post("/source/manifest/local",base)
+          manifest["include_auxiliary_evidence"]=True
+          manifest["require_auxiliary_profiles"]=True
+          signed=post("/source/acquire",manifest)
+          assert signed["receipt"]["phase"]=="SOURCE"
+          assert signed["receipt"]["status"]=="SOURCE_FROZEN", signed["receipt"]
+          verify=post("/source/verify",signed)
+          assert verify["verified"] is True, verify
+
+          art=signed["artifact"]
+          aux=art["auxiliary_evidence"]
+          profiles=aux["profiles"]
+          bias=aux["same_day_position_bias"]
+          pedigree=aux["pedigree_population_seed"]
+          assert aux["production_authority"] is False
+          assert aux["profile_source_count"]==33
+          assert aux["profile_source_success_count"]==33
+          assert len(art["nar_entity_registry"])==12
+          assert len(profiles["horses"])==12
+          assert len(profiles["riders"])==12
+          assert len(profiles["trainers"])==9
+          assert pedigree["production_authority"] is False
+          assert pedigree["runner_count"]==12
+          assert bias["production_authority"] is False
+          assert bias["races_observed"]==2
+          assert bias["top3_observations"]>=6
+          assert all(all(h["date"] < "2026/09/13" for h in x["history"]) for x in profiles["horses"].values())
+          assert sum(x["filtered_target_or_future_rows"] for x in profiles["horses"].values())>=1
+
+          print("LOCAL_SOURCE_ENRICHMENT_PRODUCTION_PASS="+json.dumps({
+            "runtime_revision":health["runtime_revision"],
+            "runtime_app_sha256":health.get("runtime_app_sha256"),
+            "aux_module_sha256":health.get("nar_auxiliary_evidence_sha256"),
+            "source_receipt_sha256":signed.get("receipt_sha256"),
+            "source_snapshot_sha256":art.get("source_snapshot_sha256"),
+            "auxiliary_evidence_sha256":art.get("auxiliary_evidence_sha256"),
+            "runner_entities":len(art["nar_entity_registry"]),
+            "horse_profiles":len(profiles["horses"]),
+            "rider_profiles":len(profiles["riders"]),
+            "trainer_profiles":len(profiles["trainers"]),
+            "same_day_races":bias["races_observed"],
+            "front_top3_rate":bias["front_at_last_corner_top3_rate"],
+            "leader_win_rate":bias["leader_at_last_corner_win_rate"],
+            "pedigree_seed_runners":pedigree["runner_count"],
+            "verified":verify["verified"],
+          },ensure_ascii=False,separators=(",",":")))
+          PY
