@@ -221,7 +221,7 @@ def deliver(q, key, out, rev=1, reasons=None):
 def first_failure(tk, order):
     w, s, t = order[:3]
     tri = tuple(sorted((w, s, t)))
-    if w not in [n for n in tk['terminal']]:
+    if str(w) not in {str(n) for n in tk['terminal']}:          # JSON keys are strings
         return 'ROLE'
     if tri not in set(map(tuple, tk['trio'])):
         return 'PAIR-P3-TERMINAL' if any(set((w, s)) <= set(x) for x in tk['trio']) else 'HEAD-P2-TERMINAL'
@@ -317,6 +317,18 @@ def tick(day, out, reader, hist):
         except Exception as e:                                   # one race never stops the day
             r['last_error'] = f'{type(e).__name__}:{str(e)[:160]}'
             log(out, 'ERROR', key, r['last_error'])
+        dump(qp, q)
+    n_set = sum(1 for r in q['races'].values() if r['state'] == 'SETTLED')
+    if n_set and (q.get('reviewed_n') != n_set or not q.get('review_done')):
+        try:
+            import review
+            fin = review.daily(out, q)
+            q['reviewed_n'] = n_set
+            if fin and not q.get('review_done'):
+                q['review_done'] = now_jst().isoformat()
+                log(out, 'REVIEW_DONE', 'daily_summary.md')
+        except Exception as e:                                   # the review never stops the day
+            log(out, 'REVIEW_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
         dump(qp, q)
     report(q, out)
     return q
