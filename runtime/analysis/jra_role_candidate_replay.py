@@ -20,6 +20,9 @@ Candidates
   third-placed runner sat at Static rank >= 8 in 10 of 15 settled races. Add the pre-cutoff market
   top-5 runners missing from P3 as PROTECTED thirds under every existing pair; the control adds the
   same number by Static rank.
+- P2_MARKET_TOP3 / P2_STATIC_SAME_COUNT_CONTROL (11/21 review, ChatGPT cross-check: FKS P2 was the
+  first failure in 4 of 6 races with the winner already in W): add the pre-cutoff market top-3 runners
+  missing from P2 as PROTECTED seconds under every W head; the control adds the same number by Static rank.
 - SKIP_HEAVY_GOING (11/21 review P2: 福島 0/6 on 稍重〜重): no bet when the signed pre-cutoff official
   going for the race is 重 or 不良. Selection only; tickets otherwise unchanged.
 """
@@ -200,6 +203,37 @@ def p3_static_same_count_control(f):
     return _add_thirds(f, picks, 'P3_STATIC_SAME_COUNT_CONTROL')
 
 
+def _add_seconds(f, picks, tag):
+    added = [r for r in picks if _promote(f, 'P2', r, tag)]
+    for r in added:
+        for h in _live(f, 'W'):
+            if h != r:
+                _mirror_pairs(f, new_head=h, new_second=r, tag=tag)
+    return bool(added)
+
+
+def _p2_market_missing(f, n):
+    mk = market_ranking(f)
+    if mk is None:
+        return None
+    taken = set(_live(f, 'P2'))
+    return [r for r in mk[:n] if r not in taken]
+
+
+def p2_market_top3(f):
+    miss = _p2_market_missing(f, 3)
+    return bool(miss) and _add_seconds(f, miss, 'P2_MARKET_TOP3')
+
+
+def p2_static_same_count_control(f):
+    miss = _p2_market_missing(f, 3)
+    if not miss:
+        return False
+    taken = set(_live(f, 'P2'))
+    picks = [r for r in (str(x) for x in f['static_prediction']['ranking']) if r not in taken][:len(miss)]
+    return _add_seconds(f, picks, 'P2_STATIC_SAME_COUNT_CONTROL')
+
+
 def official_going(f, root=ROOT):
     """Latest signed JRA official going observed before the prediction cutoff, else None."""
     import datetime as dt
@@ -228,7 +262,8 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'W_PLUS_MARKET_TOP3': w_plus_market_top3,
               'W_PLUS_STATIC_SAME_COUNT_CONTROL': w_plus_static_same_count_control,
               'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
-              'SKIP_HEAVY_GOING': skip_heavy_going}
+              'SKIP_HEAVY_GOING': skip_heavy_going,
+              'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control}
 
 
 def _settle(f, official):
