@@ -34,6 +34,7 @@ VENUE_BY_BB = {"01": "SPP", "02": "HKD", "03": "FKS", "04": "NGT", "05": "TKY",
                "06": "NKY", "07": "CHK", "08": "KYO", "09": "HSN", "10": "KKR"}
 VENUE_BY_TSL = VENUE_BY_BB
 
+PUBLISH_BLOODB_EVAL_MARK = False  # Owner 2026-11-21 10:46
 RULES = {
     "sire_track_signal": "KM-JRA-BLOODB-SIRE-COURSE-RANK-BAND-v1",
     "pedigree_class": "KM-JRA-BLOODB-SIRE-GENERATION-RANK-BAND-v1",
@@ -135,7 +136,10 @@ def bloodb_features(race: dict, src_id: str):
             if b:
                 f["pedigree_distance"] = _feature(b, RULES["pedigree_distance"], src_id,
                                                   f"BLOOD BIAS 血統タイプ{cat.lower()} band={b} ({no}番)")
-        b = BLOODB_EVAL.get(str(h.get("blood_eval") or "").strip())
+        # Owner 2026-11-21 10:46: the 注/血 mark maps 1:1 to a band, so publishing it would
+        # disclose BLOOD BIAS recommended horses (site forbids redistribution). It is no
+        # longer written to the public pack; raw marks stay in the private evidence repo.
+        b = BLOODB_EVAL.get(str(h.get("blood_eval") or "").strip()) if PUBLISH_BLOODB_EVAL_MARK else None
         if b:
             f["expert_support"] = _feature(b, RULES["expert_support"], src_id,
                                            f"BLOOD BIAS 血統評価 band={b} ({no}番)")

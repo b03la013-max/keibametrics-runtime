@@ -73,7 +73,7 @@ def test_build_packs_bands_and_no_raw_values():
     assert f["4"]["sire_track_signal"]["category"] == "EXCEPTIONAL"   # CR 3
     assert f["4"]["pedigree_class"]["category"] == "VERY_STRONG"      # GR 6
     assert f["4"]["pedigree_distance"]["category"] == "EXCEPTIONAL"   # p (芝1400) = 1
-    assert f["4"]["expert_support"]["category"] == "VERY_STRONG"      # 血
+    assert "expert_support" not in f["4"]                           # 血 mark is not published (Owner 2026-11-21)
     assert "sire_track_signal" not in f["9"]                         # blank CR
     assert f["1"]["external_index_support"]["category"] == "VERY_STRONG"
     assert f["4"]["external_index_support"]["category"] == "CAUTION"
