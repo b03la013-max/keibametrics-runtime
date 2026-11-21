@@ -12,7 +12,7 @@
 | 8 | 18:00 | SETTLED | 29 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 9 | 18:30 | SETTLED | 28 | FORMAL | 済 | 修正版 | 136.8 | ROLE |
 | 10 | 19:00 | SETTLED | 27 | FORMAL | 済 | 変更なし | 0.0 | ROLE |
-| 11 | 19:30 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 修正版 |  |  |
+| 11 | 19:30 | SETTLED | 28 | FORMAL | 済 | 修正版 | 1298.6 | ROLE |
 | 12 | 20:00 | PREDICTION_COMPLETE | 27 | FORMAL | 済 |  |  |  |
 
-投資 19,600円／払戻 9,800円／回収率 50.0%（100円均等・未較正）
+投資 22,400円／払戻 46,160円／回収率 206.1%（100円均等・未較正）
