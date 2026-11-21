@@ -270,3 +270,15 @@ def test_axis2_challenger_keeps_lines_without_honmei(tmp_path, monkeypatch):
     sh = json.loads((out / 'R01.shadow.json').read_text())['candidates']
     hm = sh['AXIS2']['honmei']
     assert sh['AXIS2']['points'] <= 30 and any(hm not in t for t in sh['AXIS2']['trio'])
+
+
+def test_kintaro_comment_picks_class_if_sample():
+    p = os.environ.get('KM_BAN_KINTARO_SAMPLE')
+    if not p or not os.path.exists(p):
+        return
+    import kintaro
+    d = kintaro.parse(p)
+    horses = d
+    assert len({b for v in horses.values() for b in v['pick_boxes']}) >= 2 and all(isinstance(v['picks'], int) for v in horses.values())
+    assert sum(1 for v in horses.values() if v.get('comment')) >= len(horses) - 1
+    assert sum(1 for v in horses.values() for q in v['past'] if q.get('race_class')) >= len(horses) * 3

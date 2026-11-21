@@ -239,7 +239,7 @@ def nar_history(nar_dir):
             fin = re.sub(r'[^\d]', '', row.get('着順') or '')
             bwt = re.sub(r'[^\d]', '', row.get('馬体重') or '')
             hist.setdefault(row['馬名'], []).append({'date': d, 'idx': idx, 'moisture': moist,
-                                                    'jockey': row.get('騎手名'),
+                                                    'jockey': row.get('騎手名'), 'race_name': rc.get('レース名'),
                                                     'finish': int(fin) if fin else None,
                                                     'body_weight': int(bwt) if bwt else None})
     for v in hist.values():
@@ -267,7 +267,8 @@ def build_horses(card, moisture, race_date, hist, feeds, race_no, race_name='', 
         nar = [z for z in hist.get(r['name'], []) if z['date'] < dt.strftime('%Y%m%d')]
         k = kin.get(str(r['no']), {})
         kbh = dict(kb.get(str(r['no']), {}))
-        kbh['cci'] = kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point'))
+        kbh['cci'] = kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point'),
+                                                (kin.get(str(r['no'])) or {}).get('comment'))   # + キンタロー短評 (spec 3-2)
         flags = derive.horse_inputs(r, k, kbh, nar, skilled or set(), race_name, band)   # also fills start moisture
         own = []
         for s in r['starts']:
