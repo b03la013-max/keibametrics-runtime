@@ -482,6 +482,20 @@ def run_formal(r, out_dir, deadline):
         cap_cfg = authority.get('local_ticket_cap')
         capped = cap_tickets(tickets, req['static_prediction']['ranking'], int(cap_cfg['max_tickets'])) \
             if cap_cfg and not no_bet else None
+        promo = None
+        if capped and not no_bet:   # Owner 2026-11-21 20:00: pre-registered same-budget variant promoted automatically
+            try:
+                from runtime.local_autopilot import auto_promote, formal_mix
+                promo = auto_promote.active_variant(Path(out_dir).parent, r['race_date'])
+                if promo:
+                    capped = auto_promote.apply_to_cap(capped, req['static_prediction']['ranking'], roles, tickets,
+                                                       formal_mix._market_order(Path(out_dir), key), promo)
+                    capped['sha256'] = _sha(capped)
+                    mark('AUTO_PROMOTION', candidate=promo['candidate'], variant=promo['variant'],
+                         tickets=len(capped['tickets']), investment=capped['kept_investment'])
+            except Exception as exc:   # never block the formal prediction: keep the R54_60 cap
+                promo = None
+                mark('AUTO_PROMOTION', status=f'ERROR_R54_60_KEPT:{type(exc).__name__}:{str(exc)[:120]}')
         if capped:
             mark('LOCAL_TICKET_CAP', max_tickets=capped['max_tickets'], mec_ticket_count=capped['mec_ticket_count'],
                  kept=capped['kept_count'], kept_investment=capped['kept_investment'], sha256=capped['sha256'])
@@ -525,6 +539,8 @@ def run_formal(r, out_dir, deadline):
                        signed_final_tickets=tickets, local_ticket_cap_sha256=(capped or {}).get('sha256'),
                        prediction_consumer=(consumer or {}).get('profile'),
                        ranking=fpp['ranking'], marks=fpp['marks'], ranking_base=num_rank_base,
+                       auto_promotion=(capped or {}).get('auto_promotion'),
+                       tickets_r54_60=(capped or {}).get('champion_r54_60_tickets'),
                        ext_connection=(None if 'ext_connection' not in arts else
                                        {k: arts['ext_connection'].get(k) for k in ('profile', 'status', 'sbo', 'keibabook',
                                                                                    'changed_top3', 'changed_top6', 'error')}),

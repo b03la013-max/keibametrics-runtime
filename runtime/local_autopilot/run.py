@@ -540,6 +540,26 @@ FORMAL_KIND = {'WIN': '単勝', 'PLACE': '複勝', 'WIDE': 'ワイド', 'QUINELL
                'TRIO': '三連複', 'TRIFECTA': '三連単'}
 
 
+def auto_promotion_daily(q, out):
+    from runtime.local_autopilot import auto_promote
+    races = (q or {}).get('races') or {}
+    if not races or not all(str(x.get('status', '')).startswith('POSTRESULT') for x in races.values()):
+        return None
+    st = auto_promote.load_state(ROOT)
+    if (st.get('last_decision') or {}).get('day') == out.name:
+        return None
+    rec = auto_promote.decide(ROOT, out.name)
+    rv = out / 'review'
+    rv.mkdir(exist_ok=True)
+    (rv / 'auto_promotion.md').write_text(auto_promote.md(rec))
+    log('AUTO_PROMOTION', rec['action'], rec.get('candidate'), rec.get('effective_from'))
+    if rec['action'] in ('PROMOTE', 'DEMOTE'):
+        issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+        if issue:
+            _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': auto_promote.md(rec)})
+    return rec
+
+
 def formal_tickets_kb(tickets):
     """MEC tickets -> settle k/b lines (100-yen units; a 200-yen stake is two lines)."""
     out = []
@@ -1148,6 +1168,12 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                            wait_seconds=round(getattr(client, 'wait_seconds', 0), 1))
             client.requests = 0
             client.wait_seconds = 0.0
+        if q is not None and FORMAL:
+            try:   # Owner 2026-11-21 20:00: automatic promotion / demotion once all of the day's races are settled
+                if auto_promotion_daily(q, out):   # (checks its own "all settled" and "once per day" conditions)
+                    changed = True
+            except Exception as e:
+                log('AUTO_PROMOTION_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
         if changed and q is not None:
             dump(out / 'queue.json', q)
             report(q, out)

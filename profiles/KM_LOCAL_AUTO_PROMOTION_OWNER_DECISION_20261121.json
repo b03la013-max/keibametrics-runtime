@@ -1,0 +1,14 @@
+{
+ "profile": "KM-LOCAL-AUTO-PROMOTION-OWNER-DECISION-20261121",
+ "decided_at": "2026-11-21T20:00:00+09:00",
+ "owner_words": "作って下さい",
+ "proposal_accepted": "反省で出た改善案のうち事前登録した候補だけを、未来のレース100R以上・本番と同じレース・同じ点数で比べてPFSと的中が上回り、2場以上で同じ向きのとき自動で本番に入れる。入れたものが次の100Rで本番を下回ったら自動で戻す。入れた・戻したはその都度通知する。",
+ "implementation": "runtime/local_autopilot/auto_promote.py (KM-LOCAL-AUTO-PROMOTION-v1.0-20261121); hook formal_rakuten (variant replaces the capped recommendation BEFORE /final, so it is signed), run.auto_promotion_daily (once per race day after every race is settled; PROMOTE / DEMOTE posted to the delivery issue)",
+ "eligible": ["C13 MIX_P2BOX20", "C15 MIX_WAXIS_TRIO", "C22 KEEP_MEC_TRIO20", "C24 W_PLUS_TOP2POP_60"],
+ "rules": {"min_races": 100, "same_budget": "60 points", "pfs": "candidate > champion", "pfs_ex_top1": "candidate > champion",
+           "hits": "candidate >= champion", "venues": ">= 2 venues (>= 12 races) better, none worse by > 30 points",
+           "effective": "next race day", "probation": "100 races; demote when PFS and PFS-ex-top1 are both below R54_60"},
+ "unchanged": ["29 indices", "KRS", "MEC", "60-point cap size", "purchase policy (recommendation only)", "三布告 v1.1"],
+ "dry_run_20261121": "C13 met every check on 118 races (PFS 140.7% vs 133.1%, ex-top1 53.8% vs 50.6%, hits 60 vs 51; KSM and SON better, OHI 41.4% vs 52.7%) -> will be promoted from 2026-11-22 when the 2026-11-21 races are all settled",
+ "rollback": "delete output/auto_promotion.json 'active' (back to R54_60 from the next formal run) or revert the commit"
+}

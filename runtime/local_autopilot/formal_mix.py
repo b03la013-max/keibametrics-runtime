@@ -34,7 +34,9 @@ def _p2(summary):
 
 def signed(summary):
     """The delivered (post-cap) formal tickets: summary['tickets'] (signed_final_tickets is the pre-cap MEC)."""
-    return [(t['bet_type'], [int(x) for x in t['selection']]) for t in summary.get('tickets') or []]
+    # an auto-promoted variant replaces summary['tickets']; the R54_60 champion stays in tickets_r54_60
+    src = summary.get('tickets_r54_60') if summary.get('tickets_r54_60') is not None else summary.get('tickets')
+    return [(t['bet_type'], [int(x) for x in t['selection']]) for t in src or []]
 
 
 def variants(summary):
