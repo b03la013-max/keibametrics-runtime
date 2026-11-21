@@ -272,10 +272,11 @@
 |---|---|---|---|---|
 | venue=KOC / band=M / distance_change=SHORTER | 36 | 33.3% | 1.34 | 155% |
 | venue=KNZ / band=M / distance_change=LONGER | 36 | 19.4% | 0.78 | 8% |
+| venue=SAG / band=S / distance_change=SAME | 35 | 37.1% | 1.25 | 10% |
 | venue=KSM / band=M / distance_change=LONGER | 51 | 19.6% | 0.82 | 21% |
 | venue=KOC / band=M / distance_change=LONGER | 84 | 30.9% | 1.15 | 54% |
 | venue=MOR / band=S / distance_change=SAME | 43 | 20.9% | 0.90 | 25% |
-| venue=SAG / band=M / distance_change=SAME | 84 | 23.8% | 1.10 | 40% |
+| venue=SAG / band=M / distance_change=SAME | 85 | 23.5% | 1.09 | 40% |
 | venue=MIZ / band=M / distance_change=SAME | 129 | 25.6% | 1.08 | 26% |
 | venue=SON / band=M / distance_change=SAME | 75 | 24.0% | 1.08 | 10% |
 | venue=KSM / band=M / distance_change=SHORTER | 44 | 25.0% | 1.07 | 35% |
@@ -298,7 +299,7 @@
 | venue=KNZ / days_since_last=<=14d | 148 | 25.7% | 0.93 | 63% |
 | venue=SON / days_since_last=<=14d | 102 | 23.5% | 1.08 | 22% |
 | venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
-| venue=SAG / days_since_last=<=14d | 169 | 23.7% | 1.04 | 53% |
+| venue=SAG / days_since_last=<=14d | 190 | 25.3% | 1.06 | 49% |
 | venue=MIZ / days_since_last=<=14d | 234 | 24.4% | 0.98 | 24% |
 
 ## 4角位置→着順：A/E の偏りが大きい区分（30出走以上、上位20）
