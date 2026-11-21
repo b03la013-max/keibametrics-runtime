@@ -68,6 +68,10 @@ class Tables(HTMLParser):
         self.nested = 0
         self.headings, self.heading = [], None
         self.link_depth = self.nav_depth = 0
+        self.status_blocks, self.status_buffer = [], None
+        self.div_depth, self.status_depth = 0, None
+        self.spans = {}
+        self.cell_span = (1, 1)
 
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style"}:
@@ -78,6 +82,10 @@ class Tables(HTMLParser):
             self.link_depth += 1
         if tag == "nav":
             self.nav_depth += 1
+        if tag == "div":
+            self.div_depth += 1
+            if {"cell", "time"} <= set(dict(attrs).get("class", "").split()):
+                self.status_depth, self.status_buffer = self.div_depth, []
         if tag in {"h1", "h2", "h3", "h4", "caption", "title"}:
             self.heading = []
         if tag == "table":
@@ -85,10 +93,16 @@ class Tables(HTMLParser):
                 self.nested += 1
             else:
                 self.table = []
+                self.spans = {}
         elif tag == "tr" and self.table is not None:
             self.row = []
         elif tag in {"td", "th"} and self.row is not None:
             self.cell = []
+            attributes = dict(attrs)
+            values = [attributes.get(k, "1") for k in ("rowspan", "colspan")]
+            if any(not re.fullmatch(r"[1-9]\d?", v) or int(v) > 20 for v in values):
+                raise ValueError("CLOSING_TABLE_SPAN_INVALID")
+            self.cell_span = tuple(map(int, values))
         elif tag == "br" and self.cell is not None:
             self.cell.append(" ")
 
@@ -105,11 +119,37 @@ class Tables(HTMLParser):
             self.link_depth = max(0, self.link_depth - 1)
         if tag == "nav":
             self.nav_depth = max(0, self.nav_depth - 1)
+        if tag == "div":
+            if self.status_depth == self.div_depth:
+                self.status_blocks.append(norm("".join(self.status_buffer)))
+                self.status_depth, self.status_buffer = None, None
+            self.div_depth = max(0, self.div_depth - 1)
         if tag in {"td", "th"} and self.cell is not None:
-            self.row.append(norm("".join(self.cell)))
+            self.row.append((norm("".join(self.cell)), *self.cell_span))
             self.cell = None
         elif tag == "tr" and self.row is not None:
-            self.table.append(self.row)
+            expanded, col, cursor, following = [], 0, 0, {}
+            while cursor < len(self.row) or col in self.spans:
+                if col in self.spans:
+                    value, remaining = self.spans[col]
+                    expanded.append(value)
+                    if remaining > 1:
+                        following[col] = (value, remaining - 1)
+                    col += 1
+                else:
+                    value, rows, columns = self.row[cursor]
+                    for _ in range(columns):
+                        if col in self.spans:
+                            raise ValueError("CLOSING_TABLE_SPAN_OVERLAP")
+                        expanded.append(value)
+                        if rows > 1:
+                            following[col] = (value, rows - 1)
+                        col += 1
+                    cursor += 1
+            if any(k >= col for k in self.spans):
+                raise ValueError("CLOSING_TABLE_SPAN_GAP")
+            self.spans = following
+            self.table.append(expanded)
             self.row = None
         elif tag == "table":
             if self.nested:
@@ -127,6 +167,8 @@ class Tables(HTMLParser):
                 self.heading.append(data)
             if self.cell is not None:
                 self.cell.append(data)
+            if self.status_buffer is not None and not self.link_depth and not self.nav_depth:
+                self.status_buffer.append(data)
 
 
 def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstarters=None):
@@ -148,6 +190,12 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
         raise ValueError("CLOSING_RACE_HEADER_AMBIGUOUS_OR_MISMATCH")
     # Menu links to a final/result page are not evidence that this table is final.
     marker = re.search(r"(?:最終|確定)(?:単勝)?オッズ|レース結果|競走成績", " ".join(parser.headings))
+    if marker is None:
+        # Live official odds pages label finality in div.cell.time, outside
+        # their title/caption. Navigation links remain ineligible evidence.
+        marker = next((re.fullmatch(r"(?:最終|確定)(?:単勝)?オッズ", block)
+                       for block in parser.status_blocks
+                       if re.fullmatch(r"(?:最終|確定)(?:単勝)?オッズ", block)), None)
     if marker is None:
         raise ValueError("CLOSING_STATUS_NOT_EXPLICIT")
     candidates = []
@@ -177,8 +225,14 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
         seen.add(no)
         state = row[status_i] if status_i is not None else ""
         name = row[name_i] if name_i is not None else None
-        status = NONSTARTERS.get(state, "ACTIVE")
         price = row[oi].replace(",", "")
+        # The official closing-odds table has no finish/status column. Its
+        # price cell explicitly prints 取消/除外 for non-starters.
+        price_status = NONSTARTERS.get(price)
+        state_status = NONSTARTERS.get(state)
+        if price_status and state_status and price_status != state_status:
+            raise ValueError("CLOSING_NONSTARTER_STATUS_CONFLICT")
+        status = state_status or price_status or "ACTIVE"
         if status == "ACTIVE":
             if not re.fullmatch(r"\d+(?:\.\d+)?", price):
                 raise ValueError("CLOSING_ACTIVE_PRICE_MISSING")
@@ -210,6 +264,38 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
     return {"race_id": race_id, "closing_marker": marker[0], "runners": runners,
             "n_active": len(active), "popularity_missing": sum(r["status"] == "ACTIVE" and r["popularity_rank"] is None for r in runners),
             "interpretation": "Explicit official closing odds; unsigned research evidence, not a RESULT receipt"}
+
+
+def reconcile_universe(parsed, *, expected_active, expected_nonstarters, finisher_ids=()):
+    """Research-only reconciliation of explicit official non-starter rows.
+
+    Older stored RESULTs may omit a cancellation field. Never infer a missing
+    horse's status from finish-order absence: require an explicit 取消/除外
+    row in the separately captured final table, and reject every conflict.
+    """
+    expected = {str(int(x)) for x in expected_active}
+    known = {str(int(k)):v for k,v in expected_nonstarters.items()}
+    rows = {row["runner_id"]:row for row in parsed["runners"]}
+    active = {k for k,v in rows.items() if v["status"] == "ACTIVE"}
+    nonstarters = {k:v["status"] for k,v in rows.items() if v["status"] != "ACTIVE"}
+    if active - expected:
+        raise ValueError("CLOSING_UNKNOWN_RUNNER_IDENTITY")
+    for rid, status in nonstarters.items():
+        if rid in known and known[rid] not in {status, "OFFICIAL_NON_STARTER_REFUND"}:
+            raise ValueError("CLOSING_NONSTARTER_UNIVERSE_MISMATCH")
+    additional = {k:v for k,v in nonstarters.items() if k in expected}
+    outside = {k:v for k,v in nonstarters.items() if k not in expected and k not in known}
+    if (additional or outside) and not finisher_ids:
+        raise ValueError("CLOSING_NONSTARTER_RECONCILIATION_EVIDENCE_MISSING")
+    if set(nonstarters) & {str(int(x)) for x in finisher_ids}:
+        raise ValueError("CLOSING_NONSTARTER_FINISHER_CONFLICT")
+    if active != expected - set(additional) or active & set(known):
+        raise ValueError("CLOSING_ACTIVE_UNIVERSE_MISMATCH")
+    return {"active_runner_ids": sorted(active, key=int),
+            "additional_official_nonstarters_not_in_stored_result": dict(sorted(additional.items(), key=lambda x:int(x[0]))),
+            "explicit_nonstarters_already_outside_model": dict(sorted(outside.items(), key=lambda x:int(x[0]))),
+            "evidence": "EXPLICIT_FINAL_ODDS_NONSTARTER_ROW_NOT_FINISH_ORDER_INFERENCE",
+            "stored_result_modified": False}
 
 
 def decode_html(raw, content_type=""):

@@ -100,6 +100,24 @@ def test_raw_and_parsed_integrity_atomic_no_overwrite(tmp_path):
     assert reader.validate_capture(value, race_id=RID)["parsed"]["n_active"] == 4
 
 
+def test_official_final_time_cell_and_frame_rowspan_preserve_horse_columns():
+    html = '<h1>単勝・複勝オッズ 2026年11月1日 4回東京11日 9レース</h1>'
+    html += '<div class="refresh_line"><div class="cell time"><strong>最終オッズ</strong></div></div>'
+    html += '<table><tr><th>枠</th><th>馬番</th><th>馬名</th><th>単勝</th></tr>'
+    html += '<tr><td rowspan="2">1</td><td>1</td><td>合成甲</td><td>2.4</td></tr>'
+    html += '<tr><td>2</td><td>合成乙</td><td>3.8</td></tr></table>'
+    value = capture(html, expected_active=[1,2])
+    assert [(x['horse_no'],x['win_odds']) for x in value['parsed']['runners']] == [(1,2.4),(2,3.8)]
+    assert value['parsed']['closing_marker'] == '最終オッズ'
+    for changed in [html.replace('最終オッズ','10時20分現在'),
+                    html.replace('<strong>最終オッズ</strong>','<a href="#">最終オッズ</a>'),
+                    html.replace('class="cell time"','class="menu"')]:
+        with pytest.raises(ValueError,match='STATUS_NOT_EXPLICIT'):
+            capture(changed)
+    with pytest.raises(ValueError,match='SPAN_INVALID'):
+        capture(html.replace('rowspan="2"','rowspan="99"'))
+
+
 def test_exact_observed_accessO_token_generic_menu_not_accepted():
     html = """<a onclick="return doAction('/JRADB/accessO.html','pw15oli00/6D')">オッズ</a>
     <a onclick="return doAction('/JRADB/accessO.html', 'pw151ouS306202604090320260927Z/15')">最終オッズ</a>"""
@@ -109,6 +127,59 @@ def test_exact_observed_accessO_token_generic_menu_not_accepted():
         collector.closing_action(html, "0620260409", "20260927", 4)
     with pytest.raises(ValueError, match="NAVIGATION_NOT_UNIQUE"):
         collector.closing_action(html + html.replace("Z/15", "Z/CA"), "0620260409", "20260927", 3)
+
+
+def test_explicit_price_cell_nonstarters_reconcile_but_absence_never_does():
+    html = '<h2>2026年11月1日 東京 9レース</h2><h3>最終オッズ</h3>'
+    html += '<table><tr><th>馬番</th><th>単勝</th></tr>'
+    html += ''.join(f'<tr><td>{i}</td><td>{price}</td></tr>' for i,price in [(1,'2.4'),(2,'3.8'),(3,'取消'),(4,'除外')])+'</table>'
+    value=capture(html,expected_active=[1,2],expected_nonstarters={'3':'CANCELLED','4':'EXCLUDED'})
+    parsed=value['parsed']
+    admission=reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={},finisher_ids=[1,2])
+    assert admission['active_runner_ids']==['1','2']
+    assert admission['additional_official_nonstarters_not_in_stored_result']=={'3':'CANCELLED','4':'EXCLUDED'}
+    assert admission['stored_result_modified'] is False
+    outside=reader.reconcile_universe(parsed,expected_active=[1,2],expected_nonstarters={},finisher_ids=[1,2])
+    assert outside['additional_official_nonstarters_not_in_stored_result']=={}
+    assert outside['explicit_nonstarters_already_outside_model']=={'3':'CANCELLED','4':'EXCLUDED'}
+    with pytest.raises(ValueError,match='UNKNOWN_RUNNER_IDENTITY'):
+        reader.reconcile_universe(parsed,expected_active=[1],expected_nonstarters={},finisher_ids=[1,2])
+    with pytest.raises(ValueError,match='FINISHER_CONFLICT'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={},finisher_ids=[1,2,3])
+    with pytest.raises(ValueError,match='EVIDENCE_MISSING'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={})
+    with pytest.raises(ValueError,match='NONSTARTER_UNIVERSE'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,4],expected_nonstarters={'3':'EXCLUDED'},finisher_ids=[1,2])
+    with pytest.raises(ValueError,match='ACTIVE_UNIVERSE'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4,5],expected_nonstarters={},finisher_ids=[1,2])
+    with pytest.raises(ValueError,match='ACTIVE_PRICE_MISSING'):
+        capture(html.replace('取消','---'))
+
+
+@pytest.mark.parametrize("mode", ["00", "10"])
+def test_actual_current_and_archive_day_links_require_exact_identity(mode):
+    token = f"pw01srl{mode}082026041120261101/C0"
+    html = f"<a onclick=\"doAction('/JRADB/accessS.html','{token}')\">対象日</a>"
+    html += "<a onclick=\"doAction('/JRADB/accessS.html','pw01srl10052026041120261101/E2')\">隣の場</a>"
+    assert collector.result_day_action(html, "0820260411", "20261101") == ("/JRADB/accessS.html", token)
+    for key, day in [("0820260410", "20261101"), ("0820260411", "20261031")]:
+        with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+            collector.result_day_action(html, key, day)
+    with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+        collector.result_day_action(html.replace("/C0", "/C0BAD"), "0820260411", "20261101")
+    with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+        collector.result_day_action(html + html.replace("/C0", "/AB"), "0820260411", "20261101")
+
+
+def test_archived_day_exposes_exact_closing_link_not_a_derived_result_token():
+    token = "pw151ou1008202604110120261101Z/0F"
+    html = f"<a onclick=\"return doAction('/JRADB/accessO.html','{token}')\">1レースオッズ</a>"
+    assert collector.closing_action(html, "0820260411", "20261101", 1) == ("/JRADB/accessO.html", token)
+    for key, day, no in [("0520260411", "20261101", 1), ("0820260411", "20261031", 1), ("0820260411", "20261101", 2)]:
+        with pytest.raises(ValueError, match="NAVIGATION_NOT_UNIQUE"):
+            collector.closing_action(html, key, day, no)
+    with pytest.raises(ValueError, match="NAVIGATION_NOT_UNIQUE"):
+        collector.closing_action(html.replace("Z/0F", "Z/0FBAD"), "0820260411", "20261101", 1)
 
 
 def test_network_requires_owner_and_preflight_and_respects_robots(monkeypatch):
@@ -157,6 +228,36 @@ def test_existing_capture_causes_zero_requests(tmp_path):
     result = collector.collect(tmp_path, [{"race_id": RID}], Forbidden())
     assert result["requests"] == result["saved"] == 0
     assert result["skipped_existing"] == 1
+
+
+def test_offline_archived_day_to_closing_collection_without_result_request(tmp_path):
+    day_token = 'pw01srl10052026041120261101/E2'
+    odds_token = 'pw151ou1005202604110920261101Z/B7'
+    def link(path, token):
+        return f"<a onclick=\"doAction('{path}','{token}')\">合成リンク</a>".encode()
+    class SavedWebsite:
+        count = 0
+        requests = []
+        def load_robots(self): self.count += 1
+        def get(self, url):
+            assert url == 'https://www.jra.go.jp/keiba/calendar2026/2026/11/1101.html'
+            self.count += 1
+            return link('/JRADB/accessS.html','pw01sli00/AF'), 'text/html', '2026-11-03T01:00:00Z'
+        def post(self, action, referer):
+            self.count += 1
+            self.requests.append(action)
+            if action[1] == 'pw01sli00/AF': raw = link('/JRADB/accessS.html',day_token)
+            elif action[1] == day_token: raw = link('/JRADB/accessO.html',odds_token)
+            elif action[1] == odds_token: raw = FIXTURE.read_bytes()
+            else: raise AssertionError('UNOBSERVED_OR_UNNECESSARY_REQUEST')
+            return raw, 'text/html; charset=utf-8', '2026-11-03T01:00:00Z'
+    website = SavedWebsite()
+    plan = [dict(race_id=RID, race_date='2026-11-01', post_at='2026-11-01T14:25:00+09:00',
+                 meeting_key='0520260411', active_runner_ids=['1','2','3','4'], nonstarters={'5':'CANCELLED','6':'EXCLUDED'})]
+    result = collector.collect(tmp_path,plan,website)
+    assert result['saved'] == 1 and result['failures'] == [] and result['requests'] == 5
+    assert website.requests == [('/JRADB/accessS.html','pw01sli00/AF'),
+                                ('/JRADB/accessS.html',day_token),('/JRADB/accessO.html',odds_token)]
 
 
 def test_concurrent_capture_writers_publish_exactly_one_file(tmp_path):
@@ -225,6 +326,35 @@ def test_paired_series_reads_validated_captures_and_rejects_temporal_or_identity
     report2, _ = closing.compare(root, date(2026,10,11), date(2026,11,1), date(2026,11,2), bootstrap_reps=3, shuffle_reps=3)
     assert report2["n_closing_races"] == 0
     assert report2["exclusion_counts"]["CLOSING_CAPTURE_AFTER_ASOF"] == 1
+
+
+def test_nonstarter_omitted_by_stored_result_is_removed_from_both_paired_series(tmp_path):
+    root=tmp_path/'data'
+    dataset(root,40)
+    rid='KM-JRA-TKY-20261011-R01'
+    result_path=root/'runtime/results'/(rid+'.json')
+    value=json.loads(result_path.read_text())
+    order=value['official_result']['finish_order']
+    cancelled=order[-1]
+    value['official_result']['finish_order']=[n for n in order if n!=cancelled]
+    write_json(result_path,value)  # Synthetic older RESULT deliberately omits the cancellation field.
+    originals={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*.json')}
+    html='<h2>2026年10月11日 東京 1レース</h2><h3>最終オッズ</h3>'
+    html+='<table><tr><th>馬番</th><th>単勝</th></tr>'
+    html+=''.join(f'<tr><td>{i}</td><td>{"取消" if i==cancelled else i*2.1}</td></tr>' for i in range(1,7))+'</table>'
+    cap=reader.build_capture(html.encode(),race_id=rid,url='https://www.jra.go.jp/JRADB/accessO.html',captured_at='2026-11-03T01:00:00+09:00')
+    reader.save_capture(root/'runtime/closing_odds',cap)
+    report,rows=closing.compare(root,date(2026,10,11),date(2026,11,1),date(2026,11,3),bootstrap_reps=3,shuffle_reps=3)
+    assert report['n_closing_races']==1 and report['n_runners']==5
+    assert report['pre_signature_paired']['n_runners']==5
+    assert report['n_additional_nonstarters_removed_from_both_series']==1
+    assert report['explicit_closing_nonstarter_reconciliation'][0]['additional_official_nonstarters_not_in_stored_result']=={str(cancelled):'CANCELLED'}
+    assert str(cancelled) not in [x['runner_id'] for x in rows]
+    assert sum(x['m'] for x in rows)==pytest.approx(1.)
+    assert np.mean([x['z'] for x in rows])==pytest.approx(0.,abs=1e-12)
+    assert np.std([x['z'] for x in rows])==pytest.approx(1.)
+    assert report['pre_signature_paired']['full_in_sample']['models']['M']['LL0']==pytest.approx(-np.log(5))
+    assert originals=={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in originals}
 
 
 def test_no_production_imports_and_manual_only_workflow():
