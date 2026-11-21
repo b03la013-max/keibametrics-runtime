@@ -111,5 +111,24 @@ class LocalProductionClosureTest(unittest.TestCase):
         reg=json.loads(Path("mapping/local_base_index_mapping_registry_v1.0_20260922.json").read_text(encoding="utf-8"))
         self.assertEqual(m.REGISTRY_ID, reg["registry_id"])
 
+    def test_krs_bridge_rejects_false_strings_as_boolean_authority_flags(self):
+        # A string "false" must not enable FORMAL_NUMERICAL or a proxy mode.
+        provenance = {k: {"rule_id":"LOCAL-TEST-BOOLEAN-FLAG","evidence_refs":["FIXTURE"]}
+                      for k in HSV_KEYS + STATIC_KEYS}
+        bridge = {"bridge_id":"LOCAL-BOOLEAN-SELFTEST","family":"LOCAL",
+                  "technical_proxy_mode":False,
+                  "runners":{"1":{"hsv":{k:60 for k in HSV_KEYS},
+                                  "static":{k:60 for k in STATIC_KEYS},
+                                  "provenance":provenance}}}
+        req = {"race_id":"LOCAL-BOOLEAN-SELFTEST-R1","runners":[self.runner()],
+               "full_numerical_calculation":"false","local_krs_bridge":bridge}
+        with self.assertRaisesRegex(LocalKRSBridgeError, "KRS_FULL_NUMERICAL_BOOLEAN_REQUIRED"):
+            build_krs(req)
+        req["full_numerical_calculation"] = False
+        bridge["technical_proxy_mode"] = "false"
+        with self.assertRaisesRegex(LocalKRSBridgeError, "KRS_TECHNICAL_PROXY_BOOLEAN_REQUIRED"):
+            build_krs(req)
+
+
 if __name__=="__main__":
     unittest.main()
