@@ -180,4 +180,8 @@ def diagnose(rank, order, pay_hit=False):
         first = 'THIRD_MISS'
     else:
         first = 'TICKET_OR_CAPITAL' if not pay_hit else 'NONE'
-    return {'winner_rank': wr, 'second_rank': r2, 'third_rank': r3, 'first_failure': first}
+    # scope: this is a ranking-only diagnosis of the frozen PAPER/static order. It is NOT the
+    # failure class of the formal 60-point ticket face (see review / formal_eval for that).
+    # ChatGPT 11/21 review P0-3: profitable races still showed W_WIDTH_OR_ROLE here.
+    return {'winner_rank': wr, 'second_rank': r2, 'third_rank': r3, 'first_failure': first,
+            'scope': 'RANK_ONLY_NOT_TICKET_FACE'}
