@@ -59,6 +59,7 @@ jobs:
       - name: Plan every official race, dispatch due races, publish status index
         id: day
         env:
+          KM_JRA_OFFICIAL_DAILY: "1"   # 馬場情報・開催お知らせ, record only (Owner 2026-11-21 10:59)
           GH_TOKEN: ${{ github.token }}
           RACE_DATE: ${{ steps.start.outputs.race_date }}
           MODE: ${{ steps.start.outputs.mode }}
