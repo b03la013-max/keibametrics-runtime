@@ -22,6 +22,7 @@ import datetime as _dt
 import glob
 import itertools
 import json
+import os
 import subprocess
 import sys
 import time
@@ -1402,10 +1403,14 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
     state_path=f"runtime/jra_race_day_plan/{race_date}.state.json"
     schedule_path=f"runtime/jra_race_day_plan/{race_date}.schedule.json"
     index_paths={f"runtime/jra_race_day_status/{race_date}.json",f"runtime/jra_race_day_status/{race_date}.md"}
-    allowed={state_path,schedule_path}|index_paths
+    daily_path=f"runtime/jra_official_daily/{race_date}.json"
+    allowed={state_path,schedule_path,daily_path}|index_paths
     if not conflicts or not set(conflicts)<=allowed:
         return False
     for path in conflicts:
+        if path==daily_path:  # record-only file written by this worker alone: keep ours
+            (root/path).write_text(run('git','show',f':3:{path}').stdout)
+            continue
         if path in index_paths:
             # Retain only the old observation clock as a comparison anchor;
             # write_status below still rebuilds every field from merged truth.
@@ -1426,7 +1431,7 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
     state=json.loads((root/state_path).read_text())
     schedule=json.loads((root/schedule_path).read_text())
     write_status(root,race_date,_dt.datetime.now(JST),schedule,state)
-    run("git","add",*sorted(allowed))
+    run("git","add",*sorted(p for p in allowed if (root/p).exists()))
     r=run("git","-c","core.editor=true","rebase","--continue")
     return r.returncode==0
 
@@ -1434,6 +1439,8 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
+    if (root/'runtime/jra_official_daily'/f'{race_date}.json').exists():
+        paths.append(f"runtime/jra_official_daily/{race_date}.json")
     plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
     if plan_path.exists():
         plan=json.loads(plan_path.read_text())
@@ -1634,6 +1641,13 @@ def main(argv=None):
                                          publish=lambda:_commit(root,a.date))
             except (subprocess.SubprocessError, OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
                 print(json.dumps({"stage":"POSTRESULT","error":str(exc)[:300]}),flush=True)
+        if (a.loop_until and not no_meetings and os.environ.get('KM_JRA_OFFICIAL_DAILY')=='1'
+                and (root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').exists()):
+            try:  # JRA official 馬場情報・開催お知らせ, record only (Owner 2026-11-21 10:59); every 20 min
+                import jra_official_daily
+                jra_official_daily.record(root,a.date)
+            except Exception as exc:  # noqa: BLE001 — never affects dispatch
+                print(json.dumps({"stage":"OFFICIAL_DAILY","error":str(exc)[:300]}),flush=True)
         if (root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').exists():
             try:
                 _commit(root,a.date)
