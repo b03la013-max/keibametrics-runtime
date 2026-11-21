@@ -24,3 +24,21 @@ runs:
         echo "$RUNNER_TEMP/kmjra-venv/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/kmjra-venv/bin/python" -m pip install -q --disable-pip-version-check certifi
         echo "SSL_CERT_FILE=$("$RUNNER_TEMP/kmjra-venv/bin/python" -m certifi)" >> "$GITHUB_ENV"
+    - if: runner.environment == 'self-hosted' && runner.os == 'macOS'
+      shell: bash
+      env:
+        GH_CLI_VERSION: "2.62.0"
+      run: |
+        set -euo pipefail
+        if command -v gh >/dev/null 2>&1; then gh --version | head -1; exit 0; fi
+        case "$(uname -m)" in arm64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac
+        DIR="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/gh/${GH_CLI_VERSION}"
+        NAME="gh_${GH_CLI_VERSION}_macOS_${ARCH}"
+        if [ ! -x "$DIR/$NAME/bin/gh" ]; then
+          mkdir -p "$DIR"
+          curl -fsSL --retry 3 -o "$DIR/gh.zip" \
+            "https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/${NAME}.zip"
+          (cd "$DIR" && unzip -q -o gh.zip && rm -f gh.zip)
+        fi
+        echo "$DIR/$NAME/bin" >> "$GITHUB_PATH"
+        "$DIR/$NAME/bin/gh" --version | head -1
