@@ -426,3 +426,19 @@ def test_phase_b_terminal_fix_preserves_all_87_baseline_numeric_values():
     q=materialize_candidate(compile_candidate_evidence(source,request))
     values={r['runner_id']:{k:x['value'] for k,x in r['canonical_components'].items()} for r in q['runners']}
     assert values==json.loads((ROOT/'research/utility/numeric_value_regression.json').read_text())
+
+def test_candidate_krs_does_not_double_count_same_numeric_horse_identity():
+    """A duplicated 29-index runner must not become two KRS horses."""
+    import pytest
+    source, request = fixture()
+    n = materialize_candidate(compile_candidate_evidence(source, request))
+    assert n["candidate_full_numerical_summary"]["numeric_transport_complete"] is True
+    assert len(n["runners"]) == 3
+    for duplicate_id in ("1", "01"):
+        malformed = copy.deepcopy(n)
+        duplicate = copy.deepcopy(malformed["runners"][0])
+        duplicate["runner_id"] = duplicate_id
+        malformed["runners"].append(duplicate)
+        with pytest.raises(ValueError, match="CANDIDATE_KRS_RUNNER_ID_DUPLICATE"):
+            build_candidate_krs(malformed)
+
