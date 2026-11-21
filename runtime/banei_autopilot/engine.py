@@ -16,6 +16,15 @@ SBO_SHARE = 0.30                                              # Owner 2026-11-18
 MID = lambda lo, hi: (lo + hi) / 2.0                          # Owner 2026-11-19: midpoint of ranges
 PICKS_W = 0.0                                                 # production 0; shadow PICKS (キンタロー推奨ボックス)
 TRACKFIT_W = None                                             # production None; shadow TRACKFIT (軽馬場/重馬場の評価)
+# 変換・合成の係数（改善の仕組みで影の候補として動かせるように名前を付けた。値は現行どおり）
+BTA_BANDS = ((18, 6.0), (22, 3.0), (27, 0.0), (34, -3.0), (999, -6.0))   # 攻略条項 BTA-B（秒以下 → 補正）
+MPA_BANDS = ((5, 5.0), (3, 3.0), (1, 1.5), (0, 0.0))                     # 攻略条項 MPA-B（前進頭数以上 → 補正、後退は MPA_BACK）
+MPA_BACK = -2.0
+BRS_BANDS = ((2, 4.0), (1, 2.0), (0, 0.0))                               # BRS-B（障害後の順位上昇 → 補正、後退は BRS_BACK）
+BRS_BACK = -2.0
+SCORE = {'win_brs': 0.5, 'win_bta': 0.5, 'unconfirmed_pen': 2.0,         # 1着・3着内・穴の合成（実装時の仮置き）
+         'place_stable': 2.0, 'hole_longshot': 3.0, 'longshot_pop': 7,
+         'isv': {'VERY_STABLE': 4, 'STABLE': 2, 'STANDARD': 0, 'UNSTABLE': -2, 'UNKNOWN': 0}}
 MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
 RULESET = 'KM-BAN-v4.0-static-r1'
@@ -98,7 +107,7 @@ def bta(past):
     if not t:
         return None, 'UNCONFIRMED', None
     m = mean(t)
-    adj = 6.0 if m <= 18 else 3.0 if m <= 22 else 0.0 if m <= 27 else -3.0 if m <= 34 else -6.0
+    adj = next(v for lim, v in BTA_BANDS if m <= lim)
     spread = max(t) - min(t) if len(t) >= 2 else None
     ev = ('STABLE' if len(t) >= 3 and spread is not None and spread <= 6 else
           'CONDITIONAL' if len(t) >= 2 else 'PROVISIONAL')       # v2.7 BAN-BRES: 1回成功≠Stable
@@ -114,7 +123,7 @@ def mpa(past):
     if not g:
         return None
     m = mean(g)
-    return 5.0 if m >= 5 else 3.0 if m >= 3 else 1.5 if m >= 1 else -2.0 if m < 0 else 0.0
+    return MPA_BACK if m < 0 else next(v for lim, v in MPA_BANDS if m >= lim)
 
 
 def brs(past):
@@ -126,7 +135,7 @@ def brs(past):
     if not g:
         return None
     m = mean(g)
-    return 4.0 if m >= 2 else 2.0 if m >= 1 else 0.0 if m >= 0 else -2.0
+    return BRS_BACK if m < 0 else next(v for lim, v in BRS_BANDS if m >= lim)
 
 
 # ---------------------------------------------------------------- weight (spec 3-2, no double count)
@@ -252,11 +261,12 @@ def _rank(rows, race):
         if TRACKFIT_W:                                           # shadow only (production None)
             t += TRACKFIT_W.get(r.get('track_fit_grade'), 0.0)
         r['tpi_eff'] = t
-        r['win_score'] = round(t + (r['brs'] or 0) * 0.5 + (r['bta'] or 0) * 0.5 - (2.0 if r['bta_evidence'] == 'UNCONFIRMED' else 0), 2)
-        stab = {'VERY_STABLE': 4, 'STABLE': 2, 'STANDARD': 0, 'UNSTABLE': -2, 'UNKNOWN': 0}[r['isv_label']]
-        r['place_score'] = round(t + stab + r['lis'] + (2 if r['bta_evidence'] == 'STABLE' else 0), 2)
-        longshot = (r['pop'] or 0) >= 7
-        r['hole_score'] = round(r['place_score'] + (3 if longshot else 0) + r['lis'], 2)
+        r['win_score'] = round(t + (r['brs'] or 0) * SCORE['win_brs'] + (r['bta'] or 0) * SCORE['win_bta']
+                               - (SCORE['unconfirmed_pen'] if r['bta_evidence'] == 'UNCONFIRMED' else 0), 2)
+        stab = SCORE['isv'][r['isv_label']]
+        r['place_score'] = round(t + stab + r['lis'] + (SCORE['place_stable'] if r['bta_evidence'] == 'STABLE' else 0), 2)
+        longshot = (r['pop'] or 0) >= SCORE['longshot_pop']
+        r['hole_score'] = round(r['place_score'] + (SCORE['hole_longshot'] if longshot else 0) + r['lis'], 2)
     for key, name in (('win_score', 'win_rank'), ('place_score', 'place_rank'), ('hole_score', 'hole_rank')):
         for i, r in enumerate(sorted(rows, key=lambda x: -x[key])):
             r[name] = i + 1

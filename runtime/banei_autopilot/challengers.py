@@ -1,4 +1,5 @@
-"""影の候補式（Shadow challengers）— Owner 2026-11-21 20:24 承認「仮説→比較→未知のレースで検証→採用」。
+"""影の候補式（Shadow challengers）— Owner 2026-11-21 20:24 承認「仮説→比較→未知のレースで検証→採用」、
+22:43 承認「条件を満たせば自動昇格（悪化したら自動で戻す）」→ registry.py が登録・昇格・引退・新候補の生成を行う。
 
 本番の予想（BASE）と同じ入力・同じ時刻で、事前登録した候補式でも予想して保存する（買わない・配信しない）。
 結果確定後に review.py が、同じ物差しで BASE と比べる。採用は R30/R100 の節目で Owner が判断し、
@@ -60,25 +61,43 @@ def _summary(ev, tk):
             'trio': tk['trio'], 'exact': tk['exact'], 'points': tk['points'], 'shape': tk.get('shape')}
 
 
-def run_all(race, rebuild):
-    """race: the production race dict (horses already built). rebuild(cuts) -> horses rebuilt with other
-    derive.CUTS (only for candidates that change a cut). Returns {candidate: summary}; never raises."""
+def config_of(c):
+    """候補の設定（コードの既定値からの差分）: patch=engine, tpatch=tickets, cuts=derive.CUTS, nopos=丸数字を使わない."""
+    return {k: c[k] for k in ('patch', 'tpatch', 'cuts', 'nopos') if c.get(k)}
+
+
+@contextlib.contextmanager
+def applied(cfg):
+    """Apply a full config (engine / tickets / derive.CUTS / nopos) for the duration of the block."""
+    cfg = cfg or {}
+    mods = dict(cfg.get('patch') or {})
+    if cfg.get('nopos'):
+        mods.update(mpa=lambda past: None, brs=lambda past: None)
+    with _patched(engine, mods), _patched(tickets, cfg.get('tpatch') or {}), \
+            _patched(derive, {'CUTS': dict(derive.CUTS, **(cfg.get('cuts') or {}))}):
+        yield
+
+
+def run_all(race, rebuild, candidates=None, production=None):
+    """race: the production race dict (horses built under the production config). rebuild() -> horses rebuilt
+    under the currently applied derive.CUTS. candidates: {id: entry with config}; default PREREG. Returns
+    {candidate: summary}; never raises."""
+    cands = candidates if candidates is not None else PREREG['candidates']
+    prod_cuts = (production or {}).get('cuts') or {}
     out = {}
-    for cid, c in PREREG['candidates'].items():
-        if c['status'] == 'REJECTED':
+    for cid, c in cands.items():
+        if c.get('status') in ('REJECTED', 'RETIRED'):
             continue
+        cfg = c.get('config') if 'config' in c else config_of(c)
+        if cid == 'BASE':
+            cfg = production or {}
         try:
             rc = dict(race, horses=copy.deepcopy(race['horses']))
-            if c.get('cuts'):
-                with _patched(derive, {'CUTS': dict(derive.CUTS, **c['cuts'])}):
+            with applied(cfg):
+                if (cfg.get('cuts') or {}) != prod_cuts:
                     rc['horses'] = rebuild()
                     rc['pace'] = derive.race_pace(rc['horses'])
-            mods = {}
-            if c.get('nopos'):
-                mods.update(mpa=lambda past: None, brs=lambda past: None)
-            with _patched(engine, dict(c.get('patch') or {}, **mods)):
                 ev = engine.evaluate(rc)
-            with _patched(tickets, c.get('tpatch') or {}):
                 out[cid] = _summary(ev, tickets.compile_race(ev))
         except Exception as e:                                   # a challenger never stops production
             out[cid] = {'error': f'{type(e).__name__}:{str(e)[:120]}'}

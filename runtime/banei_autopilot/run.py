@@ -113,14 +113,23 @@ def predict(reader, q, key, out, hist, rev=1):
     hist.get('')                                           # LazyHist: load the NAR ledger before the jockey table
     if id(hist) not in _SKILLED:
         _SKILLED[id(hist)] = derive.jockey_stats(hist)[1]
-    horses = source.build_horses(card, moisture, q['day'], hist, feeds, r['no'], race_name=name, skilled=_SKILLED[id(hist)])
-    race = {'moisture': moisture, 'special': any(k in name for k in ('特別', '賞', '杯', '記念')) and 'Ｃ' not in name,
-            'young': '2歳' in name or '２歳' in name, 'horses': horses, 'pace': derive.race_pace(horses)}
-    ev = engine.evaluate(race)
-    tk = tickets.compile_race(ev)
     import challengers
-    shadow = challengers.run_all(race, lambda: source.build_horses(
-        card, moisture, q['day'], hist, feeds, r['no'], race_name=name, skilled=derive.jockey_stats(hist)[1]))
+    import registry
+    reg = registry.load(out.parent)                              # 本番の設定（自動昇格で更新される）と影の候補
+    prod_cfg = reg['production'].get('config') or {}
+
+    def rebuild():
+        return source.build_horses(card, moisture, q['day'], hist, feeds, r['no'], race_name=name,
+                                   skilled=derive.jockey_stats(hist)[1])
+    with challengers.applied(prod_cfg):
+        horses = (source.build_horses(card, moisture, q['day'], hist, feeds, r['no'], race_name=name,
+                                      skilled=_SKILLED[id(hist)]) if not prod_cfg.get('cuts') else rebuild())
+        race = {'moisture': moisture, 'special': any(k in name for k in ('特別', '賞', '杯', '記念')) and 'Ｃ' not in name,
+                'young': '2歳' in name or '２歳' in name, 'horses': horses, 'pace': derive.race_pace(horses)}
+        ev = engine.evaluate(race)
+        tk = tickets.compile_race(ev)
+    ev['ruleset_version'] = reg['production']['version']
+    shadow = challengers.run_all(race, rebuild, reg['candidates'], prod_cfg)
     feeds_present = [k for k, v in feeds.items() if v]
     if not feeds['kintaro'].get(str(r['no'])):                 # barrier evidence missing -> not FORMAL (spec 5-3)
         tk['formality'] = 'REFERENCE-RENDERED'
@@ -369,6 +378,12 @@ def tick(day, out, reader, hist):
             if fin and not q.get('review_done'):
                 q['review_done'] = now_jst().isoformat()
                 log(out, 'REVIEW_DONE', 'daily_summary.md')
+                try:                                             # 改善の仕組み: 昇格・戻す・引退・新候補
+                    import registry
+                    ev_ = registry.step(out.parent, log=lambda *a: log(out, *a))
+                    q['improve'] = [list(e[:2]) for e in ev_]
+                except Exception as e:
+                    log(out, 'IMPROVE_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
         except Exception as e:                                   # the review never stops the day
             log(out, 'REVIEW_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
         dump(qp, q)
