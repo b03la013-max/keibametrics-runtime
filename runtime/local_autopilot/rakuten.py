@@ -257,11 +257,32 @@ def parse_start(td):
     return out
 
 
+
+def parse_jockey_changes(card_html):
+    """Read explicitly announced rider changes from this card's own header.
+
+    Only a same-page horse-numbered `騎手変更 old→new` notice is authoritative
+    for this PAPER parser. Never infer a rider from past-performance rows,
+    request another provider, or silently fill an unannounced missing rider.
+    """
+    prefix = card_html.split('<tbody class="raceCard">', 1)[0]
+    notices = {}
+    for match in re.finditer(
+        r'(?<!\d)(\d{1,2})番\s*騎手変更\s*([^\s→]+)\s*→\s*([^\s→]+)',
+        text(prefix),
+    ):
+        horse_no = int(match.group(1))
+        if 1 <= horse_no <= 18:
+            notices[horse_no] = (match.group(2), match.group(3))
+    return notices
+
+
 def parse_card(card_html):
     i = card_html.find('<tbody class="raceCard">')
     body = card_html[i:card_html.find('</tbody>', i)]
     blocks = re.split(r'<tr class="box\d+(?=[ "])', body)[1:]
     runners, excluded = [], []
+    jockey_changes = parse_jockey_changes(card_html)
     frame = None
     last_no = 0
     for blk in blocks:
@@ -311,6 +332,12 @@ def parse_card(card_html):
                'current_body_weight': cur_bw, 'current_body_weight_change': chg,
                'starts': [s for s in (parse_start(td) for td in starts) if s],
                'status': 'CANCELLED' if cancelled else 'ACTIVE_DECLARED'}
+        # Changed riders may be plain text instead of JOCKEYID anchors.
+        # Restore only the explicit current rider of this numbered horse.
+        if not cancelled and horse_no in jockey_changes:
+            before, after = jockey_changes[horse_no]
+            row['current_jockey'] = nfkc(after)
+            row['jockey_change_from'] = nfkc(before)
         (excluded if cancelled else runners).append(row)
     return runners, excluded
 
