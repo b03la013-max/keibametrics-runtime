@@ -8,7 +8,8 @@ Owner policy: 三連複 + 三連単, every race, cap 30 unique points (3,000円)
 """
 from itertools import combinations, permutations
 
-CAP_TOTAL = 30                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
+CAP_TOTAL = 30
+FORCE_TRIO_AXIS = None          # production None; challengers AXIS2 sets 2 (◎○2頭軸＋◎抜き○ライン)                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
 UNIT = 100
 
 
@@ -35,6 +36,8 @@ def compile_race(ev):
     hole = [r['no'] for r in sorted(ev['rows'], key=lambda r: r['hole_rank'])]
     honmei = ev['honmei']
     label, tshape, eshape = shape(ev['asi'], ev['aki'])
+    if FORCE_TRIO_AXIS and tshape and tshape[0] < FORCE_TRIO_AXIS:     # shadow only (production None)
+        tshape = (FORCE_TRIO_AXIS,) + tuple(tshape[1:])
 
     # 1-5: role-valid universe (all legal cells) and its frozen terminal ledger
     W = [n for n in win if rows[n]['role_w']]

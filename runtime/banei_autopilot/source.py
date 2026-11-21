@@ -222,6 +222,10 @@ def nar_history(nar_dir):
             rc = races.get((row['競走年月日'], row['レース番号']))
             if not rc:
                 continue
+            # 取消・除外・競走中止・競走取止めは着順もタイムも空: 0秒として指数にしない（11/21 ChatGPT反省 P0-3）
+            fin_raw = (row.get('着順') or '').strip()
+            if not re.sub(r'[^\d]', '', fin_raw) or not re.sub(r'[^\d1-9]', '', row.get('タイム') or ''):
+                continue
             t = (row.get('タイム') or '').zfill(4)
             try:
                 sec = int(t[:-3]) * 60 + int(t[-3:]) / 10

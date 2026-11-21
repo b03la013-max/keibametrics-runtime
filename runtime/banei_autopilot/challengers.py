@@ -29,6 +29,8 @@ PREREG = {
                      'cuts': {'pace_H_front_min': 3, 'jockey_top_share': 0.15}, 'status': 'SHADOW'},
         'MKT30':    {'what': '人気を順位に30%混ぜる', 'patch': {'MARKET_W': 0.3}, 'status': 'SHADOW'},
         'MKT50':    {'what': '人気を順位に50%混ぜる', 'patch': {'MARKET_W': 0.5}, 'status': 'SHADOW'},
+        'AXIS2':    {'what': '三連複を◎○2頭軸＋◎抜き○ライン（同じ30点上限）。本命1頭集中の代替構成',
+                     'tpatch': {'FORCE_TRIO_AXIS': 2}, 'status': 'SHADOW', 'registered': '2026-11-21T22:20+09:00'},
     },
 }
 
@@ -71,7 +73,8 @@ def run_all(race, rebuild):
                 mods.update(mpa=lambda past: None, brs=lambda past: None)
             with _patched(engine, dict(c.get('patch') or {}, **mods)):
                 ev = engine.evaluate(rc)
-            out[cid] = _summary(ev, tickets.compile_race(ev))
+            with _patched(tickets, c.get('tpatch') or {}):
+                out[cid] = _summary(ev, tickets.compile_race(ev))
         except Exception as e:                                   # a challenger never stops production
             out[cid] = {'error': f'{type(e).__name__}:{str(e)[:120]}'}
     return out
