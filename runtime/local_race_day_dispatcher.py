@@ -835,6 +835,13 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
         return report
     contexts = []
     for venue in meeting['venues']:
+        if venue == 'KAW':
+            report['venues'][venue] = {
+                'status': 'HOLD_PRIVATE_NANKAN_DISCOVERY_REQUIRED',
+                'first_stop_stage': 'OFFICIAL_RACE_DISCOVERY',
+                'formal_registration_proven': False,
+            }
+            continue
         name = day+'-'+venue
         plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
         approval_path = root/'profiles/local_autonomous_approvals'/(name+'.json')
@@ -961,6 +968,13 @@ def main():
         # HOLD must nevertheless alert the caller after preserving its evidence.
         return int(not report['target_races_complete'] or any(
             v.get('status','').startswith('HOLD') for v in report['venues'].values()))
+    if args.venue == 'KAW':
+        print(json.dumps({
+            'status': 'HOLD_PRIVATE_NANKAN_DISCOVERY_REQUIRED',
+            'first_stop_stage': 'OFFICIAL_RACE_DISCOVERY',
+            'dispatch_count': 0,
+        }))
+        return 2
     name = args.date+'-'+args.venue
     folder = root/'runtime/local_race_day_plan'
     plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')

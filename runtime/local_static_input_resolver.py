@@ -19,7 +19,9 @@ def resolve(request, source, *, root=None):
     eid = request['execution_id']
     if not eid or Path(eid).name != eid or eid in {'.', '..'} or '\\' in eid:
         raise ValueError('STATIC_INPUT_EXECUTION_ID_INVALID')
-    path = root/'runtime/formal_intents'/f'{eid}.json'
+    path = o.formal_intent_path(eid, repo_root=root)
+    if o.PRIVATE_CHECKPOINT.get() is not None:
+        root = o.PRIVATE_CHECKPOINT.get().root
     if request.get('static_prediction'):
         candidate, mode, location = copy.deepcopy(request), 'EXPLICIT_FROZEN_STATIC', None
     elif path.is_file():

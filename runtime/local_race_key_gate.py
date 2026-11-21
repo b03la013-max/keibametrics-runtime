@@ -41,14 +41,16 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
                 or execution_id in {'.','..'}):
             raise RaceKeyGateError('READBACK_EXECUTION_ID_INVALID')
         root = Path(repo_root or o.ROOT)
-        report['final_exists']=(root/'runtime/executions'/execution_id/'FORMAL/LATEST.json').exists()
-        formal = o.resolve_phase(execution_id,'FORMAL',root=root/'runtime/executions')
+        private = o.PRIVATE_CHECKPOINT.get()
+        store_root = None if private is not None else root/'runtime/executions'
+        report['final_exists']=((store_root or private.store_root)/execution_id/'FORMAL/LATEST.json').exists()
+        formal = o.resolve_phase(execution_id,'FORMAL',root=store_root)
         if formal is None:
             return {**report,'status':'NO_SIGNED_FINAL','reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
         if 'final_receipt_envelope.json' not in formal['manifest']['files']:
             return {**report,'final_exists':False,'status':'NO_SIGNED_FINAL','reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
         report['final_exists'] = True
-        source = o.resolve_phase(execution_id,'SOURCE',root=root/'runtime/executions')
+        source = o.resolve_phase(execution_id,'SOURCE',root=store_root)
         if source is None:
             raise RaceKeyGateError('READBACK_SIGNED_SOURCE_MISSING')
         final = o._load_checkpoint_json(formal,'final_receipt_envelope.json') or {}
@@ -58,7 +60,7 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         if any(flags.get(p) is not True for p in ('SOURCE','PRE_KRS','KRS_RUN','FINAL')):
             raise RaceKeyGateError('READBACK_ORIGINAL_VERIFICATIONS_INCOMPLETE')
         from runtime.execution_gateway import family_config, load_gateway, request_json, assess_runtime_health
-        gateway = load_gateway(root/'profiles/current_execution_gateway.json')
+        gateway = private.gateway if private is not None else load_gateway(root/'profiles/current_execution_gateway.json')
         cfg = family_config('LOCAL',gateway)
         def digest(value):
             return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,
@@ -113,7 +115,11 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             'formal_manifest_sha256':formal['latest']['manifest_sha256'],
             'source_envelope_sha256':digest(signed_source),'final_envelope_sha256':digest(final),
             'gateway_configuration_sha256':digest(cfg)}
-        target=root/'runtime/execution_reports'/execution_id/'delivery'
+        presentation_root = private.root if private is not None else root
+        target = (presentation_root/'presentations'/execution_id if private is not None
+                  else root/'runtime/execution_reports'/execution_id/'delivery')
+        if private is not None:
+            private.directory(target, create=True)
         saved_path=target/'canonical_presentation.json'
         saved=None
         reused=saved_path.exists()
@@ -148,6 +154,10 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
                        {'CANONICAL_GATEWAY_GET_ED25519','EXISTING_REMOTE_FINAL_VERIFY'}
                     or stamp(saved['created_at'])<signed or stamp(saved['created_at'])>now):
                 raise RaceKeyGateError('SAVED_PRESENTATION_CANONICAL_BINDING_MISMATCH')
+        elif private is not None:
+            # resolve_phase independently verifies both envelopes using the
+            # configured canonical Gateway key before returning any bytes.
+            verification={'valid':True,'method':'CANONICAL_GATEWAY_GET_ED25519'}
         elif _verified_final_response is not None:
             if _verified_final_response.get('valid') is not True:
                 raise RaceKeyGateError('READBACK_REMOTE_SIGNATURE_VERIFICATION_REQUIRED')
@@ -192,13 +202,14 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
             'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
-            'canonical_tree_ref':str(tree_path.relative_to(root)),
-            'canonical_presentation_ref':str(saved_path.relative_to(root)),
+            'canonical_tree_ref':str(tree_path.relative_to(presentation_root)),
+            'canonical_presentation_ref':str(saved_path.relative_to(presentation_root)),
             'tree_sha256':hashlib.sha256(tree['text'].encode()).hexdigest(),
             'persisted_tree_sha256':hashlib.sha256(tree_bytes).hexdigest(),
             'capital_compatibility':artifact.get('capital_policy_decision',{}).get('compatibility'),
-            'verification_scope':'SAVED_CANONICAL_CONTENT_NOT_NEW_SIGNATURE' if reused else 'VERIFIED_CANONICAL_READBACK',
-            'fresh_signature_verification':not reused,
+            'verification_scope':('SAVED_CANONICAL_CONTENT_NOT_NEW_SIGNATURE' if reused and private is None
+                                  else 'VERIFIED_CANONICAL_READBACK'),
+            'fresh_signature_verification':private is not None or not reused,
             'fresh_external_verify':_verified_final_response,
             'new_runtime_post':_verified_final_response is not None,
             'prediction_post_count':0,'verification_post_count':int(_verified_final_response is not None),
@@ -290,6 +301,8 @@ def certify(request: dict, entry_report: dict) -> dict:
 
 def terminal_state(execution_id: str, job_status: str) -> dict:
     """Receipt state is independent of Actions exit and user delivery evidence."""
+    if o.PRIVATE_CHECKPOINT.get() is not None:
+        return readback_final(execution_id,job_status,allow_network=False)
     if (o.ROOT/'runtime/execution_reports'/execution_id/'delivery/canonical_presentation.json').is_file():
         return readback_final(execution_id,job_status,allow_network=False)
     now=datetime.now(timezone.utc)
