@@ -218,3 +218,21 @@ def test_shadow_metrics_table():
     t = {r['id']: r for r in review.shadow_table(revs)}
     assert t['BASE']['winner_top1'] == 1 and t['MKT50']['winner_top3'] == 1 and t['BASE']['pfs'] == 53.6
     assert review._shadow_md(review.shadow_table(revs)).count('|') > 20
+
+
+def test_settle_refund_reduces_effective_stake(tmp_path, monkeypatch):
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    post = datetime.fromisoformat(q['races']['01']['post'])
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=20))
+    q = run.tick(day, out, rd, {})
+    tk = json.loads((out / 'R01.json').read_text())['tickets']
+    gone = tk['trio'][0][0]
+    n_gone = sum(1 for c in tk['trio'] + tk['exact'] if gone in c)
+    monkeypatch.setattr(run.ST, 'parse_result', lambda html: {'order': [9, 8, 7], 'payouts': {'TRIO': {}}, 'non_starters': [gone]})
+    run.settle_race(rd, q, '01', out)
+    res = json.loads((out / 'R01.result.json').read_text())
+    assert res['refund'] == 100 * n_gone and res['stake'] == tk['points'] * 100 - 100 * n_gone

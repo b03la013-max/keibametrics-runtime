@@ -83,7 +83,36 @@ def race_review(out, key, r):
     if near:
         P.append({'id': 'P2:OUTSIDE_ROLE_RANK', 'level': 'P2', 'what': '役割外だった着順馬の順位', 'evidence': near})
     shadow = shadow_metrics(out, key, eff, res, rec)
-    return {'key': key, 'order': res['order'][:3], 'shadow': shadow,
+    # 変換ファネル（FNB 第227条ほか）: 勝ち馬をWに → 1-2着の組 → 三連複 → 三連単 → 収支プラス
+    w_, s_, t_ = res['order'][:3]
+    funnel = {'winner_in_W': fin['1']['in_role'],
+              'pair_in_tickets': any(len(x) == 3 and x[0] == w_ and x[1] == s_ for x in tk['exact'])
+              or any({w_, s_} <= set(x) for x in tk['trio']),
+              'trio_bought': trio_ret > 0, 'exact_bought': ex_ret > 0, 'profit': (res['return'] or 0) > (res['stake'] or 0)}
+    # 着順馬ごとの経路（Formal Post-Race Review 16〜18節の簡易版）: 役割 → 三連複に入ったか → 三連単に入ったか
+    for k, f in fin.items():
+        n_ = f['no']
+        f['in_trio_tickets'] = any(n_ in x for x in tk['trio'])
+        f['in_exact_tickets'] = any(n_ in x for x in tk['exact'])
+        f['xdi'] = bool((rows.get(str(n_)) or {}).get('xdi'))
+    # 一極集中（園田 第559-561条・exposure）: 最多出現馬の三連複占有率、その馬が3着外なら残る点数
+    cnt = {}
+    for x in tk['trio']:
+        for n_ in x:
+            cnt[n_] = cnt.get(n_, 0) + 1
+    hub = max(cnt, key=cnt.get) if cnt else None
+    hub_share = round(cnt[hub] / len(tk['trio']), 2) if hub else None
+    exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
+                'hub_failed': bool(hub and hub not in res['order'][:3])}
+    if (res['return'] or 0) > 0 and (res['return'] or 0) < (res['stake'] or 0):
+        P.append({'id': 'P2:HIT_BUT_LOSS', 'level': 'P2', 'what': '的中したが投資割れ（点数の広さ・低配当）',
+                  'evidence': {'stake': res['stake'], 'return': res['return'], 'points': tk['points']}})
+    xdi_miss = [f for f in fin.values() if f['xdi']]
+    if xdi_miss:
+        P.append({'id': 'P1:XDI_FINISHER', 'level': 'P1', 'what': '水分ボンバー上位3頭なのに内部下位半分だった馬が3着内',
+                  'evidence': xdi_miss})
+    return {'key': key, 'order': res['order'][:3], 'shadow': shadow, 'funnel': funnel, 'exposure': exposure,
+            'refund': res.get('refund'),
             'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
             'rev_audit': res.get('rev_audit'), 'paper': res.get('paper'), 'finishers': fin,
@@ -183,7 +212,12 @@ def summarize(revs, missed):
             'winner_in_W': sum(x['finishers']['1']['in_role'] for x in revs),
             'second_in_P2': sum(x['finishers']['2']['in_role'] for x in revs),
             'third_in_P3': sum(x['finishers']['3']['in_role'] for x in revs),
-            'ffl': dict(ffl), 'cause': dict(cause), 'p0p1': dict(p), 'rev_audit': a}
+            'ffl': dict(ffl), 'cause': dict(cause), 'p0p1': dict(p), 'rev_audit': a,
+            'funnel': {k: sum(1 for x in revs if (x.get('funnel') or {}).get(k)) for k in
+                       ('winner_in_W', 'pair_in_tickets', 'trio_bought', 'exact_bought', 'profit')},
+            'hit_but_loss': sum(1 for x in revs if 0 < x['return'] < x['stake']),
+            'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
+            'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed'))}
 
 
 def _md(title, s, revs=None):
@@ -193,6 +227,9 @@ def _md(title, s, revs=None):
          f"- 三連複 的中 {s['trio_hit']}R・PFS {s['trio_pfs']}%／三連単 的中 {s['exact_hit']}R・PFS {s['exact_pfs']}%",
          f"- ◎ 1着 {s['honmei_win']}・3着内 {s['honmei_top3']}／勝ち馬∈W {s['winner_in_W']}・2着∈P2 {s['second_in_P2']}・3着∈P3 {s['third_in_P3']}",
          f"- 最初の断線: {s['ffl']}／原因コード: {s['cause']}",
+         f"- 変換ファネル: 勝ち馬∈W {s['funnel']['winner_in_W']} → 1-2着の組 {s['funnel']['pair_in_tickets']} → 三連複 {s['funnel']['trio_bought']}"
+         f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
+         f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
     if s['rev_audit']:
         a = s['rev_audit']

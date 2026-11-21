@@ -246,18 +246,24 @@ def settle_race(reader, q, key, out):
     trio_pay = res['payouts'].get('TRIO', {})
     ex_pay = res['payouts'].get('TRIFECTA', {})
 
+    gone = set(res.get('non_starters') or [])               # 取消・除外 after the freeze: those tickets are refunded
+
     def ret(t):
         return sum(trio_pay.get(tuple(x), 0) for x in t['trio']) + sum(ex_pay.get(tuple(e), 0) for e in t['exact'])
+
+    def eff_stake(t):                                            # 返還控除後の有効投資（FNB 第178条と同じ定義）
+        return 100 * sum(1 for c in list(t['trio']) + list(t['exact']) if not (gone & set(c)))
     back = ret(tk)
-    stake = tk['points'] * 100
+    stake = eff_stake(tk)
+    refund = tk['points'] * 100 - stake
     audit = None
     if eff:                                                      # Rev1 vs Rev2 (地方版 rev_audit と同じ比較)
         t1 = json.loads((out / f'R{key}.json').read_text())['tickets']
-        audit = {'rev1_stake': t1['points'] * 100, 'rev1_return': ret(t1), 'rev2_stake': stake, 'rev2_return': back,
+        audit = {'rev1_stake': eff_stake(t1), 'rev1_return': ret(t1), 'rev2_stake': stake, 'rev2_return': back,
                  'rev1_ffl': first_failure(t1, res['order']), 'rev2_ffl': first_failure(tk, res['order'])}
     out_res = {'order': res['order'], 'payouts': {k: {'-'.join(map(str, c)): y for c, y in v.items()}
                                                    for k, v in res['payouts'].items()},
-               'stake': stake, 'return': back, 'pfs': round(100 * back / stake, 1) if stake else None,
+               'stake': stake, 'return': back, 'refund': refund, 'non_starters': sorted(gone), 'pfs': round(100 * back / stake, 1) if stake else None,
                'first_failure_layer': first_failure(tk, res['order']), 'formality': r.get('formality'),
                'effective_revision': 2 if eff else 1, 'paper': bool(r.get('paper')), 'rev_audit': audit,
                'settled_at': now_jst().isoformat()}
