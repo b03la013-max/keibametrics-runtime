@@ -14,6 +14,8 @@ from statistics import mean
 BSI_W = {'recent': 0.40, 'track': 0.35, 'avg': 0.25}          # Owner 2026-11-19: provisional
 SBO_SHARE = 0.30                                              # Owner 2026-11-18: 水分ボンバー 30% start
 MID = lambda lo, hi: (lo + hi) / 2.0                          # Owner 2026-11-19: midpoint of ranges
+PICKS_W = 0.0                                                 # production 0; shadow PICKS (キンタロー推奨ボックス)
+TRACKFIT_W = None                                             # production None; shadow TRACKFIT (軽馬場/重馬場の評価)
 MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
 RULESET = 'KM-BAN-v4.0-static-r1'
@@ -228,6 +230,7 @@ def evaluate(race):
                      'promoted': h.get('promoted'), 'win_streak': h.get('win_streak'),
                      'bwl_signals': [k for k in ('state_bad', 'comment_weak', 'consecutive_loss') if h.get(k)],
                      'track_fit_grade': h.get('track_fit_grade'), 'tm_marks': h.get('tm_marks'),
+                     'kintaro_picks': h.get('kintaro_picks'), 'demoted': h.get('demoted'), 'last_class': h.get('last_class'),
                      '_flags': {k: h.get(k) for k in ('front_ok', 'barrier_stable', 'body_stable', 'recovered',
                                                       'body_delta', 'cci_band')} | {'cci_band': h.get('cci')}})
     _rank(rows, race)
@@ -244,6 +247,10 @@ def _rank(rows, race):
     nt = _neutral(rows, 'tpi')
     for r in rows:
         t = r['tpi'] if r['tpi'] is not None else nt            # unknown -> neutral, flagged
+        if PICKS_W and r.get('kintaro_picks'):                 # shadow only (production 0)
+            t += PICKS_W * r['kintaro_picks']
+        if TRACKFIT_W:                                           # shadow only (production None)
+            t += TRACKFIT_W.get(r.get('track_fit_grade'), 0.0)
         r['tpi_eff'] = t
         r['win_score'] = round(t + (r['brs'] or 0) * 0.5 + (r['bta'] or 0) * 0.5 - (2.0 if r['bta_evidence'] == 'UNCONFIRMED' else 0), 2)
         stab = {'VERY_STABLE': 4, 'STABLE': 2, 'STANDARD': 0, 'UNSTABLE': -2, 'UNKNOWN': 0}[r['isv_label']]

@@ -74,8 +74,14 @@ def horse_inputs(r, kin, kbh, nar, skilled, today_name, band):
             jbr_hits.append('CAN_GO_FORWARD')
     # CPU-B: 昇級初戦 / 連勝中
     order = ['C3', 'C2', 'C1', 'B4', 'B3', 'B2', 'B1', 'A2', 'A1', 'OP']
-    now_c, last_c = race_class(today_name or ''), race_class(starts[0]['race_name']) if starts else 'OTHER'
+    now_c = race_class(today_name or '')
+    # 前走クラス: キンタローの近走欄（例 C2-1）→ 楽天近走のレース名 → NAR台帳 の順（楽天の近走名にはクラスが無いことが多い）
+    kc = next((p.get('race_class') for p in past if p.get('race_class')), None)
+    last_c = race_class(kc) if kc else (race_class(starts[0]['race_name']) if starts else 'OTHER')
+    if last_c == 'OTHER' and nar:
+        last_c = race_class(max(nar, key=lambda z: z['date']).get('race_name') or '')
     promoted = now_c in order and last_c in order and order.index(now_c) > order.index(last_c)
+    demoted = now_c in order and last_c in order and order.index(now_c) < order.index(last_c)
     win_streak = len(fins) >= 2 and fins[0] == 1 and fins[1] == 1
     # BWL-B 状態悪化根拠 (4-16 手順4): 連続減 / 弱気コメント / 連敗
     bws = [s.get('body_weight') for s in starts[:2]]
@@ -91,7 +97,8 @@ def horse_inputs(r, kin, kbh, nar, skilled, today_name, band):
     fit = g.get('heavy') if band == 'DRY' else g.get('light') if band == 'WET' else None
     return {'front_type': bool(front_type), 'fades_after_barrier': bool(fades),
             'jbr_hits': jbr_hits, 'jockey_barrier': bool(jbr_hits),
-            'promoted': promoted, 'win_streak': win_streak,
+            'promoted': promoted, 'demoted': demoted, 'last_class': last_c, 'win_streak': win_streak,
+            'kintaro_picks': kin.get('picks'), 'kintaro_comment': kin.get('comment'),
             'state_bad': cont_drop, 'consecutive_loss': consecutive_loss,
             'comment_weak': kbh.get('cci') == 'CAUTION' if kbh.get('cci') else None,
             'recovered': recovered, 'track_fit_grade': fit,

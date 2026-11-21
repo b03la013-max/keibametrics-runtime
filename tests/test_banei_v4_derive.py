@@ -44,3 +44,12 @@ def test_pace_and_adf_dry_premise():
 def test_bwl_pct_neutral():
     h = {'body_weight': 1000, 'body_delta': 5, 'body_delta_pct': 0.5, 'good_bw_range': (900, 950)}
     assert engine.bwl(h) == (0.0, 'NEUTRAL_PCT')
+
+
+def test_promoted_from_kintaro_class_and_picks_comment_pass_through():
+    kin = {'grades': {}, 'past': [{'date': '11/14', 'race_class': 'C2-1'}], 'picks': 2, 'comment': '障害修正できれば'}
+    f = derive.horse_inputs(_r(starts=[]), kin, {}, [], set(), 'C1-3', 'WET')
+    assert f['promoted'] and not f['demoted'] and f['last_class'] == 'C2'
+    assert f['kintaro_picks'] == 2 and f['kintaro_comment'] == '障害修正できれば'
+    f = derive.horse_inputs(_r(starts=[]), dict(kin, past=[{'date': '11/14', 'race_class': 'C1-4'}]), {}, [], set(), 'C2-1', 'WET')
+    assert f['demoted'] and not f['promoted']

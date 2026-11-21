@@ -70,17 +70,41 @@ def parse(path):
             fin = next((int(w['text']) for w in cell if w['size'] >= 11 and w['text'].isdigit()), None)
             circ = [CIRCLED.get(ch) for w in sorted(cell, key=lambda w: w['x0']) for ch in w['text'] if ch in CIRCLED]
             note = next((w['text'] for w in cell if abs(w['size'] - 4.9) < 0.3), None)
+            cls = sorted([(abs(w['x0'] - d['x0']), m.group(0)) for w in band if d['x0'] - 16 <= w['x0'] <= d['x0'] + 20
+                          for m in [re.search(r'[A-D][1-4]?-\d+|OP|オープン', w['text'])] if m])
+            rc = cls[0][1] if cls else None                    # クラス（例 C2-1）: 日付の真下・左寄り
             segs = [int(w['text']) for w in seg[:3]]
             past.append({'date': d['text'], 'moisture': moist, 'load': load, 'time': tm, 'finish': fin,
                          'segments_sec': segs, 'barrier_sec': segs[1] if len(segs) == 3 else None,
-                         'circled_raw': circ, 'note': note,
+                         'circled_raw': circ, 'note': note, 'race_class': rc,
                          'pos_first': circ[0] if len(circ) >= 2 else None,
                          'pos_barrier': circ[1] if len(circ) >= 2 else None,
                          'pos_finish': fin, 'pos_map': 'PROVISIONAL',
                          'seg_to_barrier': segs[2] if len(segs) == 3 else None,
                          'seg_after_barrier': segs[0] if len(segs) == 3 else None})
         g = {k: _grade(band, top, x) for k, x in GRADE_X}
-        out[str(no)] = {'past': past, 'grades': g,
+        # キンタロー短評（各馬の右欄・7.2pt）: CCI-B の材料（spec 3-2: 競馬ブック＋キンタローの短評）
+        com = ''.join(w['text'] for w in sorted([w for w in band if 590 <= w['x0'] < 720 and abs(w['size'] - 7.2) < 0.4],
+                                                key=lambda w: (round(w['top']), w['x0'])))
+        out[str(no)] = {'past': past, 'grades': g, 'comment': com or None,
                         'front_ok': g['front'] in ('A', 'B') if g['front'] else None,
                         'barrier_stable': g['barrier'] in ('A', 'B') if g['barrier'] else None}
+    # レース短評（上部・8.2pt「⑧は…」）を該当馬の短評に足す
+    head = ''.join(w['text'] for w in sorted([w for w in W if w['top'] < 60 and 420 <= w['x0'] < 720
+                                               and abs(w['size'] - 8.2) < 0.4], key=lambda w: (round(w['top']), w['x0'])))
+    for ch, n in CIRCLED.items():
+        if head.startswith(ch + 'は') and str(n) in out:
+            out[str(n)]['comment'] = ((out[str(n)].get('comment') or '') + ' ' + head).strip()
+    # 推奨ボックス馬券（COM・記者2名）: 各ボックスの馬番（新聞の推奨＝外部の見立て。証拠と影の候補式で使う）
+    labels = [w for w in W if 720 <= w['x0'] < 752 and w['top'] < 160 and re.fullmatch(r'COM|\S{2}', w['text'])
+              and not re.fullmatch(r'\d+|[A-E]', w['text'])]
+    picks = {}
+    for lb in labels:
+        nums = [int(w['text']) for w in W if 752 <= w['x0'] < 830 and abs(w['top'] - lb['top']) < 4
+                and re.fullmatch(r'\d{1,2}', w['text'])]
+        if nums:
+            picks[lb['text']] = nums
+    for k, v in out.items():
+        v['pick_boxes'] = [lb for lb, nums in picks.items() if int(k) in nums]
+        v['picks'] = len(v['pick_boxes'])
     return out
