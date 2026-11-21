@@ -282,3 +282,17 @@ def test_kintaro_comment_picks_class_if_sample():
     assert len({b for v in horses.values() for b in v['pick_boxes']}) >= 2 and all(isinstance(v['picks'], int) for v in horses.values())
     assert sum(1 for v in horses.values() if v.get('comment')) >= len(horses) - 1
     assert sum(1 for v in horses.values() for q in v['past'] if q.get('race_class')) >= len(horses) * 3
+
+
+def test_parse_odds_rank_trio_and_trifecta():
+    trio = ('<tbody class="rank"><tr class=""> <td>1</td> <td>8-9-10</td> <td class=""><span class="hot">9.0</span></td> </tr>'
+            '<tr class="even"> <td>2</td> <td>4-9-10</td> <td class=""><span class="">1,211.2</span></td> </tr></tbody>')
+    ex = '<tbody class="rank"><tr> <td>1</td> <td>9→10→8</td> <td class=""><span class="">31.7</span></td> </tr></tbody>'
+    assert source.parse_odds_rank(trio, False) == {(8, 9, 10): 9.0, (4, 9, 10): 1211.2}
+    assert source.parse_odds_rank(ex, True) == {(9, 10, 8): 31.7}
+
+
+def test_official_comment_feeds_cci():
+    feed = {'11': {'3': {'trainer': '好調をキープ、チャンスはある', 'jockey': '上位争いしたい'}}}
+    assert source.official_comment_band(feed, 11, 3).startswith('好調')
+    assert source.cci_band(None, None, None, None, source.official_comment_band(feed, 11, 3)) in ('STRONG', 'VERY_STRONG')

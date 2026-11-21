@@ -88,7 +88,7 @@ def predict(reader, q, key, out, hist, rev=1):
     card = source.parse_card_ban(html)
     hdr = RK.parse_header(html)
     moisture = source.moisture_from_header(html)
-    feeds = {k: source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], k) for k in ('kintaro', 'sbo', 'keibabook')}
+    feeds = {k: source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], k) for k in ('kintaro', 'sbo', 'keibabook', 'official')}
     sbo_meta = None
     try:                                                  # 水分ボンバー: 3 indices + 当日馬場水分 for every race
         import sbo as SBOMOD
@@ -198,6 +198,27 @@ def check10(reader, q, key, out, hist):
         rec['decision'] = f'KEEP_REVISION_1 (CHECK_FAILED:{type(e).__name__}:{str(e)[:100]})'
     rec['finished_at'] = now_jst().isoformat()
     log(out, 'CHECK10', key, rec['decision'], rec.get('reasons'))
+    fetch_odds(reader, q, key, out)
+
+
+def fetch_odds(reader, q, key, out):
+    """発走10分前の見直しの後（配信の後）に、三連複・三連単の組合せ別オッズを取得して保存する（証拠：安すぎる買い目の検知、
+    反省会の投資割れ分析）。本番の券面は変えない。"""
+    r = q['races'][key]
+    if r.get('odds_at'):
+        return
+    try:
+        res = {}
+        for kind, ordered in (('sanrenfuku', False), ('sanrentan', True)):
+            html = reader.client.get(f"/odds/{kind}/RACEID/{r['rid']}")
+            res[kind] = {'-'.join(map(str, c)): o for c, o in source.parse_odds_rank(html, ordered).items()}
+        dump(out / f'R{key}.odds.json', {'fetched_at': now_jst().isoformat(), 'post': r['post'], **res})
+        r['odds_at'] = now_jst().isoformat()
+        log(out, 'ODDS', key, len(res['sanrenfuku']), len(res['sanrentan']))
+    except RK.SourceStop:
+        raise
+    except Exception as e:
+        log(out, 'ODDS_FAIL', key, f'{type(e).__name__}:{str(e)[:120]}')
 
 
 def deliver(q, key, out, rev=1, reasons=None):
