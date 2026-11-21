@@ -98,12 +98,18 @@ def test_orchestrator_does_not_truncate_or_delete_before_rejection(tmp_path):
     assert [(p.name, p.read_text()) for p in destination.iterdir()] == [('keep.json', 'original')]
 
 
-def test_legacy_runner_persist_rejects_before_open(tmp_path):
+def test_legacy_runner_persist_rejects_before_open(tmp_path, monkeypatch):
     # Loading this legacy script would execute a live workflow. Extract only
     # its real persistence function, without running the entrypoint.
     tree = ast.parse((ROOT / 'runtime/non_jra_formal_runner.py').read_text())
     persist = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'persist')
-    namespace = {'json': json, 'os': __import__('os')}
+    monkeypatch.syspath_prepend(str(ROOT / 'runtime'))
+    namespace = {
+        'json': json,
+        'os': __import__('os'),
+        'private_checkpoint': None,
+        'RUNTIME_OUT': str(tmp_path),
+    }
     exec(compile(ast.Module(body=[persist], type_ignores=[]), '<actual-runner-persist>', 'exec'), namespace)
     target = tmp_path / 'output.json'
     with pytest.raises(ValueError, match="PRIVATE_SOURCE"):

@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_ROOT = REPO_ROOT / "runtime" / "executions"
+PRIVATE_MARKER = ".km-private-checkpoints"
 
 
 class ExecutionStoreError(ValueError):
@@ -92,13 +93,22 @@ def require_public_json_files(files) -> None:
         path = pathlib.Path(path)
         if path.is_symlink():
             raise ExecutionStoreError("PUBLIC_STORAGE_SYMLINK_FORBIDDEN")
+        if _private_boundary(path):
+            raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
         require_public_storage(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _private_boundary(path):
+    path = pathlib.Path(path).resolve()
+    return any((parent / PRIVATE_MARKER).exists() for parent in (path, *path.parents))
 
 
 def require_public_artifact_paths(paths, *, json_only=False) -> int:
     files = []
     for value in paths:
         path = pathlib.Path(value)
+        if _private_boundary(path):
+            raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
         if path.is_symlink():
             raise ExecutionStoreError("PUBLIC_STORAGE_SYMLINK_FORBIDDEN")
         if not path.exists():
@@ -118,6 +128,60 @@ def require_public_artifact_paths(paths, *, json_only=False) -> int:
             files.extend(p for p in descendants if p.is_file() and p.suffix == ".json")
     require_public_json_files(files)
     return len(files)
+
+
+def build_local_result_payload(req, fin):
+    """Build the canonical settlement from the frozen LOCAL ticket list."""
+    tickets = ((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
+    finish_order = [int(number) for number in req["finish_order"]]
+    top3 = finish_order[:3]
+    payouts = {str(kind).upper(): int(value) for kind, value in (req.get("payouts") or {}).items()}
+    total_investment = sum(int(ticket.get("stake") or 0) for ticket in tickets)
+    total_return = 0
+    winning = []
+    by_type = {}
+    for ticket in tickets:
+        kind = str(ticket.get("bet_type") or "").upper()
+        selection = [int(number) for number in (ticket.get("selection") or [])]
+        stake = int(ticket.get("stake") or 0)
+        summary = by_type.setdefault(kind, {"investment": 0, "return": 0, "wins": []})
+        summary["investment"] += stake
+        hit = ((kind == "EXACTA" and selection == top3[:2])
+               or (kind == "TRIO" and set(selection) == set(top3))
+               or (kind == "TRIFECTA" and selection == top3))
+        if not hit:
+            continue
+        if payouts.get(kind, 0) <= 0:
+            raise ExecutionStoreError("RESULT_WINNING_PAYOUT_NOT_READY:" + kind)
+        ticket_return = stake * payouts[kind] // 100
+        total_return += ticket_return
+        summary["return"] += ticket_return
+        win = {"bet_type": kind, "selection": selection, "stake": stake,
+               "payout_per_100": payouts[kind], "return": ticket_return}
+        winning.append(win)
+        summary["wins"].append(win)
+
+    result_payload = {
+        "family_id": "LOCAL",
+        "race_id": req["race_id"],
+        "final_receipt": fin,
+        "official_result": {
+            "finish_order": finish_order,
+            "result_available_at": req["result_available_at"],
+            "source": req.get("source") or "USER_SUPPLIED_RESULT",
+            "payouts": payouts,
+        },
+        "result_available_at": req["result_available_at"],
+        "settlement": {
+            "status": "COMPLETE",
+            "investment": total_investment,
+            "settled_investment": total_investment,
+            "return": total_return,
+            "winning_tickets": winning,
+        },
+        "pfs_authority": req.get("pfs_authority") or "FROZEN-RECOMMENDATION",
+    }
+    return result_payload, by_type
 
 
 def verify_result_reuse(envelope, final, expected_payload, verification):
@@ -185,19 +249,26 @@ def persist_phase(
     if not files:
         raise ExecutionStoreError("EXECUTION_STORE_NO_JSON_FILES")
     require_public_json_files(files)
+    if _private_boundary(root or DEFAULT_ROOT):
+        raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
 
+    return _persist_files(execution_id, phase, run_id, files, root or DEFAULT_ROOT, github_sha)
+
+
+def _persist_files(execution_id, phase, run_id, files, root, github_sha, *, private=False):
     proot = phase_root(execution_id, phase, root)
     run_key = _safe(str(run_id))
     runs = proot / "runs"
     runs.mkdir(parents=True, exist_ok=True)
-    # Serialize pointer publication; a successful run is never overwritten.
     with (proot / ".write.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         return _persist_locked(execution_id, phase, run_key, files, proot, runs,
-                               root or DEFAULT_ROOT, github_sha)
+                               root, github_sha, private=private)
 
 
-def _persist_locked(execution_id, phase, run_key, files, proot, runs, root, github_sha):
+def _persist_locked(execution_id, phase, run_key, files, proot, runs, root, github_sha, *, private=False):
+    if private:
+        _check_private_revision(proot, runs, run_key)
     dest = runs / run_key
     if dest.exists():
         try:
@@ -212,6 +283,9 @@ def _persist_locked(execution_id, phase, run_key, files, proot, runs, root, gith
                 raise ExecutionStoreError("EXECUTION_STORE_IMMUTABLE_RUN_CONFLICT")
             latest = resolve_phase(execution_id, phase, root=root)
             if latest is None:
+                if private and manifest.get("storage_scope") == "PRIVATE":
+                    recovered = _publish_pointer(proot, dest, root, manifest)
+                    return {"manifest": manifest, "latest": recovered, "path": str(dest)}
                 raise ExecutionStoreError("EXECUTION_STORE_POINTER_MISSING_FOR_EXISTING_RUN")
             # A retry of an older run must not roll LATEST backwards.
             return {"manifest": manifest, "latest": latest["latest"], "path": str(dest)}
@@ -222,17 +296,29 @@ def _persist_locked(execution_id, phase, run_key, files, proot, runs, root, gith
 
     staging = pathlib.Path(tempfile.mkdtemp(prefix=".pending-", dir=runs))
     try:
-        return _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha)
+        return _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha, private=private)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha):
+def _check_private_revision(proot, runs, run_key):
+    # One canonical revision per execution/phase. A crashed same-run retry
+    # can finish publishing its pointer, but cannot replace verified bytes.
+    if any(p.name != run_key and not p.name.startswith(".pending-") for p in runs.iterdir()):
+        raise ExecutionStoreError("PRIVATE_CHECKPOINT_IMMUTABLE_REVISION_CONFLICT")
+    latest_path = proot / "LATEST.json"
+    if latest_path.exists() and json.loads(latest_path.read_text())["run_id"] != run_key:
+        raise ExecutionStoreError("PRIVATE_CHECKPOINT_IMMUTABLE_REVISION_CONFLICT")
+
+
+def _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha, *, private=False):
 
     inventory = {}
     for p in files:
         target = staging / p.name
         shutil.copy2(p, target)
+        if private:
+            target.chmod(0o600)
         inventory[p.name] = {"sha256": _sha256(target), "bytes": target.stat().st_size}
 
     manifest = {
@@ -244,6 +330,8 @@ def _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root
         "stored_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "files": inventory,
     }
+    if private:
+        manifest["storage_scope"] = "PRIVATE"
     manifest_path = staging / "manifest.json"
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
@@ -255,26 +343,52 @@ def _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root
         encoding="utf-8",
     )
 
+    if private:
+        manifest_path.chmod(0o600)
+        for path in staging.iterdir():
+            with path.open("rb") as fh:
+                os.fsync(fh.fileno())
+        _sync_directory(staging)
+    # Publish complete bytes before atomically changing the pointer.
+    os.rename(staging, dest)
+    if private:
+        _sync_directory(dest.parent)
+    latest = _publish_pointer(proot, dest, root, manifest)
+    return {"manifest": manifest, "latest": latest, "path": str(dest)}
+
+
+def _publish_pointer(proot, dest, root, manifest):
     latest = {
         "schema": "KM-EXECUTION-STORE-POINTER-v1",
         "execution_id": manifest["execution_id"],
         "phase": manifest["phase"],
-        "run_id": run_key,
+        "run_id": manifest["run_id"],
         "run_path": str(dest.relative_to(root)),
-        "manifest_sha256": _sha256(manifest_path),
+        "manifest_sha256": _sha256(dest / "manifest.json"),
         "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
-    # Publish complete bytes before atomically changing the pointer.
-    os.rename(staging, dest)
     fd, pointer = tempfile.mkstemp(prefix=".LATEST-", dir=proot)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(latest, fh, ensure_ascii=False, sort_keys=True, indent=2)
+            if manifest.get("storage_scope") == "PRIVATE":
+                fh.flush()
+                os.fsync(fh.fileno())
         os.replace(pointer, proot / "LATEST.json")
+        if manifest.get("storage_scope") == "PRIVATE":
+            _sync_directory(proot)
     finally:
         if os.path.exists(pointer):
             os.unlink(pointer)
-    return {"manifest": manifest, "latest": latest, "path": str(dest)}
+    return latest
+
+
+def _sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def resolve_phase(
@@ -338,6 +452,8 @@ def materialize_phase(
     resolved = resolve_phase(execution_id, phase, root=root)
     if resolved is None:
         return None
+    if resolved["manifest"].get("storage_scope") == "PRIVATE":
+        raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
     dest = pathlib.Path(destination)
     require_public_json_files(resolved["run_dir"] / name
                               for name in resolved["manifest"]["files"])
