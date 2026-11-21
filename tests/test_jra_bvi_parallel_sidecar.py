@@ -248,7 +248,7 @@ def test_genuine_parent_final_required_before_canonical_entry(tmp_path,monkeypat
 
 REVIEWED_DELIVERY_PREFIX_SHA256='56e0fc7fad5deac4ea6dc58741dc1a2e7d769dccac9f97d5d8fdbc4da8d9269c'
 REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256='336f50e2f61c2c3cfafa66a204c3f533a58a5df06030309664ee4e98e4f52a38'
-REVIEWED_SOURCE_WAIT_SHA256='0898e6904eda9e41cc25f3c3b3325b4edcc9ab92e633eb32a7b561cd9c408c19'
+REVIEWED_SOURCE_WAIT_SHA256='9d0ca853535100a0fb648247818acd22a399d4fd4d117953c4846e4cf8f9f15b'
 # Owner-approved (2026-11-15 19:50) pre-start Owner delivery, PR #422: two continue-on-error
 # steps and the issues: write permission. Reversed by exact bytes before the reviewed-prefix check.
 REVIEWED_OWNER_ISSUE_FINAL_STEP_SHA256='de5963723533dd8038493745338766f04725f8837d47524d45324b16551c7c79'
