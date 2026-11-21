@@ -283,8 +283,8 @@
 | venue=MOR / days_since_last=<=14d | 76 | 21.1% | 0.86 | 30% |
 | venue=KOC / days_since_last=<=14d | 96 | 29.2% | 1.12 | 109% |
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
-| venue=KSM / days_since_last=15-35d | 147 | 26.5% | 0.93 | 50% |
 | venue=SON / days_since_last=<=14d | 102 | 23.5% | 1.08 | 22% |
+| venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
 | venue=SAG / days_since_last=<=14d | 102 | 23.5% | 0.99 | 48% |
 
 ## 4角位置→着順：A/E の偏りが大きい区分（30出走以上、上位20）
