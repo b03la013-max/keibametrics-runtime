@@ -17,15 +17,15 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:00:33 / 21:03:33 / 21:03:33 / 21:28:58 |
 | 最早発走 | 14:55 |
-| Provider要求 | 74回・待機2669秒 |
+| Provider要求 | 75回・待機2669秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想23Rのうち実行23R／241頭×29＝6989セル（期待値 6989）：CALCULATED 6050・RULED-NEUTRAL 939・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 6989／。KRS実試行 0（外部Engine未呼出）。
+予想23Rのうち実行23R／241頭×29＝6989セル（期待値 6989）：CALCULATED 6072・RULED-NEUTRAL 917・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 6989／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較23R：◎一致 7/23・順位相関（Spearman平均）0.77。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較23R：◎一致 7/23・順位相関（Spearman平均）0.78。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）
 
@@ -48,7 +48,7 @@
 | [9R](KOC_09.md) | 19:20 | POSTRESULT_DIAGNOSTIC | 直前版 | 18:35 | 18:35 | ◎6 ベンダバリラビア | 単勝 6<br>馬単 6→10,2 | 10-9-8 払戻0円 |
 | [10R](KOC_10.md) | 19:50 | PRESTART_PUSH_VERIFIED | 直前版 | 19:05 | 19:05 | ◎3 コパノハンプトン | ワイド 3-9 / 3-8<br>三連複 2-9-10 / 3-9-10 / 2-3-9 / 1-3-9 / 3-5-9 |  |
 | [11R](KOC_11.md) | 20:20 | PRESTART_PUSH_VERIFIED | 直前版 | 19:35 | 19:35 | ◎9 マイネルフォーコン | ワイド 9-5 / 9-3<br>三連複 5-9-11 / 1-5-9 / 2-5-9 / 5-7-9 / 3-5-9 |  |
-| [12R](KOC_12.md) | 20:50 | PRESTART_PUSH_VERIFIED | 朝版 | 21:28 | 21:28 | ◎6 ベルベットアノ | ワイド 6-7 / 6-1<br>三連複 6-7-9 / 6-7-11 / 6-7-8 / 6-7-10 / 1-6-7 |  |
+| [12R](KOC_12.md) | 20:50 | PREDICTION_COMPLETE | 直前版 | 20:05 | 20:05 | ◎9 サンシャインビーチ | ワイド 9-6 / 9-1<br>三連複 4-6-7 / 4-6-9 / 6-7-9 / 6-8-9 / 6-9-11 / 6-9-10 / 1-6-9 |  |
 
 ## 佐賀
 
