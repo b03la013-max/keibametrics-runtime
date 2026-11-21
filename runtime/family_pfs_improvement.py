@@ -238,7 +238,7 @@ def build_pfs_improvement_assessment(
         routes.append("KEEP")
         keep.append("CURRENT_PRODUCTION_BEHAVIOR_FOR_THIS_RACE")
 
-    if review.get("review_semantics")=="DECISION_AWARE_V3" and race_id.startswith("KM-JRA-"):
+    if review.get("review_semantics") in {"DECISION_AWARE_V3", "DECISION_AWARE_V4"} and race_id.startswith("KM-JRA-"):
         role_tracks={"PREDICTION_ROLE_W":"WINNER_ROLE_MIGRATION",
                      "PREDICTION_ROLE_P2":"HEAD_LOCAL_P2_REAUDIT",
                      "PREDICTION_ROLE_P3":"PAIR_CONDITIONED_THIRD_REAUDIT"}

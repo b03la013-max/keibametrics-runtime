@@ -89,5 +89,76 @@ class LearningV3Tests(unittest.TestCase):
         r,f=inputs();before=copy.deepcopy((r,f));build_post_result_review(r,f,review_semantics="DECISION_AWARE_V3")
         self.assertEqual((r,f),before)
 
+    def test_v4_trio_hit_survives_ordered_winner_miss(self):
+        r, f = inputs((False, True, True))
+        f["final_prediction_package"]["roles"]["1"] = ["P3"]
+        trio = {"bet_type": "TRIO", "selection": [3, 1, 2], "stake": 100}
+        f["minimum_efficient_coverage"] = {
+            "coverage_units": [{"kind": "TAIL_SET", "parts": ["1", "2", "3"]}],
+            "tickets": [trio],
+        }
+        f["final_ticket"]["tickets"].append(trio)
+        f["final_ticket"]["total_investment"] = 200
+        r["settlement"].update(total_investment=200, total_payout=180, refund=0,
+                               winning_tickets=[{**trio, "return": 180}])
+        old = build_post_result_review(r, f, review_semantics="DECISION_AWARE_V3")
+        new = build_post_result_review(r, f, review_semantics="DECISION_AWARE_V4")
+        for key in old.keys() - {"review_semantics", "sha256"}:
+            self.assertEqual(new[key], old[key])
+        state = build_learning_state(new)
+        self.assertEqual(state["source_review_sha256"], new["sha256"])
+        self.assertEqual(state["reference_metrics"]["trio_reachability"]["trio_pfs"], 180)
+        reach = new["trio_reachability"]
+        self.assertEqual(reach["trio_profit_loss"], 80)
+        self.assertEqual(reach["by_valid_unordered_set"][0]["first_trio_failure"], "NONE")
+        self.assertEqual(new["failure_localization"]["first_material_failure"], "PREDICTION_ROLE_W")
+
+    def test_v4_ordered_set_is_evidence_without_trio_candidate(self):
+        r, f = inputs((True, True, True))
+        ordered = {"bet_type": "TRIFECTA", "selection": [2, 1, 3], "stake": 100}
+        f["minimum_efficient_coverage"] = {
+            "coverage_units": [{"kind": "EXACT_THIRD", "parts": ["2", "1", "3"]}],
+            "tickets": [ordered],
+        }
+        f["final_ticket"].update(tickets=[ordered], total_investment=100)
+        review = build_post_result_review(r, f, review_semantics="DECISION_AWARE_V4")
+        trio = review["trio_reachability"]["by_valid_unordered_set"][0]
+        self.assertTrue(review["conversion"]["top3_set_ticket_coverage"])
+        self.assertFalse(trio["final_trio_ticket_coverage"])
+        self.assertFalse(trio["mec_trio_candidate_reachable"])
+        self.assertEqual(trio["mec_joint_set_evidence"], ["EXACT_THIRD"])
+        self.assertEqual(trio["first_trio_failure"], "MEC_TRIO_NOT_GENERATED")
+
+    def test_v4_dead_heat_preserves_each_unordered_set_and_refund(self):
+        r, f = inputs((True, True, True))
+        r["official_result"].update(
+            top3_orders=[[1, 2, 3], [1, 2, 4]],
+            finish_groups=[{"finish": 1, "horse_numbers": [1]},
+                           {"finish": 2, "horse_numbers": [2]},
+                           {"finish": 3, "horse_numbers": [3, 4]}],
+        )
+        tickets = [{"bet_type": "TRIO", "selection": [1, 2, x], "stake": 100}
+                   for x in (3, 4, 5)]
+        f["final_ticket"].update(tickets=tickets, total_investment=300)
+        r["settlement"].update(
+            total_investment=300, total_payout=180, refund=100,
+            winning_tickets=[{**tickets[0], "return": 110}, {**tickets[1], "return": 70}],
+            refunded_tickets=[{**tickets[2], "refund": 100}],
+        )
+        reach = build_post_result_review(r, f, review_semantics="DECISION_AWARE_V4")["trio_reachability"]
+        self.assertEqual(reach["effective_trio_investment"], 200)
+        self.assertEqual(reach["trio_pfs"], 90)
+        self.assertEqual(reach["shared_final_trio_ticket_members"], [1, 2])
+        self.assertEqual([row["settled_trio_return"] for row in reach["by_valid_unordered_set"]], [110, 70])
+        self.assertTrue(all(row["all_shared_ticket_members_survive"]
+                            for row in reach["by_valid_unordered_set"]))
+
+    def test_v4_paper_retains_prediction_evidence_without_pfs(self):
+        r, f = inputs((True, True, True), paper=True)
+        reach = build_post_result_review(r, f, review_semantics="DECISION_AWARE_V4")["trio_reachability"]
+        self.assertIsNone(reach["trio_pfs"])
+        self.assertEqual(reach["by_valid_unordered_set"][0]["first_trio_failure"],
+                         "NOT_APPLICABLE_ZERO_EXPOSURE")
+
 
 if __name__=="__main__":unittest.main()
