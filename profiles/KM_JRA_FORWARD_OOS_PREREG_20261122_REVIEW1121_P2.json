@@ -1,0 +1,30 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261122-REVIEW1121-P2",
+ "registered_at": "2026-11-21T19:50:00+09:00",
+ "registered_by": "Claude (11/21 review cross-checked with the ChatGPT report: FKS P2 was the first failure in 4 of 6 races with the winner already in W)",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261122_REVIEW1121.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-22",
+ "evidence_rule": "same as the extended profile. Known-result replay 2026-10-11..11-21 (272R, context only): baseline 31.2%, P2_MARKET_TOP3 43.4% (excl. max payout 39.1%) vs control 32.3%.",
+ "budget_note": "arms rebuild tickets with Production MEC, so investment differs; report PFS, PFS excl. max payout, net profit change and investment change together (same-budget comparison is a separate registration).",
+ "arms": [
+  {
+   "id": "P2_MARKET_TOP3",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "rule": "add the pre-cutoff official market top-3 runners missing from P2 as PROTECTED seconds under every W head; MEC rebuilds tickets",
+   "metric": "net profit change vs frozen Production tickets; must beat P2_STATIC_SAME_COUNT_CONTROL",
+   "promote_if": "at 300R beats Production and the control on net profit and PFS excl. max payout, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R not better than P2_STATIC_SAME_COUNT_CONTROL"
+  },
+  {
+   "id": "P2_STATIC_SAME_COUNT_CONTROL",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CONTROL",
+   "rule": "add as many seconds as P2_MARKET_TOP3 would, chosen by Static rank",
+   "metric": "net profit change",
+   "promote_if": "control arm; promotion only by a separate Owner decision",
+   "reject_if": "n/a"
+  }
+ ]
+}

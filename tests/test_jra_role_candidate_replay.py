@@ -87,3 +87,23 @@ def test_skip_heavy_going_uses_pre_cutoff_official_going_only(tmp_path):
     obs[1]["observed_at"] = (cut - dt.timedelta(minutes=5)).isoformat()
     (tmp_path / f"runtime/requests/{RID}-LIVE-R1-FORMAL.json").write_text(json.dumps(rq))
     assert rc.official_going(final, root=tmp_path) == "重"
+
+
+def test_p2_market_top3_adds_missing_seconds_under_every_head():
+    import copy
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    f = copy.deepcopy(final)
+    before = set(rc._live(f, "P2"))
+    top3 = rc.market_ranking(final)[:3]
+    miss = [r for r in top3 if r not in before]
+    assert rc.p2_market_top3(f) == bool(miss)
+    assert set(rc._live(f, "P2")) == before | set(top3)
+    pairs = {(str(p["head"]), str(p["second"])) for p in f["pair_dispositions"]}
+    for h in rc._live(f, "W"):
+        for s in miss:
+            if s != h:
+                assert (h, s) in pairs
+    c = copy.deepcopy(final)
+    if miss:
+        assert rc.p2_static_same_count_control(c)
+        assert len(set(rc._live(c, "P2")) - before) == len(miss)
