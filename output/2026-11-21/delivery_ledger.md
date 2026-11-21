@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-21（19:10時点）
+# 地方版 配送台帳 2026-11-21（19:25時点）
 
-- 管理Race 23／発走済み 16
-- PAPER：凍結 23・Push検証 23・送信 13（発走前 13）・読み戻し一致 13・本人確認 0
+- 管理Race 23／発走済み 17
+- PAPER：凍結 23・Push検証 22・送信 13（発走前 13）・読み戻し一致 13・本人確認 0
 - 正式：試行 13・Signed FINAL 12（NO-BET 0）・発走前送信 12・読み戻し一致 12・本人確認 0
 - 発走前PAPER配送なしで発走：['KOC_01', 'KOC_02', 'KOC_03', 'SAG_01', 'SAG_02', 'SAG_03']
 - 発走前の正式配送なしで発走（未試行を含む）：['KOC_01', 'KOC_02', 'KOC_03', 'KOC_04', 'SAG_01', 'SAG_02', 'SAG_03']
@@ -32,7 +32,7 @@
 | SAG_07 | 18:40 | POSTRESULT_DIAGNOSTIC | 17:57 | ○ | SIGNED_FINAL | 17:58 | ○ |  |
 | SAG_08 | 19:10 | PRESTART_PUSH_VERIFIED | 18:26 | ○ | SIGNED_FINAL | 19:00 | ○ |  |
 | SAG_09 | 19:40 | PRESTART_PUSH_VERIFIED | 18:56 | ○ | SIGNED_FINAL | 18:57 | ○ |  |
-| SAG_10 | 20:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_10 | 20:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SAG_11 | 20:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
