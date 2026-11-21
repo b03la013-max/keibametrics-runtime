@@ -1204,6 +1204,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                         log('REV_AUDIT_FAIL', f'{type(e).__name__}:{e}')
                     from runtime.local_autopilot import forward_oos
                     forward_oos.write(ROOT)               # pre-registered candidates, post-freeze races only
+                    try:   # P0 index ledger + role-wise AUC of the 29 indices (evidence only)
+                        from runtime.local_autopilot import index_audit
+                        index_audit.write(ROOT)
+                    except Exception as e:
+                        log('INDEX_AUDIT_FAIL', f'{type(e).__name__}:{str(e)[:120]}')
                     from runtime.local_autopilot import aki_audit
                     aki_audit.write(ROOT)                 # AKI roughness vs outcome, formation PFS (cumulative)
                     from runtime.local_autopilot import sire_stats
