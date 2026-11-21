@@ -6,7 +6,7 @@ import pytest
 from runtime import formal_execution_orchestrator as o
 
 
-def _result_settlement_from_existing_runner(payouts):
+def _result_settlement_from_existing_runner(payouts, finish_order=None):
     path = Path(o.__file__).with_name("local_result_from_signed_final.py")
     code = path.read_text().split('tickets=((fin.get("artifact")', 1)[1]
     code = 'tickets=((fin.get("artifact")' + code.split('\ndef post(', 1)[0]
@@ -16,7 +16,7 @@ def _result_settlement_from_existing_runner(payouts):
             {"bet_type": "TRIO", "selection": [1, 2, 3], "stake": 100},
         ]}}},
         "rid": "KAW-RESULT-REGRESSION",
-        "req": {"finish_order": [7, 5, 6], "payouts": payouts,
+        "req": {"finish_order": [7, 5, 6] if finish_order is None else finish_order, "payouts": payouts,
                 "result_available_at": "2026-10-15T15:00:00+09:00"},
     }
     exec(compile(code, str(path), "exec"), scope)
@@ -38,6 +38,13 @@ def test_published_winning_payout_preserves_existing_settlement():
         "bet_type": "EXACTA", "selection": [7, 5], "stake": 100,
         "payout_per_100": 1230, "return": 1230,
     }]
+
+
+@pytest.mark.parametrize("finish_order", [[7, 5], [7, 5, 5], []])
+def test_result_top3_incomplete_must_hold_before_complete_settlement(finish_order):
+    # Missing or duplicate official placings cannot settle frozen tickets.
+    with pytest.raises(SystemExit, match="RESULT_OFFICIAL_TOP3_INCOMPLETE"):
+        _result_settlement_from_existing_runner({"EXACTA": 1230}, finish_order=finish_order)
 
 
 def base_intent():
