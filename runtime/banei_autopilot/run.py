@@ -186,7 +186,8 @@ def check10(reader, q, key, out, hist):
         elif now_jst() >= datetime.fromisoformat(r['post']) - timedelta(minutes=CUTOFF):
             rec['decision'] = 'KEEP_REVISION_1 (締切に間に合わない)'
         else:
-            r.update(effective='rev2', rev1={k: r.get(k) for k in ('ticket_sha256', 'points', 'formality', 'moisture')},
+            r.update(effective='rev2', frozen_at_rev2=r2.get('frozen_at'),
+                     rev1={k: r.get(k) for k in ('ticket_sha256', 'points', 'formality', 'moisture', 'frozen_at')},
                      ticket_sha256=r2['ticket_sha256'], points=r2['tickets']['points'],
                      formality=r2['tickets']['formality'], moisture=m2, paper=bool(mg))
             rec['decision'] = 'REVISION_2' + ('_PAPER (BAN-MG)' if mg else '')
@@ -209,7 +210,7 @@ def deliver(q, key, out, rev=1, reasons=None):
     head = '' if rev == 1 else ('【修正版 Rev2' + ('・ペーパー（馬場水分の変化）' if r.get('paper') else '') + '】'
                                 + '／'.join(reasons or []) + '\n\n')
     body = (f"### 🐴 帯広{r['no']}R {r['post'][11:16]}発走｜{r['formality']}{'｜修正版' if rev == 2 else ''}\n\n{head}```\n{text}```\n"
-            f"<sub>ケイバメトリクスばんえい v4.0-BAN 自動予想。凍結 {r['frozen_at'][11:19]}／券面SHA `{r['ticket_sha256'][:12]}`"
+            f"<sub>ケイバメトリクスばんえい v4.0-BAN 自動予想。凍結 {(r.get('frozen_at_rev2') if rev == 2 else r['frozen_at'])[11:19]}／券面SHA `{r['ticket_sha256'][:12]}`"
             f"／未較正（確率・EVではありません）</sub>")
     try:
         c = _gh('POST', f'/repos/{REPO}/issues/{issue}/comments', {'body': body})
@@ -263,7 +264,9 @@ def settle_race(reader, q, key, out):
                  'rev1_ffl': first_failure(t1, res['order']), 'rev2_ffl': first_failure(tk, res['order'])}
     out_res = {'order': res['order'], 'payouts': {k: {'-'.join(map(str, c)): y for c, y in v.items()}
                                                    for k, v in res['payouts'].items()},
-               'stake': stake, 'return': back, 'refund': refund, 'non_starters': sorted(gone), 'pfs': round(100 * back / stake, 1) if stake else None,
+               'stake': stake, 'return': back, 'refund': refund, 'non_starters': sorted(gone),
+               'did_not_finish': sorted(res.get('did_not_finish') or []),          # 競走中止: 出走扱い・返還なし
+               'pfs': round(100 * back / stake, 1) if stake else None,
                'first_failure_layer': first_failure(tk, res['order']), 'formality': r.get('formality'),
                'effective_revision': 2 if eff else 1, 'paper': bool(r.get('paper')), 'rev_audit': audit,
                'settled_at': now_jst().isoformat()}
@@ -307,28 +310,35 @@ def tick(day, out, reader, hist):
     qp = out / 'queue.json'
     q = json.loads(qp.read_text()) if qp.exists() else discover(reader, day, out)
     now = now_jst()
-    for key, r in sorted(q['races'].items()):
-        post = datetime.fromisoformat(r['post'])
-        try:
-            if r['state'] == 'DISCOVERED' and post - timedelta(minutes=PRED_FROM) <= now < post - timedelta(minutes=CUTOFF + 1):
-                predict(reader, q, key, out, hist)
-            if r['state'] == 'PREDICTION_COMPLETE' and not r.get('delivered') and now < post - timedelta(minutes=CUTOFF):
-                deliver(q, key, out)
-            if (r['state'] == 'PREDICTION_COMPLETE' and r.get('delivered') and not r.get('check10')
-                    and post - timedelta(minutes=CHECK10) <= now < post - timedelta(minutes=CUTOFF + 1)):
-                check10(reader, q, key, out, hist)
-            if r['state'] == 'DISCOVERED' and now >= post - timedelta(minutes=CUTOFF + 1):
-                r['state'] = 'MISSED_DEADLINE'
-                log(out, 'MISSED_DEADLINE', key)
-            if r['state'] == 'PREDICTION_COMPLETE' and now >= post + timedelta(minutes=RESULT_AFTER):
-                settle_race(reader, q, key, out)
-        except RK.SourceStop as e:
-            log(out, 'SOURCE_HOLD', key, e)
-            break
-        except Exception as e:                                   # one race never stops the day
-            r['last_error'] = f'{type(e).__name__}:{str(e)[:160]}'
-            log(out, 'ERROR', key, r['last_error'])
-        dump(qp, q)
+    # P0 (11/21 反省): 締切の近い予想・配信・直前見直しを先に終え、既走レースの精算はその後に回す
+    for phase in ('urgent', 'settle'):
+        for key, r in sorted(q['races'].items(), key=lambda kv: kv[1]['post']):
+            post = datetime.fromisoformat(r['post'])
+            now = now_jst()
+            try:
+                if phase == 'urgent':
+                    if r['state'] == 'DISCOVERED' and post - timedelta(minutes=PRED_FROM) <= now < post - timedelta(minutes=CUTOFF + 1):
+                        predict(reader, q, key, out, hist)
+                        dump(qp, q)
+                    if r['state'] == 'PREDICTION_COMPLETE' and not r.get('delivered') and now < post - timedelta(minutes=CUTOFF):
+                        deliver(q, key, out)
+                    if (r['state'] == 'PREDICTION_COMPLETE' and r.get('delivered') and not r.get('check10')
+                            and post - timedelta(minutes=CHECK10) <= now < post - timedelta(minutes=CUTOFF + 1)):
+                        check10(reader, q, key, out, hist)
+                    if r['state'] == 'DISCOVERED' and now >= post - timedelta(minutes=CUTOFF + 1):
+                        r['state'] = 'MISSED_DEADLINE'
+                        log(out, 'MISSED_DEADLINE', key)
+                elif r['state'] == 'PREDICTION_COMPLETE' and now >= post + timedelta(minutes=RESULT_AFTER):
+                    if _urgent_soon(q, now):                      # a prediction window opens soon: settle later
+                        break
+                    settle_race(reader, q, key, out)
+            except RK.SourceStop as e:
+                log(out, 'SOURCE_HOLD', key, e)
+                break
+            except Exception as e:                               # one race never stops the day
+                r['last_error'] = f'{type(e).__name__}:{str(e)[:160]}'
+                log(out, 'ERROR', key, r['last_error'])
+            dump(qp, q)
     n_set = sum(1 for r in q['races'].values() if r['state'] == 'SETTLED')
     if n_set and (q.get('reviewed_n') != n_set or not q.get('review_done')):
         try:
@@ -343,6 +353,19 @@ def tick(day, out, reader, hist):
         dump(qp, q)
     report(q, out)
     return q
+
+
+def _urgent_soon(q, now, within=3):
+    """True when a race needs its prediction or 直前見直し within `within` minutes (a 楽天 fetch is ~61 s)."""
+    for r in q['races'].values():
+        post = datetime.fromisoformat(r['post'])
+        if r['state'] == 'DISCOVERED' and now < post - timedelta(minutes=CUTOFF + 1) \
+                and post - timedelta(minutes=PRED_FROM + within) <= now:
+            return True
+        if (r['state'] == 'PREDICTION_COMPLETE' and r.get('delivered') and not r.get('check10')
+                and post - timedelta(minutes=CHECK10 + within) <= now < post - timedelta(minutes=CUTOFF + 1)):
+            return True
+    return False
 
 
 def done(q):

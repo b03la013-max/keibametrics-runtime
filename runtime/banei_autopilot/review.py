@@ -38,7 +38,7 @@ def race_review(out, key, r):
 
     def info(n, role):
         x = rows.get(n) or {}
-        return {'no': int(n), 'mark': marks.get(n, ''), 'pop': x.get('pop'), 'win_rank': x.get('win_rank'),
+        return {'no': int(n), 'mark': marks.get(n, ''), 'dcr': x.get('dcr'), 'pop': x.get('pop'), 'win_rank': x.get('win_rank'),
                 'place_rank': x.get('place_rank'), 'hole_rank': x.get('hole_rank'), 'in_role': bool(x.get(role))}
     fin = {'1': info(w, 'role_w'), '2': info(s, 'role_p2'), '3': info(t, 'role_p3')}
     trio_ret, ex_ret = _ret(tk, res['payouts'], 'trio'), _ret(tk, res['payouts'], 'exact')
@@ -49,7 +49,9 @@ def race_review(out, key, r):
     if r.get('state') == 'MISSED_DEADLINE':
         cause = 'C0'
     elif ffl == 'ROLE':
-        cause = 'C1' if (fin['1']['win_rank'] or 99) > 5 else 'C2'
+        # 情報不足（2歳・出走経験が少ない等で DCR<70）を能力不足と混同しない（11/21 ChatGPT反省 P1-2）
+        wdcr = (rows.get(w) or {}).get('dcr')
+        cause = 'C0-INFO' if (wdcr is not None and wdcr < 70) else ('C1' if (fin['1']['win_rank'] or 99) > 5 else 'C2')
     elif ffl in ('HEAD-P2-TERMINAL', 'PAIR-P3-TERMINAL'):
         cause = 'C3'
     elif ffl == 'EXACT' or (ffl == 'NONE' and (res['pfs'] or 0) < 100):

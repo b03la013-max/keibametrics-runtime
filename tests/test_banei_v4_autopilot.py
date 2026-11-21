@@ -236,3 +236,37 @@ def test_settle_refund_reduces_effective_stake(tmp_path, monkeypatch):
     run.settle_race(rd, q, '01', out)
     res = json.loads((out / 'R01.result.json').read_text())
     assert res['refund'] == 100 * n_gone and res['stake'] == tk['points'] * 100 - 100 * n_gone
+
+
+def test_nar_history_skips_nonfinishers(tmp_path):
+    (tmp_path / 'ban_racelist.csv').write_text(
+        '﻿競馬場,競走年月日,レース番号,レース名,条件,馬場\n帯広ば,20261001,1,C1-1,一般,1.5\n', encoding='utf-8')
+    (tmp_path / 'ban_horselist.csv').write_text(
+        '﻿競馬場,競走年月日,レース番号,馬名,負担重量,馬体重,着順,タイム,着差\n'
+        '帯広ば,20261001,1,カンソウ,700,1000,2,2000,\n帯広ば,20261001,1,トリケシ,☆620,－,,,出走取消\n'
+        '帯広ば,20261001,1,チュウシ,700,1000,,,競走中止\n', encoding='utf-8')
+    h = source.nar_history(tmp_path)
+    assert 'カンソウ' in h and 'トリケシ' not in h and 'チュウシ' not in h
+
+
+def test_urgent_soon_defers_settlement():
+    now = datetime.fromisoformat('2026-11-21T18:00:00+09:00')
+    q = {'races': {'01': {'state': 'PREDICTION_COMPLETE', 'post': '2026-11-21T17:30:00+09:00', 'delivered': 'x'},
+                   '02': {'state': 'DISCOVERED', 'post': '2026-11-21T18:36:00+09:00'}}}
+    assert run._urgent_soon(q, now)                       # 02 opens its prediction window at 18:01
+    q['races']['02']['post'] = '2026-11-21T19:30:00+09:00'
+    assert not run._urgent_soon(q, now)
+
+
+def test_axis2_challenger_keeps_lines_without_honmei(tmp_path, monkeypatch):
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    post = datetime.fromisoformat(q['races']['01']['post'])
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=20))
+    run.tick(day, out, rd, {})
+    sh = json.loads((out / 'R01.shadow.json').read_text())['candidates']
+    hm = sh['AXIS2']['honmei']
+    assert sh['AXIS2']['points'] <= 30 and any(hm not in t for t in sh['AXIS2']['trio'])
