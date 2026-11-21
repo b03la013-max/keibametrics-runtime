@@ -296,3 +296,25 @@ def test_official_comment_feeds_cci():
     feed = {'11': {'3': {'trainer': '好調をキープ、チャンスはある', 'jockey': '上位争いしたい'}}}
     assert source.official_comment_band(feed, 11, 3).startswith('好調')
     assert source.cci_band(None, None, None, None, source.official_comment_band(feed, 11, 3)) in ('STRONG', 'VERY_STRONG')
+
+
+def test_production_config_from_registry_is_applied(tmp_path, monkeypatch):
+    import registry
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    reg = registry.load(tmp_path)
+    reg['production'] = {'id': 'AXIS2', 'version': 'KM-BAN-v4.0-static-r1+AXIS2@20261201',
+                         'config': {'tpatch': {'FORCE_TRIO_AXIS': 2}}, 'since': '2026-12-01'}
+    registry.save(tmp_path, reg)
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    post = datetime.fromisoformat(q['races']['01']['post'])
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=20))
+    run.tick(day, out, rd, {})
+    rec = json.loads((out / 'R01.json').read_text())
+    sh = json.loads((out / 'R01.shadow.json').read_text())['candidates']
+    assert rec['evaluation']['ruleset_version'].endswith('AXIS2@20261201')
+    assert rec['tickets']['trio'] == sh['BASE']['trio'] == sh['AXIS2']['trio']
+    import tickets
+    assert tickets.FORCE_TRIO_AXIS is None                      # restored after the production block
