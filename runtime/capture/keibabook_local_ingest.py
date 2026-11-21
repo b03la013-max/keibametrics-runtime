@@ -153,6 +153,59 @@ def derive(race):
     return out
 
 
+BAND_L = ['VERY_STRONG', 'STRONG', 'NEUTRAL', 'CAUTION']
+BAND_WORDS = (   # same dictionary as keibabook_local_bands.js (KM-LOCAL-WORKOUT-COMMENT-v1 / STABLE-COMMENT-v1)
+    ('CAUTION', ('変わり身まで', 'どうかな', '案外', '今ひと息', '今一息', '手控え', '平凡', '心配', '気難しい',
+                 '大きくは変わらない', '物足りない', '反応鈍', '重め', '太め残り', '様子見')),
+    ('VERY_STRONG', ('絶好', '抜群', '文句なし', '充実', '期待大', '好調持続', '勝ち負け', '態勢万全')),
+    ('STRONG', ('上向', '良化', '楽しみ', '動き軽快', '素軽', 'フットワーク軽快', '状態は良く', '具合はいい', 'デキはいい',
+                '前進', '上位争い', '期待', '好調', '仕上がり良好', '動き良', '伸び脚')))
+
+
+def _band(t):
+    t = str(t or '')
+    for b, words in BAND_WORDS:
+        if any(w in t for w in words):
+            return b
+    return 'NEUTRAL'
+
+
+def _shift(b, d):
+    return BAND_L[max(0, min(3, BAND_L.index(b) - d))]
+
+
+def page_bands(race):
+    """調教 / 厩舎の話 bands from the collected pages of ANY venue (2026-11-21: the browser band step only
+    covered 南関東 /1/ pages, so 園田・姫路 (/2/) bands were never produced although Keibabook offers them)."""
+    out = {}
+    for t in (race['pages'].get('調教') or {}).get('tables') or []:
+        if 'cyokyo' not in t['cls']:
+            continue
+        for row in t['rows']:
+            if len(row) >= 4 and row[1].isdigit():
+                b = _band(row[3])
+                a = row[4] if len(row) > 4 else ''
+                b = _shift(b, 1) if '↗' in a else _shift(b, -1) if '↘' in a else b
+                out.setdefault(int(row[1]), {})['tri'] = b
+    for t in (race['pages'].get('厩舎の話') or {}).get('tables') or []:
+        if 'danwa' not in t['cls']:
+            continue
+        rows, cur = t['rows'], None
+        for row in rows:
+            if len(row) >= 2 and row[1].isdigit():
+                cur = int(row[1])
+                continue
+            if cur is not None and row and row[0]:
+                txt = row[0].strip()
+                mk = txt[:1]
+                import re as _re
+                b = _band(_re.sub(r'^.?【[^】]*】', '', txt))
+                b = _shift(b, 1) if mk == '◎' else _shift(b, -1) if mk == '△' else b
+                out.setdefault(cur, {})['cci'] = b
+                cur = None
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('file')
@@ -192,6 +245,9 @@ def main(argv=None):
         for r in doc['races']:   # bands / derived indices only, never Keibabook text or numbers
             horses = {str(no): {k: v for k, v in h.items() if k in ('cci', 'tri')}
                       for no, h in (cb.get((r['venue'], r['race_no'])) or {}).items()}
+            for no, d in page_bands(r).items():   # every venue whose pages carry 調教 / 厩舎の話
+                for k, v in d.items():
+                    horses.setdefault(str(no), {}).setdefault(k, v)
             for no, d in derive(r).items():
                 horses.setdefault(str(no), {}).update(d)
             races.append({'kb_id': r['kb_id'], 'venue': r['venue'], 'race_no': r['race_no'], 'horses': horses})

@@ -26,7 +26,7 @@ from pathlib import Path
 
 from runtime.local_autopilot import ext_model as em
 
-PROFILE = 'KM-LOCAL-EXT-CONNECTION-v2.0-20261121'
+PROFILE = 'KM-LOCAL-EXT-CONNECTION-v2.1-20261121'
 EXT_FROM = '2026-11-22'
 EXT_SHARE = 0.30
 NEUTRAL = 52.0
@@ -204,6 +204,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
         cur = {'date': day, 'venue': v, 'distance': d, 'going': race.get('going'), 'age': x.get('age'),
                'sex': (x.get('sex_age') or '')[:1] or None, 'pop': pop, 'frame_no': x.get('frame_no'),
                'jockey': x.get('current_jockey'), 'cls': hs.class_code(race.get('race_name')), 'weather': weather,
+               'bw': x.get('current_body_weight'),
                'special': hs.special_flag(v, race.get('race_name')), 'daybias': daybias,
                'sire': x.get('sire'), 'damsire': x.get('damsire')}
         rows[x['horse_no']] = {'venue': v, 'band': em.dist_band(d), 'going': em.going_class(race.get('going')),
@@ -211,7 +212,8 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                                'damsire': em.key(x.get('damsire')), 'jockey': em.key(x.get('current_jockey')),
                                'trainer': em.key(x.get('trainer')), 'frame': em.frame_band(x.get('frame_no')), 'horse': hk,
                                'sex': cur['sex'], 'age': x.get('age'), 'bwchg': em.chg_band(x.get('current_body_weight_change')),
-                               'season': em.season(day), 'spd': em.spd_of(hh), 'labels': em.labels(cur, hh)}
+                               'season': em.season(day), 'spd': em.spd_of(hh), 'labels': em.labels(cur, hh),
+                               'pop': pop or 99, 'style': em.style(hh), 'early_now': None}
     sp = [r['spd'] for r in rows.values() if r['spd'] is not None]
     mu = sum(sp) / len(sp) if len(sp) >= 2 else None
     out = {}

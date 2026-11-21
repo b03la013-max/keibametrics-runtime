@@ -33,12 +33,15 @@ from pathlib import Path
 NEUTRAL = 52.0
 MIN_N, M = 30, 30
 H_MIN, H_M = 3, 8
-TABLE_VERSION = 2
+TABLE_VERSION = 3
 CIRCUIT = {'OHI': 'NANKAN', 'FNB': 'NANKAN', 'KAW': 'NANKAN', 'URW': 'NANKAN', 'MIZ': 'IWATE', 'MOR': 'IWATE',
            'SON': 'HYOGO', 'HMJ': 'HYOGO'}
 VENUE_NAME = {'盛岡': 'MOR', '水沢': 'MIZ', '浦和': 'URW', '船橋': 'FNB', '大井': 'OHI', '川崎': 'KAW', '金沢': 'KNZ',
               '笠松': 'KSM', '名古屋': 'NGY', '園田': 'SON', '姫路': 'HMJ', '高知': 'KOC', '佐賀': 'SAG', '門別': 'MON'}
 SMALL_TRACK = {'URW', 'KAW', 'SON', 'KSM', 'MIZ'}
+LEFT_TURN = {'URW', 'FNB', 'KAW', 'MOR'}                 # same set as local_nar_evidence_candidate
+GEOMETRY = {'OHI': 'LARGE', 'MON': 'LARGE', 'MOR': 'LARGE', 'FNB': 'MID', 'KNZ': 'MID', 'NGY': 'MID', 'SAG': 'MID',
+            'KOC': 'MID', 'HMJ': 'MID', 'MIZ': 'SMALL', 'URW': 'SMALL', 'KAW': 'SMALL', 'SON': 'SMALL', 'KSM': 'SMALL'}
 CLASS_ORDER = {'C3': 1, 'C2': 2, 'C1': 3, 'B3': 4, 'B2': 5, 'B1': 6, 'A2': 7, 'A1': 8, 'OPEN': 9}
 BAND_SCORE = {'VERY_STRONG': 66.0, 'STRONG': 59.0, 'NEUTRAL': 52.0, 'CAUTION': 45.0}
 
@@ -219,6 +222,10 @@ def labels(cur, hist):
         out.append(('WEATHER', f'{wc}|{st}'))
     if cur.get('daybias') and st:
         out.append(('DAYBIAS', f"{cur['daybias']}|{st}"))
+    good = [p['bw'] for p in hist if p.get('bw') and p.get('finish') and p['finish'] <= 3]
+    if good and cur.get('bw'):       # 馬体重は前走比でなく好走レンジで見る（馬体重の見方 / 中央版 §62）
+        lo, hi = min(good), max(good)
+        out.append(('GOODBW', 'IN' if lo - 4 <= cur['bw'] <= hi + 4 else 'LIGHT' if cur['bw'] < lo - 4 else 'HEAVY'))
     if pop == 1:   # 危険な1番人気 checklist (第10章), read mechanically
         n = sum([not any(p['venue'] == cur['venue'] for p in hist),
                  not any(p.get('distance') == cur.get('distance') for p in hist),
@@ -280,7 +287,7 @@ def _rows(races, std=None):
             fig = (max(0.0, min(100.0, 50 + 10 * (s0[0] - x['time']) / s0[1]))
                    if s0 and x['status'] == 'RAN' and x.get('time') else None)
             if x['status'] == 'RAN' and x.get('pop'):
-                cur = dict(cur0, age=x.get('age'), sex=x.get('sex'), pop=x['pop'], frame_no=x.get('frame'),
+                cur = dict(cur0, age=x.get('age'), sex=x.get('sex'), pop=x['pop'], frame_no=x.get('frame'), bw=x.get('bw'),
                            jockey=x.get('jockey'), sire=x.get('sire'), damsire=x.get('damsire'))
                 rr.append({'race_id': race['race_id'], 'date': race['date'], 'venue': race['venue'],
                            'distance': race.get('distance'), 'band': dist_band(race.get('distance')), 'going': g,
@@ -288,7 +295,8 @@ def _rows(races, std=None):
                            'sire': key(x.get('sire')), 'damsire': key(x.get('damsire')), 'jockey': key(x.get('jockey')),
                            'trainer': key(x.get('trainer')), 'frame': frame_band(x.get('frame')), 'horse': hk,
                            'sex': x.get('sex'), 'age': x.get('age'), 'bwchg': chg_band(x.get('bw_chg')),
-                           'season': season(race['date']), 'spd': spd_of(prev), 'labels': labels(cur, prev)})
+                           'season': season(race['date']), 'spd': spd_of(prev), 'labels': labels(cur, prev),
+                           'style': style(prev), 'early_now': early})
             done.append((hk, {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
                               'finish': x.get('finish'), 'early': early, 'late': late, 'cls': cur0['cls'],
                               'jockey': x.get('jockey'), 'fig': None if fig is None else round(fig, 1),
@@ -326,6 +334,21 @@ def cell_keys(r):
         ks += [('H', r['horse'], v, d), ('H', r['horse'], v), ('H', r['horse'])]
     if r['bwchg']:
         ks += [('BW', r['bwchg'], r['sex'])]
+    h, j = r['horse'], r['jockey']
+    if h:   # the horse's own record by course facts (CFIg-L / RFIg-L slots)
+        ks += [('HD', h, 'LEFT' if v in LEFT_TURN else 'RIGHT'), ('HGe', h, GEOMETRY.get(v, 'MID')), ('HDi', h, d),
+               ('HB', h, b), ('HGo', h, g)]
+        if r.get('early_now') is not None and r['early_now'] <= 0.3:
+            ks += [('HS', h, 'FRONT')]
+        if j:
+            ks += [('JH', j, h)]
+    if j:   # jockey record by situation (JTI-L slots)
+        pb = 'FAV' if r['pop'] <= 2 else 'LONG' if r['pop'] >= 6 else 'MID'
+        ks += [('JF', j, pb)]
+        if r.get('recent'):
+            ks += [('JR', j, v)]
+        if r.get('style'):
+            ks += [('JS', j, r['style'])]
     if r['age']:
         ks += [('AG', min(r['age'], 9), r['sex'], circ(v)), ('AG', min(r['age'], 9), r['sex'])]
     ks += [('SE', r['season'], r['sex'], circ(v)), ('SPD', r['spd_band'], circ(v)), ('SPD', r['spd_band'])]
@@ -343,9 +366,10 @@ def expectation(rows):
     return {k: v[1] / v[0] for k, v in base.items() if v[0]}
 
 
-def accumulate(rows, exp):
+def accumulate(rows, exp, recent_from=None):
     cells = defaultdict(lambda: [0, 0, 0.0])
     for r in rows:
+        r['recent'] = bool(recent_from and r['date'] >= recent_from)
         e = exp.get((r['venue'], min(r['pop'], 10), r['fband']))
         if e is None:
             continue
@@ -363,7 +387,7 @@ def build(races, before_day):
     std = _standards(rs)
     rows, hist = _rows(rs, std)
     exp = expectation(rows)
-    cells = accumulate(rows, exp)
+    cells = accumulate(rows, exp, (date.fromisoformat(before_day) - timedelta(days=365)).isoformat())
     t = {'version': TABLE_VERSION, 'before_day': before_day, 'starts': len(rows),
          'period': [min((r['date'] for r in rows), default=None), max((r['date'] for r in rows), default=None)],
          'standards': {json.dumps(k, ensure_ascii=False): v for k, v in std.items()},
@@ -416,6 +440,27 @@ def components(cells, r):
     if r['age']:
         put('age_growth', [('AG', min(r['age'], 9), r['sex'], circ(v)), ('AG', min(r['age'], 9), r['sex'])])
     put('season', [('SE', r['season'], r['sex'], circ(v))])
+    h, j = r['horse'], r['jockey']
+    if h:
+        put('turn_direction', [('HD', h, 'LEFT' if v in LEFT_TURN else 'RIGHT')], H_MIN, H_M)
+        put('course_geometry', [('HGe', h, GEOMETRY.get(v, 'MID'))], H_MIN, H_M)
+        put('same_distance', [('HDi', h, d)], H_MIN, H_M)
+        put('same_venue', [('H', h, v)], H_MIN, H_M)
+        put('similar_distance', [('HB', h, b)], H_MIN, H_M)
+        put('going_fit', [('HGo', h, g)], H_MIN, H_M)
+        put('lead_acceptance', [('HS', h, 'FRONT')], 2, H_M)
+        if j:
+            put('jockey_horse', [('JH', j, h)], 2, H_M)
+    if j:
+        put('jockey_fav', [('JF', j, 'FAV')])
+        put('jockey_long', [('JF', j, 'LONG')])
+        put('jockey_distance', [('J', j, b)])
+        put('jockey_venue_recent', [('JR', j, v)])
+        put('jockey_front', [('JS', j, 'FRONT')])
+        put('jockey_back', [('JS', j, 'BACK')])
+    gb = next((val for name, val in r['labels'] if name == 'GOODBW'), None)
+    if gb:
+        put('good_weight', [('P', 'GOODBW', gb, circ(v)), ('P', 'GOODBW', gb)])
     put('SPD', [('SPD', r['spd_band'], circ(v)), ('SPD', r['spd_band'])])
     ps = []
     for name, val in r['labels']:
@@ -449,6 +494,22 @@ def full29_evidence(comp, kb=None, spd_field_score=None):
     put('BWI-L.weight_change_reason_rate', 'bwchg', 'NAR body-weight change band x sex')
     put('BWI-L.age_growth', 'age_growth', 'NAR age x sex x circuit')
     put('BWI-L.transport_season', 'season', 'NAR season x sex x circuit')
+    put('BWI-L.good_weight_range', 'good_weight', 'NAR A/E of 好走時馬体重レンジ内/外')
+    put('CFIg-L.turn_direction', 'turn_direction', "NAR the horse's A/E by turn direction")
+    put('CFIg-L.course_geometry', 'course_geometry', "NAR the horse's A/E by track size class")
+    put('CFIg-L.same_distance', 'same_distance', "NAR the horse's A/E at this distance")
+    put('CFIg-L.same_venue', 'same_venue', "NAR the horse's A/E at this venue")
+    put('CFIg-L.similar_distance', 'similar_distance', "NAR the horse's A/E in this distance band")
+    put('CFIg-L.going_fit', 'going_fit', "NAR the horse's A/E on this going")
+    put('RFIg-L.going_adaptation', 'going_fit', "NAR the horse's A/E on this going")
+    put('RFIg-L.leadership_stalk_acceptance', 'lead_acceptance', "NAR the horse's A/E when it ran in front")
+    put('RFIg-L.jockey_reproducibility', 'jockey_horse', 'NAR A/E of this jockey on this horse')
+    put('JTI-L.favorite_reliability', 'jockey_fav', 'NAR jockey A/E on 1-2 favourites')
+    put('JTI-L.longshot_record', 'jockey_long', 'NAR jockey A/E on 6th+ favourites')
+    put('JTI-L.distance_record', 'jockey_distance', 'NAR jockey A/E in this distance band')
+    put('JTI-L.venue_recent', 'jockey_venue_recent', 'NAR jockey A/E at this venue, last 365 days')
+    put('JTI-L.position_acquisition_skill', 'jockey_front', 'NAR jockey A/E on front-running types')
+    put('JTI-L.progression_timing_skill', 'jockey_back', 'NAR jockey A/E on closers')
     if spd_field_score is not None:
         ev['NCI.class_relative_time'] = {'score': round(spd_field_score, 3), 'coverage': 1.0,
                                          'fact': 'own NAR speed figure, field-relative (measured A/E band)',
