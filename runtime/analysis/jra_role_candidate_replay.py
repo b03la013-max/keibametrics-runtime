@@ -16,6 +16,12 @@ Candidates
   the request's signed JRA official market observation captured before prediction_cutoff.
 - W_PLUS_STATIC_SAME_COUNT_CONTROL (LOCAL C20): add as many runners as W_PLUS_MARKET_TOP3
   would, chosen by Static rank instead of the market, so width and signal are separable.
+- P3_MARKET_TOP5 / P3_STATIC_SAME_COUNT_CONTROL (Owner 2026-11-21 18:58, 11/21 review P1): the
+  third-placed runner sat at Static rank >= 8 in 10 of 15 settled races. Add the pre-cutoff market
+  top-5 runners missing from P3 as PROTECTED thirds under every existing pair; the control adds the
+  same number by Static rank.
+- SKIP_HEAVY_GOING (11/21 review P2: 福島 0/6 on 稍重〜重): no bet when the signed pre-cutoff official
+  going for the race is 重 or 不良. Selection only; tickets otherwise unchanged.
 """
 import argparse, copy, glob, json, sys
 from pathlib import Path
@@ -157,10 +163,72 @@ def w_plus_static_same_count_control(f):
     return _add_heads(f, picks, 'W_PLUS_STATIC_SAME_COUNT_CONTROL')
 
 
+def _add_thirds(f, picks, tag):
+    added = [r for r in picks if _promote(f, 'P3', r, tag)]
+    if not added:
+        return False
+    thirds = f.setdefault('third_dispositions', [])
+    have = {(str(x['head']), str(x['second']), str(x['third'])) for x in thirds}
+    for pr in f.get('pair_dispositions') or []:
+        h, s2 = str(pr['head']), str(pr['second'])
+        for t in added:
+            if t not in (h, s2) and (h, s2, t) not in have:
+                thirds.append({'head': h, 'second': s2, 'third': t, 'status': 'PROTECT',
+                               'reason': 'SHADOW_CANDIDATE:' + tag, 'rule_matches': []})
+    return True
+
+
+def _p3_market_missing(f, n):
+    mk = market_ranking(f)
+    if mk is None:
+        return None
+    taken = set(_live(f, 'P3'))
+    return [r for r in mk[:n] if r not in taken]
+
+
+def p3_market_top5(f):
+    miss = _p3_market_missing(f, 5)
+    return bool(miss) and _add_thirds(f, miss, 'P3_MARKET_TOP5')
+
+
+def p3_static_same_count_control(f):
+    miss = _p3_market_missing(f, 5)
+    if not miss:
+        return False
+    taken = set(_live(f, 'P3'))
+    picks = [r for r in (str(x) for x in f['static_prediction']['ranking']) if r not in taken][:len(miss)]
+    return _add_thirds(f, picks, 'P3_STATIC_SAME_COUNT_CONTROL')
+
+
+def official_going(f, root=ROOT):
+    """Latest signed JRA official going observed before the prediction cutoff, else None."""
+    import datetime as dt
+    rq = root / 'runtime/requests' / f"{f['race_id']}-LIVE-R1-FORMAL.json"
+    if not rq.exists():
+        return None
+    obs = (json.loads(rq.read_text()).get('source_snapshot') or {}).get('aki_external_observations') or []
+    try:
+        cut = dt.datetime.fromisoformat(f['prediction_cutoff'])
+        ok = [o for o in obs if o.get('going') and o.get('source_authority') == 'JRA_OFFICIAL'
+              and dt.datetime.fromisoformat(o['observed_at']) <= cut]
+    except (KeyError, TypeError, ValueError):
+        return None
+    return max(ok, key=lambda o: o['observed_at'])['going'] if ok else None
+
+
+def skip_heavy_going(f):
+    if official_going(f) not in ('重', '不良'):
+        return False
+    f['_skip_bet'] = True
+    return True
+
+
 CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head_local,
               'P2_STATIC_NEXT_CONTROL': p2_static_next_control, 'W_PLUS_MARKET1': w_plus_market1,
               'W_PLUS_MARKET_TOP3': w_plus_market_top3,
-              'W_PLUS_STATIC_SAME_COUNT_CONTROL': w_plus_static_same_count_control}
+              'W_PLUS_STATIC_SAME_COUNT_CONTROL': w_plus_static_same_count_control,
+              'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
+              'SKIP_HEAVY_GOING': skip_heavy_going}
 
 
 def _settle(f, official):
@@ -190,6 +258,10 @@ def run(dates, root=ROOT):
                 f = copy.deepcopy(final)
                 if not fn(f):
                     row[name] = None
+                    continue
+                if f.get('_skip_bet'):
+                    row[name] = {'investment': 0, 'payout': 0, 'W_hit': row['baseline']['W_hit'],
+                                 'P2_hit': row['baseline']['P2_hit'], 'tickets': 0, 'skipped': True}
                     continue
                 try:
                     mec = build_mec_plan(f)
@@ -267,6 +339,10 @@ def freeze_forward(date8, root=ROOT, now=None):
             if not (final.get('final_ticket') or {}).get('tickets') or not fn(f):
                 body['arms'][name] = None
                 continue
+            if f.get('_skip_bet'):
+                body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
+                                      'tickets': [], 'investment': 0, 'skipped': True}
+                continue
             try:
                 mec = build_mec_plan(f)
             except Exception as exc:
@@ -300,6 +376,9 @@ def evaluate_forward(root=ROOT):
         for name, arm in pre['arms'].items():
             if not arm or 'tickets' not in arm:
                 row[name] = None
+                continue
+            if arm.get('skipped'):
+                row[name] = {'investment': 0, 'payout': 0}
                 continue
             f = copy.deepcopy(final)
             f['final_ticket'] = {**f['final_ticket'], 'tickets': arm['tickets'], 'total_investment': arm['investment']}
