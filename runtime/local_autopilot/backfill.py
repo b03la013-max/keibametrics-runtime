@@ -91,6 +91,11 @@ def parse_page(html):
     seg = html[i:html.find('</table>', i)] if i >= 0 else ''
     h['corners'] = [[rk.nfkc(a), rk.nfkc(b)] for a, b in
                     re.findall(r'<th scope="row">(.*?)</th>\s*<td class="time">(.*?)</td>', seg, re.S)]
+    # ラップ（ハロンタイム）と上がり4F/3F — 2026-11-21 Owner「ラップタイムも探しなさい」: published on the result page
+    lap = re.search(r'ハロンタイム\s*(?:</[^>]+>\s*<[^>]+>\s*)*([\d.]+(?:-[\d.]+)+)', html)
+    h['laps'] = [float(x) for x in lap[1].split('-')] if lap else None
+    ag = re.search(r'上がり\s*(?:</[^>]+>\s*<[^>]+>\s*)*4F\s*([\d.]+)\s*-\s*3F\s*([\d.]+)', html)
+    h['agari_4f_3f'] = [float(ag[1]), float(ag[2])] if ag else None
     res = settle.parse_result(html)
     if res:
         res['payouts'] = {k: {'-'.join(map(str, c)): y for c, y in v.items()} for k, v in res['payouts'].items()}
@@ -149,6 +154,13 @@ class Backfill:
             return rid
         return None
 
+    def laps_race(self):
+        # 2026-11-21: races fetched before lap parsing existed are fetched once more (newest first) for their laps
+        for rid in sorted((r for r, v in self.st['races'].items() if v['status'] == 'DONE' and 'laps' not in v),
+                          reverse=True):
+            return rid
+        return None
+
     def discover_day(self, day):
         d = day.replace('-', '')
         html = self._get(f'/race_card/list/RACEID/{d}0000000000')
@@ -186,6 +198,7 @@ class Backfill:
         out.mkdir(parents=True, exist_ok=True)
         (out / f'{vid}_{rno:02d}.json').write_text(json.dumps(rec, ensure_ascii=False) + '\n')
         info['status'] = 'DONE' if page['result'] else 'NO_RESULT_TABLE'
+        info['laps'] = page['header'].get('laps') is not None
 
     def run(self, budget):
         t0 = time.time()
@@ -198,10 +211,13 @@ class Backfill:
                     self.fetch_race(rid)
                 else:
                     day = self.next_day()
-                    if not day:
+                    if day:
+                        self.discover_day(day)
+                    elif self.laps_race():
+                        self.fetch_race(self.laps_race())
+                    else:
                         self.st['complete'] = True
                         break
-                    self.discover_day(day)
                 self.save()
         except rk.SourceStop as e:
             self.st['last_stop'] = str(e)
