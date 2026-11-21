@@ -428,6 +428,38 @@ def _git(out, *args):
         return ''
 
 
+PUBLISH_NOW_MIN = 20
+
+
+def publish_now(reason):
+    """Commit + push the data checkout immediately (same commands as the workflow's publish())."""
+    if os.environ.get('KM_LOCAL_PUBLISH_MIDTICK', '1') == '0':
+        return False
+    repo = ROOT.parent
+    if not (repo / '.git').exists():
+        return False
+    t0 = time.monotonic()
+
+    def g(*a, timeout=60):
+        return subprocess.run(['git', '-C', str(repo), *a], capture_output=True, text=True, timeout=timeout)
+    try:
+        g('add', '-A', 'output')
+        if g('diff', '--cached', '--quiet').returncode == 0:
+            return False
+        g('commit', '-q', '-m', f"LOCAL autopilot {now_jst():%Y-%m-%d %H:%M} (prestart: {reason})")
+        for _ in range(3):
+            if g('pull', '-q', '--rebase', 'origin', 'local-autopilot-data').returncode == 0 and \
+                    g('push', '-q', 'origin', 'HEAD:local-autopilot-data').returncode == 0:
+                g('fetch', '-q', 'origin', '+refs/heads/local-autopilot-data:refs/remotes/origin/local-autopilot-data')
+                log('PUBLISH_NOW', reason, round(time.monotonic() - t0, 1))
+                return True
+            time.sleep(3)
+        log('PUBLISH_NOW_FAIL', reason)
+    except Exception as exc:
+        log('PUBLISH_NOW_FAIL', reason, f'{type(exc).__name__}:{str(exc)[:120]}')
+    return False
+
+
 def mark_delivery(q, out):
     """Per revision: COMMITTED (local commit containing the frozen file) and
     PUSH_VERIFIED (that commit is on the remote-tracking data branch, whose
@@ -1132,6 +1164,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     q['timings'].setdefault('first_prediction_at', now_jst().isoformat())
                     log('OK', key, edition, timing)
                     changed = True
+                    # P0-1 (ChatGPT 11/21 review, 佐賀3R pushed 1m13s after cutoff): a revision close to its cutoff is
+                    # committed and pushed right away instead of waiting for the end of the tick.
+                    if (cutoff(r) - now_jst()).total_seconds() < PUBLISH_NOW_MIN * 60:
+                        publish_now(f'{key} {edition}')
             except rk.SourceStop as exc:
                 r['status'] = 'SOURCE_HOLD'
                 r['last_error'] = str(exc)[:160]
