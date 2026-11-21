@@ -110,3 +110,20 @@ def test_cci_band():
     assert source.cci_band('ここも様子見', '追走いっぱい') == 'CAUTION'
     assert source.cci_band('障害次第') == 'NEUTRAL'          # conditional is not weak (v2.3 第63条)
     assert source.cci_band(None) is None
+
+
+def test_nar_good_bw_range_fallback_and_pct(tmp_path):
+    import sys
+    sys.path.insert(0, 'runtime/banei_autopilot')
+    import source
+    (tmp_path / 'ban_racelist.csv').write_text(
+        '﻿競馬場,競走年月日,レース番号,レース名,条件,馬場\n帯広ば,20261001,1,C1-1,一般,1.5\n帯広ば,20261008,1,C1-1,一般,2.0\n', encoding='utf-8')
+    (tmp_path / 'ban_horselist.csv').write_text(
+        '﻿競馬場,競走年月日,レース番号,馬名,負担重量,馬体重,着順,タイム\n'
+        '帯広ば,20261001,1,テスト,700,1000,2,2000\n帯広ば,20261008,1,テスト,700,1030,1,2100\n', encoding='utf-8')
+    hist = source.nar_history(tmp_path)
+    assert hist['テスト'][0]['finish'] == 1 and hist['テスト'][0]['body_weight'] == 1030
+    card = [{'no': 1, 'name': 'テスト', 'starts': [], 'good_bw_range': None, 'body_weight': 1040, 'body_delta': 10}]
+    h = source.build_horses(card, 2.0, '2026-11-21', hist, {}, 1)[0]
+    assert h['good_bw_range'] == (1000, 1030) and h['good_bw_src'] == 'NAR'
+    assert h['body_delta_pct'] == round(100 * 10 / 1030, 2) and h['nar_starts'] == 2

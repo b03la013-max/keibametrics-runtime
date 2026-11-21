@@ -142,6 +142,20 @@ def compile_race(ev):
             'trio': trio_l, 'exact': exact, 'removed': removed, 'pess_u': sorted(pess_u),
             'terminal': terminal, 'hole_link': hole_link, 'gates': gates,
             'universe': {'trio': len(universe_trio), 'exact': len(universe_exact)},
+            'exposure': _exposure(trio_l, exact),
             'points': len(trio_l) + len(exact), 'stake': (len(trio_l) + len(exact)) * UNIT,
             'formality': 'FORMAL' if all(v in ('PASS', 'GUARDED', 'NOT-APPLICABLE') for v in gates.values())
             else 'REFERENCE-RENDERED'}
+
+
+def _exposure(trio, exact):
+    """horse_role_exposure_trace (KRS-BAN Compiler v1.3.0; evidence only): per horse, how many bought
+    三連単 have it as HEAD / P2 / P3 and how many 三連複 contain it. Single-hub dependence is visible here."""
+    out = {}
+    for t in trio:
+        for n in t:
+            out.setdefault(str(n), {'head': 0, 'p2': 0, 'p3': 0, 'trio': 0})['trio'] += 1
+    for e in exact:
+        for k, n in zip(('head', 'p2', 'p3'), e):
+            out.setdefault(str(n), {'head': 0, 'p2': 0, 'p3': 0, 'trio': 0})[k] += 1
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
