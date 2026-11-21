@@ -347,6 +347,11 @@ def predict(reader, r, today, edition, out, cards):
         slim['kametani'] = bloodline_kametani.race_evidence(race, runners)
     except Exception as exc:
         slim['kametani'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    try:  # SHADOW: 亀谷 v2 corrected reading (Drive 精読 2026-11-21); v2 / ext_model unchanged, no consumer
+        from runtime.local_autopilot import kametani_v2c
+        slim['kametani_v2c'] = kametani_v2c.race_evidence(race, runners)
+    except Exception as exc:
+        slim['kametani_v2c'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     try:  # research BVI-L-R2 from our own pooled past starts (days before the race only): evidence only
         from runtime.local_autopilot import sire_stats
         slim['bvi_r2'] = sire_stats.race_evidence(race, runners, sire_stats.load(ROOT, str(r['race_date'])))
