@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-22（21:40時点）
+# 地方版 配送台帳 2026-11-22（00:00時点）
 
 - 管理Race 34／発走済み 0
-- PAPER：凍結 34・Push検証 27・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 34・Push検証 34・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -18,10 +18,10 @@
 | KOC_05 | 17:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_06 | 18:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_07 | 18:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KOC_08 | 19:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_09 | 19:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_10 | 20:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_11 | 20:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_08 | 19:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_09 | 19:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_10 | 20:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_11 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_01 | 12:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_02 | 12:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_03 | 13:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
@@ -42,8 +42,8 @@
 | SAG_06 | 18:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_07 | 18:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_08 | 19:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SAG_09 | 19:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_10 | 20:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_11 | 20:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_09 | 19:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_10 | 20:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_11 | 20:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
