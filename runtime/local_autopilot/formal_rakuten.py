@@ -363,6 +363,28 @@ def run_formal(r, out_dir, deadline):
         num_rank, num_pred = (numerical_ranking(sh) if consumer else (None, None))
         if num_pred:
             arts['numerical_prediction'] = num_pred
+        num_rank_base = num_rank
+        from runtime.local_autopilot import ext_connect
+        if num_pred and ext_connect.enabled(r['race_date']):
+            # Owner 2026-11-21 13:09「水分ボンバー・NAR・ドライブ精読を接続しなさい」: external information re-orders the
+            # numerical ranking before Static (Production 29 registry / KRS / MEC / cap / purchase policy unchanged).
+            try:
+                def _sbo_fetch():
+                    from runtime.local_autopilot import sbo
+                    snap = sbo.snapshot(sbo.Client(Path(out_dir).parent / 'sbo_state.json'), r['race_date'], r['venue_id'], r['race_no'])
+                    return snap, _now().astimezone(JST).isoformat()
+                guard('STATIC_FREEZE')
+                conn = ext_connect.connect(r, head, active, num_pred, out_dir, deadline, _sbo_fetch)
+                arts['ext_connection'] = conn
+                num_rank = conn['ranking']
+                mark('EXT_CONNECTION', profile=conn['profile'], sbo=conn['sbo'].get('status'),
+                     keibabook=conn['keibabook'].get('status'), nar_tables=conn['status']['tables'],
+                     changed_top3=conn['changed_top3'], ranking_base=conn['ranking_base'], ranking=conn['ranking'])
+            except FormalStop:
+                raise
+            except Exception as exc:   # the connection must never block the formal prediction
+                arts['ext_connection'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
+                mark('EXT_CONNECTION', status='ERROR_BASE_RANKING_USED')
         req, ledger = build_static(race, src, active, numerical, policy, _now(), ranked_override=num_rank, consumer=consumer)
         arts['static_ledger'] = ledger
         mark('STATIC_FREEZE', ledger_sha256=ledger['sha256'], ranking=req['static_prediction']['ranking'])
@@ -487,7 +509,10 @@ def run_formal(r, out_dir, deadline):
                        signed_final_ticket_count=len(tickets), signed_final_total_investment=total,
                        signed_final_tickets=tickets, local_ticket_cap_sha256=(capped or {}).get('sha256'),
                        prediction_consumer=(consumer or {}).get('profile'),
-                       ranking=fpp['ranking'], marks=fpp['marks'],
+                       ranking=fpp['ranking'], marks=fpp['marks'], ranking_base=num_rank_base,
+                       ext_connection=(None if 'ext_connection' not in arts else
+                                       {k: arts['ext_connection'].get(k) for k in ('profile', 'status', 'sbo', 'keibabook',
+                                                                                   'changed_top3', 'changed_top6', 'error')}),
                        roles={k: v for k, v in roles.items()}, krs_actual_run_count=ka['actual_run_count'],
                        before_cutoff=_now() < deadline, tickets=capped['tickets'] if capped else tickets,
                        krs_input_mode=kin['keibametrics_input_authority']['input_mode'],

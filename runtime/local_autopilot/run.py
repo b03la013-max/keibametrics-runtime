@@ -223,6 +223,11 @@ def sbo_aux(r, runners):
             _SBO.append(sbo.Client(ROOT / 'sbo_state.json'))
         snap = sbo.snapshot(_SBO[0], r['race_date'], r['venue_id'], r['race_no'])
         at = now_jst().isoformat()
+        try:   # private cache for the formal EXT connection (raw SBO numbers never enter Git)
+            from runtime.local_autopilot import ext_connect
+            ext_connect.save_sbo(r['race_date'], r['venue_id'], r['race_no'], snap, at)
+        except Exception:
+            pass
         active = [x['horse_no'] for x in runners if x.get('status') != 'CANCELLED']
         meta = {'status': snap['status'], 'fetched_at': at, 'sha256': snap.get('sha256'), 'active': len(active),
                 'coverage': 0, 'weight': engine.VMI_WEIGHT}
@@ -720,6 +725,16 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
     if odd:
         lines.append('（100円以外の点：' + '、'.join(f"{FORMAL_KIND.get(t['bet_type'], t['bet_type'])} "
                                               + '・'.join(map(str, t['selection'])) + f" {t['stake']}円" for t in odd) + '）')
+    ec = sm.get('ext_connection') or {}
+    if ec.get('profile'):
+        st = ec.get('status') or {}
+        lines += ['', '<sub>外部情報の接続：' + '／'.join([
+            f"水分ボンバー {st.get('sbo_horses', 0)}頭", f"競馬ブック {st.get('kb_horses', 0)}頭",
+            ('NAR公式＋楽天結果 ' + '〜'.join(st.get('tables_period') or []) if st.get('tables') else 'NAR表 未準備'),
+            '接続前の上位3頭 ' + '・'.join((sm.get('ranking_base') or [])[:3])
+            + ('（入れ替わりあり）' if ec.get('changed_top3') else '（同じ）')]) + '</sub>']
+    elif ec.get('error'):
+        lines += ['', f"<sub>外部情報の接続：エラーのため接続前の順位で計算（{ec['error'][:60]}）</sub>"]
     lines += ['', f"<sub>SOURCE=Runtime署名の楽天出馬表／KRS {sm['krs_actual_run_count']}回（未較正・技術Proxy）／"
                   f"Static Owner v1.1（未検証の順序規則）／FINAL Receipt `{sm['final_receipt_sha256'][:16]}`"
                   f"（署名検証 local={sm['final_verified_local']} remote={sm['final_verified_remote']}）</sub>"]
@@ -933,6 +948,12 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
         resettle(day)  # one-time offline re-settlement of legacy (pre-revision) settlements
         q = load_queue(out)
     changed = False
+    try:   # NAR / backfill tables for the formal EXT connection, once per race day (private cache, ~1 min)
+        from runtime.local_autopilot import ext_connect
+        if FORMAL and ext_connect.enabled(day):
+            ext_connect.ensure(ROOT, day)
+    except Exception as exc:
+        log('EXT_TABLES_FAIL', day, f'{type(exc).__name__}:{str(exc)[:160]}')
     try:
         if q is None:
             q = discover(reader, day, out, cards)

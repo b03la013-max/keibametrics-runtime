@@ -1,0 +1,12 @@
+{
+ "profile": "KM-LOCAL-EXT-CONNECTION-OWNER-DECISION-20261121",
+ "decided_at": "2026-11-21T13:09:00+09:00",
+ "owner_words": "水分ボンバーオンラインもNARの資料もGoogleドライブの精読も接続しなさい",
+ "context": "Claude reported at 12:58 that (a) 水分ボンバー and 競馬ブック fed only the PAPER engine (corrected 13:1x: an earlier reply wrongly said the formal indices), (b) NAR official CSVs and the Rakuten backfill fed statistics tables only, (c) Drive-reading findings were evidence/shadow only.",
+ "implementation": "runtime/local_autopilot/ext_connect.py (KM-LOCAL-EXT-CONNECTION-v1.0-20261121), hooked in formal_rakuten between the Full29 numerical ranking and Static",
+ "effective_from": "2026-11-22 (race day, morning edition)",
+ "unchanged": ["Production 29-index registry and values", "KRS Engine / parameter_map", "MEC R3", "60-ticket cap", "purchase policy (recommendation only, no purchase)", "三布告 v1.1"],
+ "changed": "order of runners handed to Static (W 3 / P2 6 / P3 9), hence MEC input roles and the cap order",
+ "monitoring": "profiles/KM_LOCAL_FORWARD_OOS_PREREG_20261121_R11.json (C26, connected vs base ranking on the same races)",
+ "rollback": "set KM_EXT_CONNECTION=0 in the autopilot workflow env (base ranking, same day) or revert the commit"
+}

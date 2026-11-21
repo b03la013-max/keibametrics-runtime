@@ -125,6 +125,10 @@ jobs:
           python -m pip install -q cryptography || echo "cryptography install failed (formal signature checks will HOLD)"
           python -m pip install -q pdfplumber || echo "pdfplumber install failed (ばんえい キンタロー feed -> REFERENCE)"
           export KM_LOCAL_AUTOPILOT_OUT="$GITHUB_WORKSPACE/data/output"
+          # NAR official CSVs (Owner-downloaded ZIPs, extracted on the Mac; not in Git) and the private cache for
+          # the formal EXT connection (Owner 2026-11-21 13:09「接続しなさい」)
+          if [ -d "$HOME/Downloads/km_nar/hist/nar" ]; then export KM_NAR_ROOT="$HOME/Downloads/km_nar"; fi
+          export KM_PRIVATE_CACHE="$HOME/.km_private_cache"
           git -C data config user.name "keibametrics-runtime"
           git -C data config user.email "actions@users.noreply.github.com"
           START=$(date +%s)

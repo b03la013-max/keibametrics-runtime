@@ -1,0 +1,23 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261121-R11",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-21T14:00:00+09:00",
+ "first_eligible_post": "2026-11-22T00:00:00+09:00",
+ "origin": "Owner 2026-11-21 13:09 JST order「水分ボンバーオンラインもNARの資料もGoogleドライブの精読も接続しなさい」. The connection is applied to the formal ranking from the 2026-11-22 morning edition (EXT-CONNECTION v1.0). This registration fixes, before any connected race, how the connected ranking is checked against the base ranking it replaced.",
+ "owner_decision": {"decision": "CONNECT (formal ranking) from 2026-11-22", "owner_words": "水分ボンバーオンラインもNARの資料もGoogleドライブの精読も接続しなさい"},
+ "change_under_test": "formal ranking overall' = 0.7 x Full29 candidate overall + 0.3 x EXT (水分ボンバー 4 columns, 競馬ブック bands, NAR sire/damsire/jockey/trainer/frame/own-record A/E, Drive-reading pattern labels measured on NAR). Production 29 registry, KRS, MEC, 60-ticket cap and purchase policy unchanged.",
+ "weights": {"EXT_SHARE": 0.30, "W": {"VMI": 0.25, "CCI": 0.06, "TRI": 0.06, "TMI": 0.06, "KBA": 0.06, "PACE": 0.02, "BVI": 0.10, "JKY": 0.08, "TRN": 0.07, "FRM": 0.04, "HRS": 0.08, "PAT": 0.12}, "SBO_COLS": {"recent": 0.40, "dist": 0.20, "going": 0.15, "avg": 0.25}, "fitted": false},
+ "pre_evidence": {
+   "nar_time_split": "tables from NAR 2023-01..2026-06 (479,069 starts), tested on 2026-07..10 (49,183 starts, not used for the tables): top-3 A/E by EXT_NAR band <46 0.24 / 46-50 0.81 / 50-54 1.01 / 54-58 1.09; top-3 log-loss market 0.46823 -> market x EXT_NAR 0.46755 (final popularity, NAR components only, SBO/KB not in NAR)",
+   "replay_20261120_36R": "winner in W(top3): base 22 -> connected 25, W changed in 9 races (NAR+KB, no SBO cache; the day was seen before the weights were frozen, weights not tuned on it)"},
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "venue_rule": "same direction in >= 2 venues with >= 12 races each",
+ "candidates": [
+  {"id": "C26-EXT-CONNECTION",
+   "hypothesis": "The connected ranking puts the winner in W (top 3) more often than the base Full29 ranking on the same races.",
+   "primary_metric": "winner in W3 (connected vs base, same races); secondary: 2nd in P2 (top 6), all top-3 in P3 (top 9), winner mean rank, by venue",
+   "keep_if": "at 100 races connected winner-in-W3 >= base",
+   "review_if": "at 100 races connected winner-in-W3 is lower than base by >= 3 races, or lower in >= 2 venues with >= 12 races -> decision packet to the Owner (keep / reweight / disconnect). Nothing is reverted automatically."}
+ ]
+}

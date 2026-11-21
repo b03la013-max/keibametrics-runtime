@@ -600,7 +600,7 @@ def dump(stats, path):
         json.dump(stats, f, ensure_ascii=False)
 
 
-def load_sources(root):
+def load_sources(root, nar_root=None):
     """All historical races available under the autopilot output root: NAR CSV months (hist/nar/<YYYYMM>/*.csv,
     preferred when present) and the Rakuten backfill results (backfill/results/<date>/*.json)."""
     from pathlib import Path
@@ -612,7 +612,10 @@ def load_sources(root):
         except (ValueError, KeyError, TypeError):
             continue
     src = ['RAKUTEN_RESULT_PAGE'] if races else []
-    for m in sorted((root / 'hist' / 'nar').glob('*')):
+    months = {m.name: m for m in sorted((root / 'hist' / 'nar').glob('*'))}
+    if nar_root:                                   # e.g. the Owner's NAR ZIPs extracted on the runner (not in Git)
+        months.update({m.name: m for m in sorted((Path(nar_root) / 'hist' / 'nar').glob('*')) if m.name not in months})
+    for _, m in sorted(months.items()):
         rl, hl, pb = (sorted(m.glob(f'*_{k}.csv')) for k in ('racelist', 'horselist', 'payback'))
         if rl and hl and pb:
             races.update(from_nar_csv(rl[0].read_bytes(), hl[0].read_bytes(), pb[0].read_bytes()))
