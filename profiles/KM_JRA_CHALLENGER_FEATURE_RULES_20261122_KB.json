@@ -1,0 +1,49 @@
+{
+ "profile": "KM-JRA-CHALLENGER-FEATURE-RULES-KB-v1",
+ "registered_at": "2026-11-21T22:45:00+09:00",
+ "registered_by": "Claude (Owner 2026-11-21 22:20: connect collected information to the indices; fill features that were 0% observed on 11/21)",
+ "status": "CHALLENGER_ONLY",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-22",
+ "source": "runtime/capture/keibabook_challenger_bands.js (KM-JRA-KB-CHALLENGER-BANDS-v1, bands only; raw text stays in the Owner's browser)",
+ "observed_on_20261121": "224 runners: workout_load 0%, workout_partner_level 0%, workout_consistency 0%, stable_readiness 0%",
+ "band_vocabulary": "same as Production evidence bands (STRONG/POSITIVE/NEUTRAL/CAUTION); numeric values come from the existing rule registry, no new numbers",
+ "feature_rules": {
+  "workout_load": {
+   "from": "load",
+   "map": {
+    "HIGH": "STRONG",
+    "MEDIUM_HIGH": "POSITIVE",
+    "MEDIUM": "POSITIVE",
+    "LOW": "NEUTRAL"
+   },
+   "hypothesis": "a harder final workout signals readiness (to be tested; heavy load is not assumed good in Production)"
+  },
+  "workout_partner_level": {
+   "from": "partner",
+   "map": {
+    "AHEAD": "STRONG",
+    "EVEN": "POSITIVE",
+    "SOLO": "NEUTRAL",
+    "BEHIND": "CAUTION"
+   }
+  },
+  "workout_consistency": {
+   "from": [
+    "trend",
+    "workouts_listed"
+   ],
+   "rule": "trend UP -> STRONG; trend FLAT and workouts_listed >= 3 -> POSITIVE; FLAT -> NEUTRAL; DOWN -> CAUTION; missing -> unobserved"
+  },
+  "stable_readiness": {
+   "from": "readiness",
+   "map": {
+    "READY": "STRONG",
+    "NEUTRAL": "NEUTRAL",
+    "NOT_READY": "CAUTION"
+   }
+  }
+ },
+ "consumers": "runtime/analysis/jra_index_research.py Challenger (indices whose formula_manifest weights use these features: TRI, RFI, KGI, CSI ...). Production indices keep these features unobserved.",
+ "evaluation": "pre-race freeze from 2026-11-22; compare each affected index Champion vs Challenger by winner rank, top-3 capture at equal candidate count, and per venue x surface (jra_oos_strata). Stages 30/100/300R; adoption only by Owner decision."
+}
