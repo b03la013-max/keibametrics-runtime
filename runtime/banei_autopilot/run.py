@@ -318,6 +318,18 @@ def tick(day, out, reader, hist):
             r['last_error'] = f'{type(e).__name__}:{str(e)[:160]}'
             log(out, 'ERROR', key, r['last_error'])
         dump(qp, q)
+    n_set = sum(1 for r in q['races'].values() if r['state'] == 'SETTLED')
+    if n_set and (q.get('reviewed_n') != n_set or not q.get('review_done')):
+        try:
+            import review
+            fin = review.daily(out, q)
+            q['reviewed_n'] = n_set
+            if fin and not q.get('review_done'):
+                q['review_done'] = now_jst().isoformat()
+                log(out, 'REVIEW_DONE', 'daily_summary.md')
+        except Exception as e:                                   # the review never stops the day
+            log(out, 'REVIEW_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
+        dump(qp, q)
     report(q, out)
     return q
 

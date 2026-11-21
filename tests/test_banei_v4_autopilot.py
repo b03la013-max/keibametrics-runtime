@@ -161,3 +161,30 @@ def test_first_failure_with_json_string_keys():
     assert run.first_failure(tk, [5, 7, 3]) == 'PAIR-P3-TERMINAL'
     assert run.first_failure(tk, [5, 7, 9]) == 'NONE'
     assert run.first_failure(tk, [8, 7, 9]) == 'ROLE'
+
+
+def test_review_writes_race_and_daily_summary(tmp_path, monkeypatch):
+    import review
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    for key in ('01', '02'):
+        post = datetime.fromisoformat(q['races'][key]['post'])
+        monkeypatch.setattr(run, 'now_jst', lambda post=post: post - timedelta(minutes=20))
+        q = run.tick(day, out, rd, {})
+    rec = json.loads((out / 'R01.json').read_text())
+    trio = rec['tickets']['trio'][0]
+    order = list(trio)
+    for key in ('01', '02'):
+        run.dump(out / f'R{key}.result.json', {'order': order, 'payouts': {'TRIO': {'-'.join(map(str, sorted(order))): 1500}},
+                                              'stake': 2800, 'return': 1500, 'pfs': 53.6, 'first_failure_layer': 'EXACT',
+                                              'effective_revision': 1})
+        q['races'][key]['state'] = 'SETTLED'
+    assert review.daily(out, q)
+    s = json.loads((out / 'review' / 'daily_summary.json').read_text())
+    assert s['races'] == 2 and s['trio_hit'] >= 1 and (out / 'review' / 'daily_summary.md').exists()
+    rv = json.loads((out / 'review' / 'R01.review.json').read_text())
+    assert any(p['id'] == 'P2:COMPONENT_PFS' for p in rv['proposals'])
+    assert (tmp_path / 'review_period_summary.md').exists()
