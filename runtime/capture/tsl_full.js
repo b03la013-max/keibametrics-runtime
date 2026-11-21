@@ -22,8 +22,9 @@ window.__tslFull = async function (date8, venues, kind, opts) {
     // The page repeats 推奨買い目 in a help line; the block that matters starts at 波乱度.
     const i = t.indexOf('波乱度'); const j = t.indexOf('(1)', i);
     const rec = i >= 0 ? t.slice(i, j > i ? j : i + 300).trim() : null;
-    const g = k => { const m = rec && rec.match(new RegExp(k + ':\\s*([^\\n]*)')); return m ? m[1].trim() : null; };
-    return { title: d.title, odds_at: (t.match(/(\d+時\d+分)現在オッズ/) || [])[1] || null, horses: H,
+    // odds_at is the page's own label, e.g. 最終オッズ.
+    const g = k => { const m = rec && rec.match(new RegExp(k + ':[ \\t]*([^\\n]*)')); return m ? m[1].trim() : null; };
+    return { title: d.title, odds_at: (t.match(/\d+日\s+(\S*オッズ)/) || [])[1] || null, horses: H,
              rec: rec ? { volatility: g('波乱度'), axis: g('軸'), main: g('本線'), second: g('次点'), cover: g('おさえ'), raw: rec } : null };
   };
   const out = { profile: 'KM-JRA-TSL-FULL-CAPTURE-v1', date8, kind, captured_at: new Date().toISOString(),
