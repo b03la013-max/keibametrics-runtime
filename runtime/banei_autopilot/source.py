@@ -253,6 +253,30 @@ def load_feed(feed_dir, day, kind):
     return json.loads(p.read_text()) if p.exists() else {}
 
 
+def parse_odds_rank(html, ordered):
+    """楽天 /odds/sanrenfuku|sanrentan/ の人気順一覧（tbody.rank: 順位・組番・オッズ）→ {(a,b,c): odds}.
+    三連複は昇順タプル、三連単は着順どおり。発売前（0.0・空）は除く。"""
+    out = {}
+    i = html.find('<tbody class="rank">')
+    body = html[i:html.find('</tbody>', i)] if i >= 0 else ''
+    for combo, odds in re.findall(r'<td>\s*\d+\s*</td>\s*<td>\s*([\d\-→]+)\s*</td>\s*<td[^>]*>\s*<span[^>]*>\s*([\d.,]+)\s*</span>', body):
+        nums = tuple(int(x) for x in re.split(r'[-→]', combo) if x)
+        try:
+            o = float(odds.replace(',', ''))
+        except ValueError:
+            continue
+        if len(nums) == 3 and o > 0:
+            out[nums if ordered else tuple(sorted(nums))] = o
+    return out
+
+
+def official_comment_band(feed, race_no, no):
+    """ばんえい十勝の公式発表（重賞の全調教師・騎手コメント）: 馬番ごとの文面を CCI-B の材料として返す。"""
+    r = (feed or {}).get(str(race_no)) or {}
+    v = r.get(str(no)) or {}
+    return ' '.join(x for x in (v.get('trainer'), v.get('jockey')) if x) or None
+
+
 def build_horses(card, moisture, race_date, hist, feeds, race_no, race_name='', skilled=None):
     """Card + history + feeds -> engine horse dicts (provenance kept by the engine)."""
     import derive
@@ -267,8 +291,10 @@ def build_horses(card, moisture, race_date, hist, feeds, race_no, race_name='', 
         nar = [z for z in hist.get(r['name'], []) if z['date'] < dt.strftime('%Y%m%d')]
         k = kin.get(str(r['no']), {})
         kbh = dict(kb.get(str(r['no']), {}))
+        off = official_comment_band(feeds.get('official'), race_no, r['no'])            # 重賞の公式コメント
         kbh['cci'] = kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point'),
-                                                (kin.get(str(r['no'])) or {}).get('comment'))   # + キンタロー短評 (spec 3-2)
+                                                (kin.get(str(r['no'])) or {}).get('comment'), off)   # + キンタロー短評 (spec 3-2)
+        kbh['official_comment'] = bool(off)
         flags = derive.horse_inputs(r, k, kbh, nar, skilled or set(), race_name, band)   # also fills start moisture
         own = []
         for s in r['starts']:
@@ -290,7 +316,7 @@ def build_horses(card, moisture, race_date, hist, feeds, race_no, race_name='', 
                     'nar_starts': len(nar),
                     'kintaro_past': k.get('past', []), 'front_ok': k.get('front_ok'),
                     'barrier_stable': k.get('barrier_stable'),
-                    'cci': kbh['cci'],
+                    'cci': kbh['cci'], 'official_comment': kbh['official_comment'],
                     'moisture_known': moisture is not None,
                     'body_stable': r['body_delta'] is not None and abs(r['body_delta']) < 16})
     return out

@@ -106,6 +106,20 @@ def race_review(out, key, r):
     hub_share = round(cnt[hub] / len(tk['trio']), 2) if hub else None
     exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
                 'hub_failed': bool(hub and hub not in res['order'][:3])}
+    # 安すぎる買い目（FNB 第219条 Low-Payout Structure）: 発走前オッズで、当たっても投資額に届かない券の割合
+    od = _j(out / f'R{key}.odds.json')
+    low = None
+    if od:
+        stake_all = tk['points'] * 100
+        tri = [od.get('sanrenfuku', {}).get('-'.join(map(str, sorted(x)))) for x in tk['trio']]
+        exa = [od.get('sanrentan', {}).get('-'.join(map(str, x))) for x in tk['exact']]
+        known = [o for o in tri + exa if o]
+        low = {'tickets_with_odds': len(known), 'below_stake': sum(1 for o in known if o * 100 < stake_all),
+               'trio_min': min([o for o in tri if o], default=None), 'exact_min': min([o for o in exa if o], default=None),
+               'odds_at': od.get('fetched_at')}
+        if known and low['below_stake'] / len(known) >= 0.5:
+            P.append({'id': 'P2:LOW_PAYOUT_STRUCTURE', 'level': 'P2',
+                      'what': '発走前オッズで券の半数以上が当たっても投資割れ', 'evidence': low})
     if (res['return'] or 0) > 0 and (res['return'] or 0) < (res['stake'] or 0):
         P.append({'id': 'P2:HIT_BUT_LOSS', 'level': 'P2', 'what': '的中したが投資割れ（点数の広さ・低配当）',
                   'evidence': {'stake': res['stake'], 'return': res['return'], 'points': tk['points']}})
@@ -114,6 +128,7 @@ def race_review(out, key, r):
         P.append({'id': 'P1:XDI_FINISHER', 'level': 'P1', 'what': '水分ボンバー上位3頭なのに内部下位半分だった馬が3着内',
                   'evidence': xdi_miss})
     return {'key': key, 'order': res['order'][:3], 'shadow': shadow, 'funnel': funnel, 'exposure': exposure,
+            'low_payout': low,
             'refund': res.get('refund'),
             'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
