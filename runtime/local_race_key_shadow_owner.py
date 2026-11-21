@@ -114,15 +114,16 @@ def compile_shadow(
                 n.append(key)
         neutrals[rid] = n
     ranked = {k: _ranking(rows, k) for k in INDEXES}
-    winner_scores = sorted((float(row["canonical_components"]["ZAI-WIN"]["value"])
-                            for row in rows), reverse=True)
-    spread = round(winner_scores[0] - winner_scores[1], 5)
+    winner_cells = [row["canonical_components"]["ZAI-WIN"] for row in rows]
+    winner_scores = sorted((float(cell["value"]) for cell in winner_cells
+                            if cell["terminal_status"] == "CALCULATED"), reverse=True)
+    spread = round(winner_scores[0] - winner_scores[1], 5) if len(winner_scores) >= 2 else None
     # Explicit UNVALIDATED SHADOW bands. Never infer a calibrated probability.
     # Widths are only a provisional paper baseline for unknown-future OOS.
-    if spread >= 15:
+    if spread is not None and spread >= 15:
         widths = (1, 2, 5)
         band = "SHADOW_NARROW"
-    elif spread >= 7:
+    elif spread is not None and spread >= 7:
         widths = (2, 3, 6)
         band = "SHADOW_MEDIUM"
     else:
@@ -141,7 +142,9 @@ def compile_shadow(
             thirds.append(rid)
         if len(thirds) >= widths[2]:
             break
-    p3_unknown = [rid for rid in ids if "T3I-L" in neutrals[rid]]
+    pairs = [(h, p) for h in heads for p in seconds if h != p]
+    p3_unknown = [rid for rid in ranked["T3I-L"]
+                  if "T3I-L" in neutrals[rid] and any(rid not in pair for pair in pairs)]
     # One unknown third is protected in this paper baseline rather than being
     # silently equated to a low score. Never promote to Production.
     protected_unknown = None
@@ -151,7 +154,6 @@ def compile_shadow(
     roles = {rid: [col for col, pool in
                    (("W", heads), ("P2", seconds), ("P3", thirds))
                    if rid in pool] for rid in ids}
-    pairs = [(h, p) for h in heads for p in seconds if h != p]
     # Order-exact paper candidates are not actual bets or Producer SIGNED FINAL.
     exacta = [{"bet_type": "EXACTA", "selection": [h, p], "stake": 100}
               for h, p in pairs]
