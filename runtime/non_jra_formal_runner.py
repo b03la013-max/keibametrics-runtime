@@ -65,8 +65,26 @@ resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
 
+private_checkpoint = None
+if os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_RUNNER") == "1":
+    from runtime.local_private_checkpoint import PrivateCheckpoint
+    private_checkpoint = PrivateCheckpoint.from_env()
+    if (private_checkpoint is None or fam != "LOCAL" or phase != "FORMAL"
+            or req.get("venue_id") != "KAW" or not isinstance(req.get("source_receipt"), dict)
+            or req.get("source_receipt_artifact_id")):
+        raise ValueError("PRIVATE_FORMAL_SIGNED_SOURCE_REQUIRED")
+    private_checkpoint.require_formal_execution(execution_id)
+    private_checkpoint.output_directory(pathlib.Path(RUNTIME_OUT))
+    saved = private_checkpoint.resolve(execution_id, "SOURCE")
+    if (saved is None or req["source_receipt"] !=
+            json.loads((saved["run_dir"] / "source_receipt_envelope.json").read_bytes())):
+        raise ValueError("PRIVATE_FORMAL_SOURCE_HANDOFF_MISMATCH")
+
 os.makedirs(RUNTIME_OUT,exist_ok=True)
 def persist(name,obj):
+    if private_checkpoint is not None:
+        private_checkpoint.write(pathlib.Path(RUNTIME_OUT) / name, obj)
+        return
     from execution_store import require_public_storage
     require_public_storage(obj)
     with open(os.path.join(RUNTIME_OUT,name),"w",encoding="utf-8") as wf:
@@ -1627,6 +1645,9 @@ candidate_krs_summary=None
 candidate_krs_v02_summary=None
 candidate_krs_v03_summary=None
 def run_candidate_krs_arm(label,q,legacy=False):
+    if private_checkpoint is not None:
+        return {"status":"SKIPPED_PRIVATE_FORMAL_ONLY","label":label,
+                "production_authority":False,"oos_temporal_eligible":False}
     if q is None:
         return {"status":"NOT_AVAILABLE","label":label,"production_authority":False,"oos_temporal_eligible":False}
     try:

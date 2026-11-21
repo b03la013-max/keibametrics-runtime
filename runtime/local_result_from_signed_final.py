@@ -21,7 +21,7 @@ from common_exact_continuity_shadow import (
 )
 from common_exact_continuity_oos_tracker import write_status as write_common_exact_continuity_oos_status
 from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json, result_route
-from execution_store import (materialize_phase, verify_result_reuse,
+from execution_store import (ExecutionStoreError, build_local_result_payload, materialize_phase, verify_result_reuse,
                              require_public_storage, require_public_artifact_paths)
 from race_day_fast_reflection import build_fast_reflection
 
@@ -117,47 +117,15 @@ if not endpoint.startswith("https://"):
 
 tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
 top3=[int(x) for x in req["finish_order"][:3]]
-payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
-total_investment=sum(int(t.get("stake") or 0) for t in tickets)
-total_return=0
-winning=[]
-by_type={}
-for t in tickets:
-    bt=str(t.get("bet_type") or "").upper()
-    sel=[int(x) for x in (t.get("selection") or [])]
-    st=int(t.get("stake") or 0)
-    b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
-    b["investment"]+=st
-    hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
-    if hit and (bt not in payouts or payouts[bt] <= 0):
-        # An unpublished winning payout is unknown, never a zero return.
-        # Stop before sending or signing a COMPLETE settlement.
-        raise SystemExit("RESULT_WINNING_PAYOUT_NOT_READY:"+bt)
-    if hit and bt in payouts:
-        r=st*payouts[bt]//100
-        total_return+=r; b["return"]+=r
-        win={"bet_type":bt,"selection":sel,"stake":st,"payout_per_100":payouts[bt],"return":r}
-        winning.append(win); b["wins"].append(win)
-
-result_payload={
-  "family_id":"LOCAL","race_id":rid,
-  "final_receipt":fin,
-  "official_result":{
-    "finish_order":[int(x) for x in req["finish_order"]],
-    "result_available_at":req["result_available_at"],
-    "source":req.get("source") or "USER_SUPPLIED_RESULT",
-    "payouts":payouts
-  },
-  "result_available_at":req["result_available_at"],
-  "settlement":{
-    "status":"COMPLETE",
-    "investment":total_investment,
-    "settled_investment":total_investment,
-    "return":total_return,
-    "winning_tickets":winning
-  },
-  "pfs_authority":req.get("pfs_authority") or "FROZEN-RECOMMENDATION"
-}
+try:
+    result_payload,by_type=build_local_result_payload(req,fin)
+except ExecutionStoreError as exc:
+    raise SystemExit(str(exc)) from None
+settlement=result_payload["settlement"]
+total_investment=settlement["investment"]
+total_return=settlement["return"]
+winning=settlement["winning_tickets"]
+payouts=result_payload["official_result"]["payouts"]
 def post(path,payload):
     status,body=request_json(
         endpoint+path,
