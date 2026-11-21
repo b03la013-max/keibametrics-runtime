@@ -143,6 +143,40 @@ def test_result_missing_payout_and_full_cancel_remain_held():
         _parse_refund_fixture(_refund_snapshot(None, notice='競走取り止め'))
 
 
+@pytest.mark.parametrize('notice,stopped,code', [
+    ('', 4, None),
+    ('<p>競走中止</p>', 4, 'CANCELLATION_HOLD'),
+    ('', 7, 'DNF_UNIVERSE_HOLD'),
+])
+def test_kaw_20261111_r12_individual_dnf_is_not_a_race_cancellation(notice, stopped, code):
+    # Normalized result facts from the historical 12R, with no signed or live inputs.
+    import base64, gzip, hashlib
+    finishers = [7, 10, 8, 6, 1, 14, 11, 9, 2, 3, 13, 5, 12]
+    html = '<h2>2026年11月11日（水）川崎第12競走競走成績</h2>' + notice
+    html += '<table><tr><th>着順</th><th>馬番</th><th>馬名</th></tr>'
+    for position, horse in enumerate(finishers, 1):
+        html += f'<tr><td>{position}</td><td>{horse}</td><td>Fixture</td></tr>'
+    html += f'<tr><td>競走中止</td><td>{stopped}</td><td>Fixture</td></tr></table><table>'
+    for name, selection, amount in (
+        ('馬連単', '7-10', '7,800'), ('三連複', '7-8-10', '15,690'), ('三連単', '7-10-8', '80,600')
+    ):
+        html += f'<tr><td>{name}</td><td>{selection}</td><td>{amount}円</td><td>1人気</td></tr>'
+    raw = (html + '</table>').encode()
+    snapshot = {
+        'http_status': 200, 'official': True, 'content_type': 'text/html; charset=utf-8',
+        'raw_gzip_b64': base64.b64encode(gzip.compress(raw)).decode(),
+        'raw_sha256': hashlib.sha256(raw).hexdigest(),
+    }
+    context = {'venue_id': 'KAW', 'race_date': '2026-11-11', 'race_no': 12}
+    if code:
+        with pytest.raises(o.FormalOrchestrationError, match=code):
+            o.parse_official_result_snapshot(snapshot, context, range(1, 15))
+    else:
+        order, payouts = o.parse_official_result_snapshot(snapshot, context, range(1, 15))
+        assert order == finishers
+        assert payouts == {'EXACTA': 7800, 'TRIO': 15690, 'TRIFECTA': 80600}
+
+
 def test_refund_hold_stops_before_settlement_learning_and_completion(monkeypatch, tmp_path):
     def acquire(*args, **kwargs):
         _parse_refund_fixture(_refund_snapshot('取消'))
