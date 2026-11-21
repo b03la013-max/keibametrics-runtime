@@ -205,11 +205,11 @@ def nar_history(nar_dir):
     if not p.exists() or not q.exists():
         return {}
     races = {}
-    with q.open(encoding='utf-8') as f:
+    with q.open(encoding='utf-8-sig') as f:
         for row in csv.DictReader(f):
             races[(row['競走年月日'], row['レース番号'])] = row
     hist = {}
-    with p.open(encoding='utf-8') as f:
+    with p.open(encoding='utf-8-sig') as f:
         for row in csv.DictReader(f):
             rc = races.get((row['競走年月日'], row['レース番号']))
             if not rc:
@@ -224,7 +224,11 @@ def nar_history(nar_dir):
             d = row['競走年月日']
             idx = speed_index(sec, load, moist, int(d[4:6]), race_class(rc['レース名']),
                               '2歳' in rc['条件'] or '２歳' in rc['条件'])
-            hist.setdefault(row['馬名'], []).append({'date': d, 'idx': idx, 'moisture': moist})
+            fin = re.sub(r'[^\d]', '', row.get('着順') or '')
+            bwt = re.sub(r'[^\d]', '', row.get('馬体重') or '')
+            hist.setdefault(row['馬名'], []).append({'date': d, 'idx': idx, 'moisture': moist,
+                                                    'finish': int(fin) if fin else None,
+                                                    'body_weight': int(bwt) if bwt else None})
     for v in hist.values():
         v.sort(key=lambda z: z['date'], reverse=True)
     return hist
@@ -256,7 +260,15 @@ def build_horses(card, moisture, race_date, hist, feeds, race_no):
         k = kin.get(str(r['no']), {})
         kbh = kb.get(str(r['no']), {})
         sb = (sbo.get('table') or {}).get(r['no']) or (sbo.get('table') or {}).get(str(r['no']))
-        out.append({**r, 'own_past': own, 'idx_sbo': sb,
+        rng = r.get('good_bw_range')
+        if not rng:                                # 21-4: good-run body-weight range from 1-3着 runs (NAR ledger)
+            good = [z['body_weight'] for z in nar if z.get('finish') and z['finish'] <= 3 and z.get('body_weight')]
+            rng = (min(good), max(good)) if good else None
+        bw, bd = r.get('body_weight'), r.get('body_delta')
+        out.append({**r, 'own_past': own, 'idx_sbo': sb, 'good_bw_range': rng,
+                    'good_bw_src': 'CARD' if r.get('good_bw_range') else ('NAR' if rng else None),
+                    'body_delta_pct': round(100 * bd / (bw - bd), 2) if bw and bd is not None and bw != bd else (0.0 if bd == 0 else None),
+                    'nar_starts': len(nar),
                     'kintaro_past': k.get('past', []), 'front_ok': k.get('front_ok'),
                     'barrier_stable': k.get('barrier_stable'),
                     'cci': kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point')),

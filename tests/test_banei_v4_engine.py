@@ -76,3 +76,11 @@ def test_low_confidence_no_exact():
     ev = dict(engine.evaluate(_race(young=True)), asi=40)
     tk = tickets.compile_race(ev)
     assert tk['exact'] == [] and tk['points'] <= 30
+
+
+def test_exposure_trace_counts_roles():
+    from runtime.banei_autopilot import tickets as T
+    ex = T._exposure([(1, 2, 3), (1, 2, 4)], [(1, 2, 3), (2, 1, 3)])
+    assert ex['1'] == {'head': 1, 'p2': 1, 'p3': 0, 'trio': 2}
+    assert ex['3'] == {'head': 0, 'p2': 0, 'p3': 2, 'trio': 1}
+    assert ex['4']['trio'] == 1

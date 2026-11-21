@@ -212,7 +212,10 @@ def evaluate(race):
                      'mpa': h['mpa'], 'brs': h['brs'], 'wda': wda, 'front_bonus': front_bonus,
                      'weight_source': wsrc, 'jbr': jbr, 'adf': adf_adj, 'adf_hits': adf_n,
                      'bwl': bwl_adj, 'bwl_label': bwl_lab, 'cci': cci, 'cpu': cpu, 'tpi': tpi,
-                     'dcr': dcr(h, idx, bta_ev), 'age': h.get('age'), 'load': h.get('load')})
+                     'dcr': dcr(h, idx, bta_ev), 'age': h.get('age'), 'load': h.get('load'),
+                     # evidence only (not in TPI): 馬体重の増減率・好走体重レンジの出所・NAR過去走数
+                     'body_delta_pct': h.get('body_delta_pct'), 'good_bw_src': h.get('good_bw_src'),
+                     'nar_starts': h.get('nar_starts')})
     _rank(rows, race)
     return {'ruleset': RULESET, 'moisture_band': moisture_band(race.get('moisture')), 'rows': rows,
             **_race_level(rows, race), 'probability_status': 'NOT-PROBABILITY / NOT-EV'}
