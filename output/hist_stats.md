@@ -255,15 +255,15 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=6 | 30 | 20.0% | 1.44 | 0% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=6 | 32 | 18.8% | 1.38 | 0% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=7 | 42 | 26.2% | 0.79 | 9% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 46 | 34.8% | 1.26 | 65% |
-| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=7 | 30 | 20.0% | 0.85 | 28% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=7 | 32 | 18.8% | 0.81 | 26% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=8 | 40 | 42.5% | 1.13 | 354% |
-| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=8 | 30 | 30.0% | 1.12 | 52% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=8 | 32 | 28.1% | 1.09 | 49% |
 | venue=KSM / distance=1580 / going=DRY / field_band=F9-11 / frame=8 | 30 | 30.0% | 0.93 | 172% |
+| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=5 | 32 | 28.1% | 0.93 | 30% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=7 | 35 | 25.7% | 1.01 | 15% |
-| venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=5 | 30 | 30.0% | 0.99 | 32% |
 
 ## 距離変更：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -272,10 +272,10 @@
 | venue=KOC / band=M / distance_change=SHORTER | 36 | 33.3% | 1.34 | 155% |
 | venue=SAG / band=M / distance_change=SAME | 46 | 26.1% | 1.24 | 62% |
 | venue=KSM / band=M / distance_change=LONGER | 51 | 19.6% | 0.82 | 21% |
+| venue=MIZ / band=M / distance_change=SAME | 81 | 24.7% | 1.12 | 33% |
 | venue=MOR / band=S / distance_change=SAME | 43 | 20.9% | 0.90 | 25% |
 | venue=SON / band=M / distance_change=SAME | 75 | 24.0% | 1.08 | 10% |
 | venue=KSM / band=M / distance_change=SHORTER | 44 | 25.0% | 1.07 | 35% |
-| venue=MIZ / band=M / distance_change=SAME | 59 | 23.7% | 1.07 | 23% |
 | venue=KOC / band=M / distance_change=LONGER | 65 | 27.7% | 1.02 | 59% |
 | venue=KNZ / band=M / distance_change=SAME | 53 | 30.2% | 0.99 | 25% |
 | venue=KSM / band=M / distance_change=SAME | 147 | 29.2% | 1.00 | 99% |
@@ -292,14 +292,14 @@
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
 | venue=SON / days_since_last=<=14d | 102 | 23.5% | 1.08 | 22% |
 | venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
-| venue=MIZ / days_since_last=<=14d | 69 | 26.1% | 1.02 | 16% |
+| venue=MIZ / days_since_last=<=14d | 94 | 25.5% | 1.04 | 25% |
 | venue=SAG / days_since_last=<=14d | 102 | 23.5% | 0.99 | 48% |
 
 ## 4角位置→着順：A/E の偏りが大きい区分（30出走以上、上位20）
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=MIZ / band=M / last_corner_pos(6=6+)=6 | 53 | 1.9% | 0.10 | 0% |
+| venue=MIZ / band=M / last_corner_pos(6=6+)=6 | 70 | 2.9% | 0.15 | 0% |
 | venue=KOC / band=S / last_corner_pos(6=6+)=6 | 87 | 3.5% | 0.22 | 0% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=6 | 316 | 4.1% | 0.23 | 31% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 230 | 5.2% | 0.30 | 2% |
@@ -400,7 +400,7 @@
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
 | venue=KOC / band=M / max_gain_prev5=GAIN<=0 | 72 | 22.2% | 0.83 | 88% |
-| venue=MIZ / band=M / max_gain_prev5=GAIN<=0 | 49 | 24.5% | 1.18 | 74% |
+| venue=MIZ / band=M / max_gain_prev5=GAIN<=0 | 68 | 25.0% | 1.20 | 72% |
 | venue=SON / band=M / max_gain_prev5=GAIN<=0 | 65 | 20.0% | 0.88 | 11% |
 | venue=KSM / band=M / max_gain_prev5=GAIN<=0 | 146 | 21.9% | 0.90 | 22% |
 | venue=KNZ / band=M / max_gain_prev5=GAIN<=0 | 61 | 22.9% | 0.96 | 11% |
