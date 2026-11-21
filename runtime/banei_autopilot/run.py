@@ -78,6 +78,9 @@ def discover(reader, day, out):
     return q
 
 
+_SKILLED = {}
+
+
 def predict(reader, q, key, out, hist):
     r = q['races'][key]
     html = reader.card_page(r['rid'])
@@ -104,10 +107,14 @@ def predict(reader, q, key, out, hist):
                 feeds['kintaro'] = {**feeds['kintaro'], str(r['no']): kintaro.parse(pdf)}
             except Exception as e:                       # layout change -> REFERENCE, never a crash
                 log(out, 'KINTARO_PARSE_FAIL', key, type(e).__name__)
-    horses = source.build_horses(card, moisture, q['day'], hist, feeds, r['no'])
     name = hdr.get('race_name') or ''
+    import derive
+    hist.get('')                                           # LazyHist: load the NAR ledger before the jockey table
+    if id(hist) not in _SKILLED:
+        _SKILLED[id(hist)] = derive.jockey_stats(hist)[1]
+    horses = source.build_horses(card, moisture, q['day'], hist, feeds, r['no'], race_name=name, skilled=_SKILLED[id(hist)])
     race = {'moisture': moisture, 'special': any(k in name for k in ('特別', '賞', '杯', '記念')) and 'Ｃ' not in name,
-            'young': '2歳' in name or '２歳' in name, 'horses': horses}
+            'young': '2歳' in name or '２歳' in name, 'horses': horses, 'pace': derive.race_pace(horses)}
     ev = engine.evaluate(race)
     tk = tickets.compile_race(ev)
     feeds_present = [k for k, v in feeds.items() if v]
@@ -117,7 +124,7 @@ def predict(reader, q, key, out, hist):
     text, total = render.render(label, ev, tk, paper=False)
     frozen = now_jst().isoformat()
     sha = hashlib.sha256(json.dumps([tk['trio'], tk['exact']]).encode()).hexdigest()
-    rec = {'race': r, 'header': hdr, 'moisture': moisture, 'sbo': sbo_meta, 'feeds_present': feeds_present, 'frozen_at': frozen,
+    rec = {'race': r, 'header': hdr, 'moisture': moisture, 'pace': race['pace'], 'derive_cuts': derive.CUTS, 'sbo': sbo_meta, 'feeds_present': feeds_present, 'frozen_at': frozen,
            'ticket_sha256': sha, 'evaluation': ev, 'tickets': tk, 'text': text}
     # full ledger (SBO / キンタロー derived numbers) stays private on the Mac; the public file keeps composites only
     cache = Path(os.environ.get('KM_BAN_CACHE', out.parent / '.cache'))

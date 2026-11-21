@@ -48,6 +48,7 @@ def compile_race(ev):
     axis = [honmei] + _col(win, a_n - 1, (honmei,))
     second = _col([honmei] + place, b_n, ()) if a_n == 1 else _col(place, b_n, axis) + axis
     second = list(dict.fromkeys(axis + second))[:max(b_n, len(axis)) + (0 if a_n == 1 else 1)]
+    second = second + [n for n in place if rows[n].get('phv') and n not in second]   # 4-19 PHV-B: 2列目にも配置
     third = list(dict.fromkeys(second + _col(place + hole, c_n + 2)))
     trio = set()
     for x in axis:
