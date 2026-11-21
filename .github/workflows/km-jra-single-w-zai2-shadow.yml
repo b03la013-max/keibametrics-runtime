@@ -1,0 +1,81 @@
+name: JRA single-W ZAI2 isolated Shadow
+on:
+  pull_request:
+    paths:
+      - 'research/single_w_zai2/**'
+      - '.github/workflows/km-jra-single-w-zai2-shadow.yml'
+  workflow_run:
+    workflows: ['KeibaMetrics Formal Request Runner', 'KeibaMetrics Formal Result Runner']
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: jra-single-w-zai2-isolated-shadow
+  cancel-in-progress: false
+jobs:
+  regression:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q pytest cryptography beautifulsoup4 PyMuPDF
+      - run: python -m pytest -q research/single_w_zai2/test_shadow.py
+  shadow:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.event != 'pull_request' &&
+      vars.KM_SINGLE_W_POLICY_ACK != '' && vars.KM_SINGLE_W_OWNER_ACK_REF != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      actions: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KM_SINGLE_W_POLICY_ACK: ${{ vars.KM_SINGLE_W_POLICY_ACK }}
+      KM_SINGLE_W_OWNER_ACK_REF: ${{ vars.KM_SINGLE_W_OWNER_ACK_REF }}
+      KM_UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q cryptography beautifulsoup4 PyMuPDF
+      - name: Freeze after Production FINAL; never call SOURCE or Engine
+        if: github.event.workflow_run.name == 'KeibaMetrics Formal Request Runner'
+        run: python research/single_w_zai2/worker.py freeze
+      - name: Detect newly frozen public coupons
+        id: new
+        run: |
+          if [ -f runtime_out/single_w_zai2/publication.json ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; fi
+      - name: Archive complete public Shadow coupons
+        uses: actions/upload-artifact@v4
+        if: steps.new.outputs.present == 'true'
+        id: archive
+        with:
+          name: jra-single-w-zai2-public-coupons-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime_out/single_w_zai2/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Verify server-created artifact and exact coupon bytes
+        if: steps.new.outputs.present == 'true'
+        env:
+          SHADOW_ARTIFACT_ID: ${{ steps.archive.outputs.artifact-id }}
+        run: python research/single_w_zai2/worker.py witness --artifact-id "$SHADOW_ARTIFACT_ID"
+      - name: Join already signed RESULT only
+        if: github.event.workflow_run.name == 'KeibaMetrics Formal Result Runner'
+        run: python research/single_w_zai2/worker.py evaluate
