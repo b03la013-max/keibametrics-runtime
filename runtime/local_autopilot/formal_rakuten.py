@@ -35,6 +35,7 @@ for p in (REPO, REPO / 'runtime'):
 from runtime.local_autopilot import rakuten  # noqa: E402
 
 POLICY_PATH = REPO / 'profiles' / 'local_production_static_owner_20261116_v1_1.json'
+FORMAL_VENUE = {'KOC': 'KCH', 'HMJ': 'HIM'}   # autopilot (Rakuten page) code -> Runtime / Static / Full29 code
 RAKUTEN_PROFILE = 'KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116'
 JST = timezone(timedelta(hours=9))
 STAGES = ['SOURCE_FREEZE', 'RUNNER_UNIVERSE', 'NUMERICAL_MATERIALIZATION', 'INDEX_PROVENANCE', 'STATIC_FREEZE',
@@ -289,7 +290,12 @@ def run_formal(r, out_dir, deadline):
     from capital_policy import resolve_capital_policy
     t0 = time.monotonic()
     key = f"{r['venue_id']}_{r['race_no']:02d}"
-    race = dict(r, formal_race_id=f"KM-LOCAL-{r['venue_id']}-{r['race_date'].replace('-', '')}-R{r['race_no']:02d}-RKT")
+    # The Runtime, the Static owner policy and the Full29 compiler use 高知 = KCH / 姫路 = HIM; the autopilot
+    # queue uses the Rakuten-page codes KOC / HMJ. Translate for every formal-side call (fixes
+    # HTTP_422 RAKUTEN_VENUE_NOT_IN_SCOPE, 2026-11-21); files, keys, 水分ボンバー and NAR tables keep KOC / HMJ.
+    fv = FORMAL_VENUE.get(r['venue_id'], r['venue_id'])
+    race = dict(r, venue_id=fv,
+                formal_race_id=f"KM-LOCAL-{fv}-{r['race_date'].replace('-', '')}-R{r['race_no']:02d}-RKT")
     stages, arts, manifest = {}, {}, []
     summary = {'classification': 'LOCAL_FORMAL_PRODUCTION_RAKUTEN_SIGNED_SOURCE', 'race_id': race['formal_race_id'],
                'stages': stages, 'first_failed_stage': None, 'actual_purchase': False}
@@ -314,7 +320,7 @@ def run_formal(r, out_dir, deadline):
         guard('SOURCE_FREEZE')
         sc, src = _call(base, '/source/acquire', {
             'family_id': 'LOCAL', 'race_id': race['formal_race_id'], 'manifest_profile': RAKUTEN_PROFILE,
-            'venue_id': r['venue_id'], 'race_date': r['race_date'], 'race_no': r['race_no'],
+            'venue_id': fv, 'race_date': r['race_date'], 'race_no': r['race_no'],
             'rakuten_race_id': r['rid'], 'prediction_cutoff': deadline.isoformat()}, 200)
         arts['source_receipt'] = src
         if sc >= 300 or (src.get('receipt') or {}).get('status') != 'SOURCE_FROZEN':
@@ -353,7 +359,7 @@ def run_formal(r, out_dir, deadline):
                     x.pop('external_evidence', None)
         guard('NUMERICAL_MATERIALIZATION')
         try:
-            sh = shadow29.run_production({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
+            sh = shadow29.run_production({'venue_id': fv, 'venue_name': r['venue_name'], 'race_no': r['race_no'],
                                           'race_date': r['race_date'], 'distance': head.get('distance'),
                                           'surface': head.get('surface'), 'going': head.get('going'),
                                           'race_name': head.get('race_name'), 'post_current': r['post_current'],
@@ -530,7 +536,7 @@ def run_formal(r, out_dir, deadline):
         if ext_pre is not None:   # C26 comparison base: the same card WITHOUT any external evidence (record only)
             try:
                 plain = [{k: v for k, v in x.items() if k != 'external_evidence'} for x in active]
-                sh0 = shadow29.run_production({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
+                sh0 = shadow29.run_production({'venue_id': fv, 'venue_name': r['venue_name'], 'race_no': r['race_no'],
                                                'race_date': r['race_date'], 'distance': head.get('distance'),
                                                'surface': head.get('surface'), 'going': head.get('going'),
                                                'race_name': head.get('race_name'), 'post_current': r['post_current'],
