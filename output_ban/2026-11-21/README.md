@@ -11,7 +11,7 @@
 | 7 | 17:25 | SETTLED | 27 | FORMAL | 済 | 修正版 | 83.0 | ROLE |
 | 8 | 18:00 | SETTLED | 29 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 9 | 18:30 | SETTLED | 28 | FORMAL | 済 | 修正版 | 136.8 | ROLE |
-| 10 | 19:00 | PREDICTION_COMPLETE | 27 | FORMAL | 済 |  |  |  |
+| 10 | 19:00 | PREDICTION_COMPLETE | 27 | FORMAL | 済 | 変更なし |  |  |
 | 11 | 19:30 | DISCOVERED |  |  |  |  |  |  |
 | 12 | 20:00 | DISCOVERED |  |  |  |  |  |  |
 
