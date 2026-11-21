@@ -132,6 +132,12 @@ def parse_card_ban(html):
                         'good_bw_range': (min(wr), max(wr)) if wr else None,
                         'body_weight': cur, 'body_delta': chg, 'scratched': cancelled,
                         'starts': [s for s in (parse_start_ban(t) for t in starts) if s]})
+    # 人気 is cut off for 'hot' horses (nested <span class="hot"> ends the rate span early): rank by odds
+    ranked = sorted((x['odds'], x['no']) for x in runners if x['odds'] and not x['scratched'])
+    for i, (_, no) in enumerate(ranked):
+        x = next(y for y in runners if y['no'] == no)
+        if x['pop'] is None:
+            x['pop'] = i + 1
     return runners
 
 
