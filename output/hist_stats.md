@@ -293,7 +293,7 @@
 |---|---|---|---|---|
 | venue=KOC / band=S / last_corner_pos(6=6+)=6 | 87 | 3.5% | 0.22 | 0% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=6 | 316 | 4.1% | 0.23 | 31% |
-| venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 137 | 4.4% | 0.25 | 0% |
+| venue=KNZ / band=M / last_corner_pos(6=6+)=6 | 142 | 4.9% | 0.28 | 0% |
 | venue=KOC / band=M / last_corner_pos(6=6+)=6 | 130 | 5.4% | 0.33 | 4% |
 | venue=SON / band=M / last_corner_pos(6=6+)=6 | 215 | 5.6% | 0.38 | 1% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=6 | 164 | 6.1% | 0.38 | 0% |
@@ -308,7 +308,7 @@
 | venue=SON / band=M / last_corner_pos(6=6+)=5 | 36 | 19.4% | 0.65 | 5% |
 | venue=SON / band=M / last_corner_pos(6=6+)=1 | 67 | 86.6% | 1.53 | 214% |
 | venue=SON / band=M / last_corner_pos(6=6+)=4 | 50 | 24.0% | 0.67 | 6% |
-| venue=KNZ / band=M / last_corner_pos(6=6+)=1 | 41 | 85.4% | 1.50 | 378% |
+| venue=KNZ / band=M / last_corner_pos(6=6+)=1 | 43 | 86.1% | 1.49 | 367% |
 | venue=KOC / band=M / last_corner_pos(6=6+)=1 | 37 | 75.7% | 1.45 | 234% |
 | venue=KNZ / band=M / last_corner_pos(6=6+)=4 | 37 | 37.8% | 1.44 | 4% |
 
@@ -368,9 +368,9 @@
 |---|---|---|---|---|
 | venue=SON / band=M / class=C2 / last_corner_pos(6=6+)=6 | 66 | 1.5% | 0.11 | 0% |
 | venue=KSM / band=M / class=OTHER / last_corner_pos(6=6+)=6 | 71 | 2.8% | 0.17 | 92% |
-| venue=KNZ / band=M / class=B2 / last_corner_pos(6=6+)=6 | 31 | 3.2% | 0.20 | 0% |
 | venue=KOC / band=S / class=C3 / last_corner_pos(6=6+)=6 | 65 | 3.1% | 0.21 | 0% |
 | venue=KSM / band=M / class=C1 / last_corner_pos(6=6+)=6 | 105 | 5.7% | 0.31 | 30% |
+| venue=KNZ / band=M / class=B2 / last_corner_pos(6=6+)=6 | 36 | 5.6% | 0.34 | 0% |
 | venue=KNZ / band=M / class=C2 / last_corner_pos(6=6+)=6 | 30 | 6.7% | 0.36 | 0% |
 | venue=KOC / band=M / class=OTHER / last_corner_pos(6=6+)=6 | 37 | 5.4% | 0.37 | 14% |
 | venue=MON / band=S / class=C4 / last_corner_pos(6=6+)=6 | 66 | 4.5% | 0.37 | 0% |
