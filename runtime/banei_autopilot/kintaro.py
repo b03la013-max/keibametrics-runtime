@@ -10,17 +10,18 @@ import re
 import urllib.request
 from pathlib import Path
 
-URL = 'https://net-banba.com/rakuten/qw{d}{r:02d}.pdf'
+URL = 'https://net-banba.com/rakuten/qw{d}{r:02d}.pdf'   # legacy guess only: the 2-letter prefix changes daily (qw, re, ...)
 CIRCLED = {c: i + 1 for i, c in enumerate('①②③④⑤⑥⑦⑧⑨⑩⑪⑫')}
 GRADE_X = [('front', 605), ('barrier', 630), ('kick', 655), ('light', 681), ('heavy', 706)]
 
 
-def fetch(day, race_no, dest):
-    """Download one race PDF (Owner-approved source). Returns path or None."""
+def fetch(day, race_no, dest, url=None):
+    """Download one race PDF (Owner-approved source). The real URL comes from the 楽天 mypage link list
+    (kintaro_links.json written by the browser-side collector); without it the legacy guess is tried."""
     dest = Path(dest)
     if dest.exists() and dest.stat().st_size > 10000:
         return dest
-    url = URL.format(d=day.replace('-', ''), r=race_no)
+    url = url or URL.format(d=day.replace('-', ''), r=race_no)
     req = urllib.request.Request(url, headers={'User-Agent': 'KeibaMetrics-BAN-PrivateResearch/1.0'})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:

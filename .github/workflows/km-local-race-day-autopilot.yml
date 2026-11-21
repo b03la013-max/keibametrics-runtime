@@ -144,7 +144,7 @@ jobs:
             python -m runtime.local_autopilot.run --date "$D" --budget 420 || echo "tick exit $?"
             # ばんえい（帯広）v4.0-BAN: one pass per loop on the same worker / same 楽天 throttle state (non-fatal)
             KM_BAN_OUT="$GITHUB_WORKSPACE/data/output_ban" KM_BAN_SOURCE_STATE="$KM_LOCAL_AUTOPILOT_OUT/source_state.json" \
-              KM_BAN_NAR_DIR="$HOME/Downloads/KM_BAN_NAR" KM_BAN_FEED_DIR="$HOME/Documents/KM_BAN_FEED" KM_BAN_CACHE="$HOME/.km_ban_cache" \
+              KM_BAN_NAR_DIR="$HOME/actions-runner/km_ban/nar" KM_BAN_FEED_DIR="$HOME/actions-runner/km_ban/feed" KM_BAN_CACHE="$HOME/.km_ban_cache" \
               python runtime/banei_autopilot/run.py --day "$D" || echo "ban tick exit $?"
             publish
             [ "$MODE" = "loop" ] || break

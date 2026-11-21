@@ -66,7 +66,7 @@ def discover(reader, day, out):
     prefix = source.day_meeting(top, day)
     if not prefix:
         return {'day': day, 'races': {}, 'meeting': None}
-    menu = RK.parse_menu(reader.card_page(prefix + '01'), prefix)
+    menu = source.parse_menu_ban(reader.card_page(f"{day.replace('-', '')}{source.BABA}03000001"), day)
     races = {}
     for no, rid, hhmm in menu:
         h, m = map(int, hhmm.split(':'))
@@ -87,7 +87,8 @@ def predict(reader, q, key, out, hist):
     feeds = {k: source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], k) for k in ('kintaro', 'sbo', 'keibabook')}
     if not feeds['kintaro'].get(str(r['no'])):
         cache = Path(os.environ.get('KM_BAN_CACHE', out.parent / '.cache'))
-        pdf = kintaro.fetch(q['day'], r['no'], cache / q['day'] / f"qw{q['day'].replace('-', '')}{r['no']:02d}.pdf")
+        links = source.load_feed(os.environ.get('KM_BAN_FEED_DIR'), q['day'], 'kintaro_links')
+        pdf = kintaro.fetch(q['day'], r['no'], cache / q['day'] / f"kintaro_{r['no']:02d}.pdf", url=links.get(f"{r['no']:02d}"))
         if pdf:
             try:
                 feeds['kintaro'] = {**feeds['kintaro'], str(r['no']): kintaro.parse(pdf)}

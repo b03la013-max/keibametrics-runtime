@@ -48,6 +48,18 @@ def day_meeting(top_html, day):
     return None
 
 
+def parse_menu_ban(card_html, day):
+    """(race_no, rid, 'HH:MM') for the whole 帯広 day. 楽天 menu links use a meeting-coded prefix
+    (e.g. 2026112103041701RR); the canonical day+'03030000'+RR id serves the same card (verified 2026-11-21)."""
+    i = card_html.find('<ul class="raceNumber')
+    seg = card_html[i:card_html.find('</ul>', i)]
+    d = day.replace('-', '')
+    out = {}
+    for num, hhmm in re.findall(r'<span class="num">(\d{1,2})R</span>\s*<span class="time">(\d{1,2}:\d{2})</span>', seg):
+        out[int(num)] = (int(num), f'{d}{BABA}0300{int(num):04d}'[:18], hhmm)
+    return sorted(out.values())
+
+
 def parse_start_ban(td):
     """One past start cell (ばんえい: 200ダ, load 3 digits, time m:ss.s (margin), body 4 digits k)."""
     if 'class="place"' not in td:
@@ -62,7 +74,7 @@ def parse_start_ban(td):
         m = re.fullmatch(r'(\S+)\s+(\d{2}\.\d{2}\.\d{2})', ln)
         if m and not out['date']:
             out['date'] = m[2]
-            out['race_name'] = ' '.join(L[k + 1:k + 3])
+            out['race_name'] = L[k + 1] if k + 1 < len(L) else ''
             continue
         m = re.search(r'200(?:ダ|ば)?\s*(\d+)人', ln)
         if m and out['pop'] is None:
@@ -113,7 +125,7 @@ def parse_card_ban(html):
         runners.append({'no': no, 'name': RK.nfkc(nm[1]) if nm else RK.text(cell.get('name'))[:20],
                         'age': int(age[1]) if age else None, 'load': load,
                         'jockey': RK.nfkc(jm[1]) if jm else None,
-                        'odds': float(win[1]) if win and not cancelled else None,
+                        'odds': float(win[1]) if win and not cancelled and float(win[1]) > 0 else None,
                         'pop': int(pop[1]) if pop else None,
                         'good_bw_range': (min(wr), max(wr)) if wr else None,
                         'body_weight': cur, 'body_delta': chg, 'scratched': cancelled,
