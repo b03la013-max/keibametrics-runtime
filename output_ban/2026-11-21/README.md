@@ -9,7 +9,7 @@
 | 5 | 16:15 | MISSED_DEADLINE |  |  |  |  |  |  |
 | 6 | 16:55 | SETTLED | 29 | FORMAL | 済 | 変更なし | 98.3 | ROLE |
 | 7 | 17:25 | PREDICTION_COMPLETE | 27 | FORMAL | 済 | 修正版 |  |  |
-| 8 | 18:00 | DISCOVERED |  |  |  |  |  |  |
+| 8 | 18:00 | PREDICTION_COMPLETE | 29 | FORMAL | 済 |  |  |  |
 | 9 | 18:30 | DISCOVERED |  |  |  |  |  |  |
 | 10 | 19:00 | DISCOVERED |  |  |  |  |  |  |
 | 11 | 19:30 | DISCOVERED |  |  |  |  |  |  |
