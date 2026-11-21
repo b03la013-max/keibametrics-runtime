@@ -68,7 +68,9 @@ def parse_start_ban(td):
     body = td[td.find('</div>') + 6:]
     L = RK.lines(body)
     ft = RK.text(place[1]) if place else ''
+    rid = re.search(r'race_performance/list/RACEID/(\d{18})', td)
     out = {'finish': int(ft) if ft.isdigit() else None, 'date': None, 'race_name': '', 'pop': None,
+           'race_no': int(rid[1][-2:]) if rid else None, 'moisture': None,
            'jockey': None, 'load': None, 'sec': None, 'margin': None, 'body_weight': None}
     for k, ln in enumerate(L):
         m = re.fullmatch(r'(\S+)\s+(\d{2}\.\d{2}\.\d{2})', ln)
@@ -130,6 +132,12 @@ def parse_card_ban(html):
                         'good_bw_range': (min(wr), max(wr)) if wr else None,
                         'body_weight': cur, 'body_delta': chg, 'scratched': cancelled,
                         'starts': [s for s in (parse_start_ban(t) for t in starts) if s]})
+    # 人気 is cut off for 'hot' horses (nested <span class="hot"> ends the rate span early): rank by odds
+    ranked = sorted((x['odds'], x['no']) for x in runners if x['odds'] and not x['scratched'])
+    for i, (_, no) in enumerate(ranked):
+        x = next(y for y in runners if y['no'] == no)
+        if x['pop'] is None:
+            x['pop'] = i + 1
     return runners
 
 
@@ -227,6 +235,7 @@ def nar_history(nar_dir):
             fin = re.sub(r'[^\d]', '', row.get('着順') or '')
             bwt = re.sub(r'[^\d]', '', row.get('馬体重') or '')
             hist.setdefault(row['馬名'], []).append({'date': d, 'idx': idx, 'moisture': moist,
+                                                    'jockey': row.get('騎手名'),
                                                     'finish': int(fin) if fin else None,
                                                     'body_weight': int(bwt) if bwt else None})
     for v in hist.values():
@@ -240,37 +249,43 @@ def load_feed(feed_dir, day, kind):
     return json.loads(p.read_text()) if p.exists() else {}
 
 
-def build_horses(card, moisture, race_date, hist, feeds, race_no):
+def build_horses(card, moisture, race_date, hist, feeds, race_no, race_name='', skilled=None):
     """Card + history + feeds -> engine horse dicts (provenance kept by the engine)."""
+    import derive
+    from engine import moisture_band
     kin = (feeds.get('kintaro') or {}).get(str(race_no), {})
     sbo = (feeds.get('sbo') or {}).get(str(race_no), {})
     kb = (feeds.get('keibabook') or {}).get(str(race_no), {})
     dt = datetime.strptime(race_date, '%Y-%m-%d')
+    band = moisture_band(moisture)
     out = []
     for r in card:
+        nar = [z for z in hist.get(r['name'], []) if z['date'] < dt.strftime('%Y%m%d')]
+        k = kin.get(str(r['no']), {})
+        kbh = dict(kb.get(str(r['no']), {}))
+        kbh['cci'] = kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point'))
+        flags = derive.horse_inputs(r, k, kbh, nar, skilled or set(), race_name, band)   # also fills start moisture
         own = []
         for s in r['starts']:
             if s.get('sec') and s.get('load') and s.get('date'):
                 d = datetime.strptime('20' + s['date'], '%Y.%m.%d')
-                own.append({'idx': speed_index(s['sec'], s['load'], None, d.month, race_class(s['race_name']), False),
-                            'moisture': None, 'date': d.strftime('%Y%m%d')})
-        nar = [z for z in hist.get(r['name'], []) if z['date'] < dt.strftime('%Y%m%d')]
+                own.append({'idx': speed_index(s['sec'], s['load'], s.get('moisture'), d.month, race_class(s['race_name']), False),
+                            'moisture': s.get('moisture'), 'date': d.strftime('%Y%m%d')})
         seen = {z['date'] for z in nar}
         own = sorted(nar + [z for z in own if z['date'] not in seen], key=lambda z: z['date'], reverse=True)
-        k = kin.get(str(r['no']), {})
-        kbh = kb.get(str(r['no']), {})
         sb = (sbo.get('table') or {}).get(r['no']) or (sbo.get('table') or {}).get(str(r['no']))
         rng = r.get('good_bw_range')
         if not rng:                                # 21-4: good-run body-weight range from 1-3着 runs (NAR ledger)
             good = [z['body_weight'] for z in nar if z.get('finish') and z['finish'] <= 3 and z.get('body_weight')]
             rng = (min(good), max(good)) if good else None
         bw, bd = r.get('body_weight'), r.get('body_delta')
-        out.append({**r, 'own_past': own, 'idx_sbo': sb, 'good_bw_range': rng,
+        out.append({**r, **flags, 'own_past': own, 'idx_sbo': sb, 'good_bw_range': rng,
                     'good_bw_src': 'CARD' if r.get('good_bw_range') else ('NAR' if rng else None),
                     'body_delta_pct': round(100 * bd / (bw - bd), 2) if bw and bd is not None and bw != bd else (0.0 if bd == 0 else None),
                     'nar_starts': len(nar),
                     'kintaro_past': k.get('past', []), 'front_ok': k.get('front_ok'),
                     'barrier_stable': k.get('barrier_stable'),
-                    'cci': kbh.get('cci') or cci_band(kbh.get('short'), kbh.get('danwa'), kbh.get('point')),
+                    'cci': kbh['cci'],
+                    'moisture_known': moisture is not None,
                     'body_stable': r['body_delta'] is not None and abs(r['body_delta']) < 16})
     return out

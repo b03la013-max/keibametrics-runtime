@@ -127,3 +127,30 @@ def test_nar_good_bw_range_fallback_and_pct(tmp_path):
     h = source.build_horses(card, 2.0, '2026-11-21', hist, {}, 1)[0]
     assert h['good_bw_range'] == (1000, 1030) and h['good_bw_src'] == 'NAR'
     assert h['body_delta_pct'] == round(100 * 10 / 1030, 2) and h['nar_starts'] == 2
+
+
+def test_check10_keeps_rev1_when_nothing_changes_and_revises_on_change(tmp_path, monkeypatch):
+    day = '2026-11-21'
+    out = tmp_path / day
+    out.mkdir()
+    rd = FakeReader(day)
+    q = run.discover(rd, day, out)
+    post = datetime.fromisoformat(q['races']['01']['post'])
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=20))
+    q = run.tick(day, out, rd, {})
+    q['races']['01']['delivered'] = 'x'                       # no issue env in tests
+    run.dump(out / 'queue.json', q)
+    monkeypatch.setattr(run, 'now_jst', lambda: post - timedelta(minutes=9))
+    q = run.tick(day, out, rd, {})
+    c = q['races']['01']['check10']
+    assert c['decision'].startswith('KEEP_REVISION_1') and q['races']['01'].get('effective') is None
+    # a scratch before post -> Revision 2 (Rev1 file kept)
+    q['races']['01'].pop('check10')
+    run.dump(out / 'queue.json', q)
+    orig = rd.card_page
+    rd.card_page = lambda rid: orig(rid).replace('<td class="number">3</td>', '<td class="number">取消</td>')
+    q = run.tick(day, out, rd, {})
+    r = q['races']['01']
+    assert r['check10']['decision'].startswith('REVISION_2') and r['effective'] == 'rev2'
+    assert '出走馬の変更（取消・除外）' in r['check10']['reasons']
+    assert (out / 'R01.json').exists() and (out / 'R01.rev2.json').exists()

@@ -157,6 +157,9 @@ def bwl(h):
     rng = h.get('good_bw_range')                  # (lo, hi) from 1-3着 runs
     if bw is None or d is None:
         return 0.0, 'UNKNOWN'
+    pct = _f(h.get('body_delta_pct'))
+    if pct is not None and abs(pct) < 0.8:          # 4-16: ±0.8%未満は原則中立
+        return 0.0, 'NEUTRAL_PCT'
     if not rng:
         return 0.0, 'HOLD'                        # レンジ未取得: 保留 (21-4)
     lo, hi = rng
@@ -167,9 +170,11 @@ def bwl(h):
 
 
 def adf(h, race):
+    """4-15 ADF-B: 乾燥馬場が前提。8歳以上・690kg以上・想定ペースH・馬体重減・好位/先行負荷のうち3項目以上で TPI-4~8."""
+    if moisture_band(race.get('moisture')) != 'DRY':
+        return 0.0, 0
     c = sum([(_f(h.get('age')) or 0) >= 8, (_f(h.get('load')) or 0) >= 690, race.get('pace') == 'H',
-             (_f(h.get('body_delta')) or 0) < 0, bool(h.get('front_type')), moisture_band(race.get('moisture')) == 'DRY',
-             bool(h.get('fades_after_barrier'))])
+             (_f(h.get('body_delta')) or 0) < 0, bool(h.get('front_type'))])
     return (-MID(4, 8), c) if c >= 3 else (0.0, c)
 
 
@@ -198,7 +203,8 @@ def evaluate(race):
         bta_adj, bta_ev, bta_mean = bta(kp)
         h = dict(h, mpa=mpa(kp), brs=brs(kp))
         wda, front_bonus, wsrc = weight_terms(h, H, race.get('special'), h.get('front_ok'))
-        jbr = MID(2, 3) if h.get('jockey_barrier') else 0.0
+        nj = len(h.get('jbr_hits') or ([1] if h.get('jockey_barrier') else []))
+        jbr = MID(3, 6) if nj >= 2 else MID(2, 3) if nj == 1 else 0.0          # 4-2 軽度 / 複数該当
         adf_adj, adf_n = adf(h, race)
         bwl_adj, bwl_lab = bwl(h)
         cci = {'VERY_STRONG': 3.0, 'STRONG': 1.5, 'NEUTRAL': 0.0, 'CAUTION': -1.5}.get(h.get('cci'), 0.0)
@@ -215,7 +221,13 @@ def evaluate(race):
                      'dcr': dcr(h, idx, bta_ev), 'age': h.get('age'), 'load': h.get('load'),
                      # evidence only (not in TPI): 馬体重の増減率・好走体重レンジの出所・NAR過去走数
                      'body_delta_pct': h.get('body_delta_pct'), 'good_bw_src': h.get('good_bw_src'),
-                     'nar_starts': h.get('nar_starts')})
+                     'nar_starts': h.get('nar_starts'), 'jbr_hits': h.get('jbr_hits'),
+                     'front_type': h.get('front_type'), 'fades_after_barrier': h.get('fades_after_barrier'),
+                     'promoted': h.get('promoted'), 'win_streak': h.get('win_streak'),
+                     'bwl_signals': [k for k in ('state_bad', 'comment_weak', 'consecutive_loss') if h.get(k)],
+                     'track_fit_grade': h.get('track_fit_grade'), 'tm_marks': h.get('tm_marks'),
+                     '_flags': {k: h.get(k) for k in ('front_ok', 'barrier_stable', 'body_stable', 'recovered',
+                                                      'body_delta', 'cci_band')} | {'cci_band': h.get('cci')}})
     _rank(rows, race)
     return {'ruleset': RULESET, 'moisture_band': moisture_band(race.get('moisture')), 'rows': rows,
             **_race_level(rows, race), 'probability_status': 'NOT-PROBABILITY / NOT-EV'}
@@ -248,6 +260,38 @@ def _rank(rows, race):
         r['role_p3'] = 'BUY' if r['place_rank'] <= min(6, n) else 'MONITOR' if r['hole_rank'] <= 6 else None
         # 強制降格 (5-2): 3項目以上で本命禁止
         r['no_honmei'] = r['adf_hits'] >= 3 or (r['bta_evidence'] == 'UNCONFIRMED' and race.get('young'))
+    _rules(rows, race)
+
+
+def _rules(rows, race):
+    """攻略条項 5-1 強制昇格 / 5-2 強制降格 / 4-8 POF-B / 4-20 MOP-B / 4-19 PHV-B / 4-7 PCH-B (categorical effects only:
+    本命禁止・最低▲・三連複2列目・評価フラグ; no new point values)."""
+    n = len(rows)
+    loads = [r['load'] for r in rows if r['load']]
+    fwd = sum(1 for r in rows if r['_flags'].get('front_ok'))
+    same_type = sum(1 for r in rows if r['front_type'])
+    dry = moisture_band(race.get('moisture')) == 'DRY'
+    bsi_sorted = sorted([r['bsi'] for r in rows if r['bsi'] is not None], reverse=True)
+    for r in rows:
+        f = r['_flags']
+        hits52 = sum([(r['age'] or 0) >= 8, (r['load'] or 0) >= 690, (f.get('body_delta') or 0) <= -15,
+                      race.get('pace') == 'H', fwd >= n / 2, dry])
+        r['force_down'] = hits52 >= 3
+        b_rank = (bsi_sorted.index(r['bsi']) + 1) if r['bsi'] is not None else None
+        r['mop'] = bool(r['odds'] and r['odds'] < 3.0 and b_rank and b_rank > 3)
+        r['pof'] = bool((r['pop'] or 99) <= 3 and r['front_type'] and same_type >= 2
+                        and (dry or (r['load'] or 0) >= max(loads or [0])))
+        if r['force_down'] or r['mop'] or r['pof']:
+            r['no_honmei'] = True
+        light20 = bool(loads and r['load'] and max(loads) - r['load'] >= 20)
+        up = [light20, bool(f.get('front_ok')), bool(f.get('recovered'))]          # 調教良化: 情報なし
+        r['force_up'] = sum(up) == 3
+        third = bsi_sorted[2] if len(bsi_sorted) >= 3 else (bsi_sorted[-1] if bsi_sorted else None)
+        r['phv'] = bool((r['pop'] or 0) >= 7 and f.get('body_stable') and (f.get('front_ok') or (r['mpa'] or 0) > 0)
+                        and f.get('cci_band') in ('STRONG', 'VERY_STRONG') and f.get('barrier_stable')
+                        and r['bsi'] is not None and third is not None and r['bsi'] >= third - 5)
+        r['pch'] = bool(race.get('pace') == 'H' and f.get('barrier_stable') and not r['front_type']
+                        and not r['fades_after_barrier'])
 
 
 def _race_level(rows, race):
@@ -260,6 +304,9 @@ def _race_level(rows, race):
             marks[r['no']] = '○'
     for r in by_place:
         if r['no'] not in marks and len([m for m in marks.values() if m == '▲']) < 1:
+            marks[r['no']] = '▲'
+    for r in rows:                                   # 5-1 強制昇格: 最低▲
+        if r.get('force_up') and r['no'] not in marks:
             marks[r['no']] = '▲'
     f3s = [honmei['no']]
     for r in by_place:

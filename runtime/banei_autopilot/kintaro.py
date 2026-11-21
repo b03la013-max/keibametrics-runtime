@@ -4,7 +4,10 @@ Layout (2026-11 issue, A4 landscape, verified on qw2026111611): one row per hors
 five past-race cells (1走前..5走前, ~95 pt wide from x~175). In each cell the barrier diagram carries
 three segment seconds left-to-right = [start -> 第2障害, 第2障害, 障害後 -> goal] (sum = race time),
 e.g. 37 / 26 / 73 for 2.16.0. Right block: 先行力 / 障害力 / 末脚 / 軽馬場 / 重馬場 grades A..E.
-Circled positions are kept raw (meaning not yet confirmed) and are not used by the engine.
+The diagram is drawn right-to-left (start on the right, arrow ←): left-to-right the three seconds are
+[障害後→goal, 第2障害, start→第2障害]. Circled numbers (provisional map, 2026-11-21, checked on qw2026111611
+and re2026112101 against the 短評 逃げ/好位/中位/後方): 1st = 道中の位置, 2nd = 第2障害での位置; finish = 着順.
+MPA-B / BRS-B use this map with map_status PROVISIONAL until 30 races confirm it.
 """
 import re
 import urllib.request
@@ -70,7 +73,12 @@ def parse(path):
             segs = [int(w['text']) for w in seg[:3]]
             past.append({'date': d['text'], 'moisture': moist, 'load': load, 'time': tm, 'finish': fin,
                          'segments_sec': segs, 'barrier_sec': segs[1] if len(segs) == 3 else None,
-                         'circled_raw': circ, 'note': note})
+                         'circled_raw': circ, 'note': note,
+                         'pos_first': circ[0] if len(circ) >= 2 else None,
+                         'pos_barrier': circ[1] if len(circ) >= 2 else None,
+                         'pos_finish': fin, 'pos_map': 'PROVISIONAL',
+                         'seg_to_barrier': segs[2] if len(segs) == 3 else None,
+                         'seg_after_barrier': segs[0] if len(segs) == 3 else None})
         g = {k: _grade(band, top, x) for k, x in GRADE_X}
         out[str(no)] = {'past': past, 'grades': g,
                         'front_ok': g['front'] in ('A', 'B') if g['front'] else None,
