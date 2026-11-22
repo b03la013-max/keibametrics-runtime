@@ -290,7 +290,7 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=MON / days_since_last=<=14d | 33 | 18.2% | 1.34 | 11% |
+| venue=MON / days_since_last=<=14d | 34 | 17.6% | 1.31 | 10% |
 | venue=SON / days_since_last=15-35d | 44 | 29.5% | 1.20 | 24% |
 | venue=MOR / days_since_last=<=14d | 76 | 21.1% | 0.86 | 30% |
 | venue=MIZ / days_since_last=15-35d | 41 | 29.3% | 1.13 | 174% |
@@ -316,7 +316,7 @@
 | venue=SON / band=M / last_corner_pos(6=6+)=6 | 251 | 6.0% | 0.39 | 1% |
 | venue=KOC / band=S / last_corner_pos(6=6+)=5 | 33 | 12.1% | 0.42 | 0% |
 | venue=SON / band=S / last_corner_pos(6=6+)=6 | 140 | 5.7% | 0.44 | 0% |
-| venue=MON / band=S / last_corner_pos(6=6+)=6 | 198 | 7.6% | 0.49 | 15% |
+| venue=MON / band=S / last_corner_pos(6=6+)=6 | 222 | 7.7% | 0.50 | 14% |
 | venue=MOR / band=M / last_corner_pos(6=6+)=6 | 229 | 8.7% | 0.51 | 11% |
 | venue=KSM / band=M / last_corner_pos(6=6+)=5 | 69 | 17.4% | 0.57 | 0% |
 | venue=MOR / band=S / last_corner_pos(6=6+)=3 | 30 | 56.7% | 1.72 | 64% |
@@ -368,7 +368,7 @@
 | venue=KNZ / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 142 | 3.5% | 0.21 | 4% |
 | venue=KNZ / distance=1500 / fastest_last3f=False / last_corner_band=6+ | 116 | 4.3% | 0.25 | 0% |
 | venue=KOC / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 127 | 3.9% | 0.25 | 0% |
-| venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 87 | 3.5% | 0.26 | 0% |
+| venue=MON / distance=1000 / fastest_last3f=False / last_corner_band=6+ | 92 | 4.3% | 0.34 | 0% |
 | venue=MOR / distance=1400 / fastest_last3f=False / last_corner_band=6+ | 146 | 5.5% | 0.34 | 3% |
 | venue=MOR / distance=1600 / fastest_last3f=False / last_corner_band=6+ | 62 | 4.8% | 0.34 | 0% |
 | venue=SON / distance=1230 / fastest_last3f=False / last_corner_band=6+ | 79 | 5.1% | 0.34 | 0% |
@@ -400,7 +400,7 @@
 | venue=MOR / band=S / class=C2 / last_corner_pos(6=6+)=6 | 101 | 7.9% | 0.48 | 0% |
 | venue=KSM / band=M / class=C1 / last_corner_pos(6=6+)=1 | 30 | 90.0% | 2.05 | 462% |
 | venue=KNZ / band=M / class=C2 / last_corner_pos(6=6+)=6 | 52 | 9.6% | 0.49 | 0% |
-| venue=MON / band=S / class=2YO / last_corner_pos(6=6+)=6 | 70 | 10.0% | 0.56 | 29% |
+| venue=MON / band=S / class=2YO / last_corner_pos(6=6+)=6 | 85 | 9.4% | 0.54 | 24% |
 
 ## 近5走の最大進出（1角→4角）（MPA-SAG／MAI-MORの検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
 
