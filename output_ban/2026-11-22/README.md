@@ -11,8 +11,8 @@
 | 7 | 17:25 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | PAIR-P3-TERMINAL |
 | 8 | 17:55 | SETTLED | 30 | FORMAL | 済 | 修正版 | 277.7 | NONE |
 | 9 | 18:25 | SETTLED | 28 | FORMAL | 済 | 変更なし | 0.0 | PAIR-P3-TERMINAL |
-| 10 | 19:00 | PREDICTION_COMPLETE | 30 | FORMAL | 済 | 修正版 |  |  |
+| 10 | 19:00 | SETTLED | 30 | FORMAL | 済 | 修正版 | 444.3 | EXACT |
 | 11 | 19:30 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
 | 12 | 20:15 | DISCOVERED |  |  |  |  |  |  |
 
-投資 25,400円／払戻 8,330円／回収率 32.8%（100円均等・未較正）
+投資 28,400円／払戻 21,660円／回収率 76.3%（100円均等・未較正）
