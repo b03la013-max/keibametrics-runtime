@@ -17,21 +17,21 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:02:05 / 21:06:03 / 21:06:03 / 21:40:38 |
 | 最早発走 | 12:00 |
-| Provider要求 | 38回・待機2112秒 |
+| Provider要求 | 40回・待機2173秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想34Rのうち実行34R／359頭×29＝10411セル（期待値 10411）：CALCULATED 8485・RULED-NEUTRAL 1926・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10411／。KRS実試行 0（外部Engine未呼出）。
+予想34Rのうち実行34R／359頭×29＝10411セル（期待値 10411）：CALCULATED 8507・RULED-NEUTRAL 1904・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10411／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較34R：◎一致 11/34・順位相関（Spearman平均）0.73。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較34R：◎一致 10/34・順位相関（Spearman平均）0.73。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 水沢
 
 | R | 発走（変更） | 状態 | 版 | 取得 | 保存 | 本命 | 買い目 | 結果 |
 |---|---|---|---|---|---|---|---|---|
-| [1R](MIZ_01.md) | 12:00 | PRESTART_PUSH_VERIFIED | 朝版 | 21:04 | 21:06 | ◎2 デディカス | 馬単 2→1,11,8<br>三連単 2→1,11→1,11,8,5,10 |  |
+| [1R](MIZ_01.md) | 12:00 | PREDICTION_COMPLETE | 直前版 | 11:16 | 11:16 | ◎2 デディカス | ワイド 2-1 / 2-10<br>三連複 1-2-11 / 1-2-8 / 1-2-10 / 2-8-11 / 2-10-11 |  |
 | [2R](MIZ_02.md) | 12:35 | PRESTART_PUSH_VERIFIED | 朝版 | 21:07 | 21:07 | ◎3 ツクバアヴァロン | ワイド 3-7 / 3-10<br>三連複 1-3-7 / 3-4-7 / 3-7-8 / 3-7-9 / 3-7-10 |  |
 | [3R](MIZ_03.md) | 13:10 | PRESTART_PUSH_VERIFIED | 朝版 | 21:08 | 21:08 | ◎3 メイショウオタモイ | 馬単 3→4,9,8<br>三連単 3→4,9→4,9,8,6,10 |  |
 | [4R](MIZ_04.md) | 13:45 | PRESTART_PUSH_VERIFIED | 朝版 | 21:09 | 21:09 | ◎8 ブライティアロード | 馬単 8→3,7,9<br>三連単 8→3,7→3,7,9,2,10 |  |

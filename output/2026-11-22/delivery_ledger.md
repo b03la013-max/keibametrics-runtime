@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-22（06:07時点）
+# 地方版 配送台帳 2026-11-22（11:16時点）
 
 - 管理Race 34／発走済み 0
-- PAPER：凍結 34・Push検証 34・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 34・Push検証 33・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -22,7 +22,7 @@
 | KOC_09 | 19:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_10 | 20:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_11 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| MIZ_01 | 12:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| MIZ_01 | 12:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | MIZ_02 | 12:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_03 | 13:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_04 | 13:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
