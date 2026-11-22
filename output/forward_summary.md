@@ -209,5 +209,5 @@
 | 2026-11-22 | MIZ_01 | `dd39eaa92f3a6386` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
 | 2026-11-22 | MIZ_02 | `84e12bddea95c406` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
 | 2026-11-22 | MIZ_03 | `ca88d09e8af49a14` | 済 | 6000 | 9150 | True | CAPITAL_EFFICIENCY |
-| 2026-11-22 | MIZ_04 | `0e4b8e2bc5d93d0e` | 待 | – | – | – | – |
+| 2026-11-22 | MIZ_04 | `f5ecde526bdd6299` | 待 | – | – | – | – |
 | 2026-11-22 | MIZ_05 | `8c006fde81dc0676` | 待 | – | – | – | – |
