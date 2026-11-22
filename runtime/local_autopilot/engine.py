@@ -230,6 +230,16 @@ def softmax(xs, tau):
     return [v / s for v in e]
 
 
+def rank_f3s(rows):
+    """PAPER ranking: F3S band, published odds, raw score, stable horse number.
+
+    Never let upstream card order decide the favorite inside a rounded F3S
+    band when both horses have missing (or identical) odds.
+    """
+    return sorted(rows, key=lambda x: (-round(x['F3S'], 1), x['win'] or 999.0,
+                                       -x['F3S'], x['no']))
+
+
 def predict(race, runners, odds, today, ext=None):
     active = [r for r in runners if r.get('status') != 'CANCELLED'
               and not (odds.get(r['horse_no'], {}).get('cancelled'))]
@@ -308,8 +318,9 @@ def predict(race, runners, odds, today, ext=None):
         x['p_model'] = a
         x['p_market'] = m / tot if (m and tot) else None
         x['p_win'] = 0.5 * a + 0.5 * x['p_market'] if x['p_market'] else a
-    # ties (e.g. all-newcomer fields where every index is UNKNOWN) break on the market
-    order = sorted(rows, key=lambda x: (-round(x['F3S'], 1), x['win'] or 999.0))
+    # Keep the existing 0.1-point band and market tie-break, then use raw F3S
+    # instead of provider/card order when odds are equally unavailable.
+    order = rank_f3s(rows)
     marks = ['◎', '○', '▲', '△', '△']
     for x in rows:
         x['mark'] = ''
