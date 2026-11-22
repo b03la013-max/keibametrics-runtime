@@ -17,15 +17,15 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:02:05 / 21:06:03 / 21:06:03 / 21:40:38 |
 | 最早発走 | 12:00 |
-| Provider要求 | 54回・待機2473秒 |
+| Provider要求 | 55回・待機2473秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想34Rのうち実行34R／359頭×29＝10411セル（期待値 10411）：CALCULATED 8609・RULED-NEUTRAL 1802・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10411／。KRS実試行 0（外部Engine未呼出）。
+予想34Rのうち実行34R／359頭×29＝10411セル（期待値 10411）：CALCULATED 8627・RULED-NEUTRAL 1784・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10411／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較34R：◎一致 10/34・順位相関（Spearman平均）0.75。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較34R：◎一致 11/34・順位相関（Spearman平均）0.75。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）
 
@@ -70,7 +70,7 @@
 
 | R | 発走（変更） | 状態 | 版 | 取得 | 保存 | 本命 | 買い目 | 結果 |
 |---|---|---|---|---|---|---|---|---|
-| [1R](SAG_01.md) | 15:15 | PRESTART_PUSH_VERIFIED | 朝版 | 21:12 | 21:12 | ◎2 サンベニト | 馬単 2→4,3,1<br>三連単 2→4,3→4,3,1,6,5 |  |
+| [1R](SAG_01.md) | 15:15 | PREDICTION_COMPLETE | 直前版 | 14:30 | 14:30 | ◎2 サンベニト | 単勝 2<br>馬単 2→4,3 |  |
 | [2R](SAG_02.md) | 15:50 | PRESTART_PUSH_VERIFIED | 朝版 | 21:15 | 21:15 | ◎11 オグナ | ワイド 11-3 / 11-2<br>三連複 3-8-11 / 3-5-11 / 2-3-11 / 5-8-11 / 2-8-11 |  |
 | [3R](SAG_03.md) | 16:25 | PRESTART_PUSH_VERIFIED | 朝版 | 21:19 | 21:19 | ◎2 グランディオーソ | ワイド 2-5 / 2-4<br>三連複 2-5-7 / 2-3-5 / 2-4-5 / 2-3-7 / 2-4-7 |  |
 | [4R](SAG_04.md) | 17:00 | PRESTART_PUSH_VERIFIED | 朝版 | 21:22 | 21:22 | ◎3 フラクタル | ワイド 3-1 / 3-6<br>三連複 1-3-7 / 1-3-10 / 1-3-6 / 3-7-10 / 3-6-7 |  |
