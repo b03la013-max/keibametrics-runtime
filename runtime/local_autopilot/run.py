@@ -583,12 +583,20 @@ def auto_promotion_daily(q, out):
     rec = auto_promote.decide(ROOT, out.name)
     rv = out / 'review'
     rv.mkdir(exist_ok=True)
-    (rv / 'auto_promotion.md').write_text(auto_promote.md(rec))
+    text = auto_promote.md(rec)
+    try:   # reflection -> new same-budget candidates, retire the failed ones (Owner 2026-11-22 21:31)
+        from runtime.local_autopilot import auto_candidates
+        gen = auto_candidates.daily(ROOT, out.name, rec)
+        text += auto_candidates.md(ROOT, gen)
+        log('AUTO_CANDIDATES', 'new', ','.join(gen['new']) or '-', 'retired', ','.join(gen['retired']) or '-')
+    except Exception as exc:
+        log('AUTO_CANDIDATES_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    (rv / 'auto_promotion.md').write_text(text)
     log('AUTO_PROMOTION', rec['action'], rec.get('candidate'), rec.get('effective_from'))
     if rec['action'] in ('PROMOTE', 'DEMOTE'):
         issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
         if issue:
-            _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': auto_promote.md(rec)})
+            _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': text})
     return rec
 
 

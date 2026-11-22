@@ -39,7 +39,73 @@ def signed(summary):
     return [(t['bet_type'], [int(x) for x in t['selection']]) for t in src or []]
 
 
-def variants(summary):
+def variants(summary, gen_names=()):
+    out = _fixed_variants(summary)
+    for name in gen_names:
+        try:
+            out[name] = gen_variant(summary, name, out['R54_60'])
+        except Exception:
+            out[name] = out['R54_60']
+    return out
+
+
+def variant_of(summary, name):
+    """One variant by name (fixed or generated GEN:...)."""
+    if str(name).startswith('GEN:'):
+        return variants(summary, (name,))[name]
+    return _fixed_variants(summary)[name]
+
+
+def parse_gen(name):
+    """'GEN:TRIOBOX:n=5' -> ('TRIOBOX', {'n': 5})."""
+    _, fam, *kv = str(name).split(':')
+    params = {}
+    for x in kv:
+        k, v = x.split('=')
+        params[k] = int(v)
+    return fam, params
+
+
+def gen_name(fam, **params):
+    return 'GEN:' + fam + ''.join(f':{k}={v}' for k, v in sorted(params.items()))
+
+
+def gen_variant(summary, name, base=None):
+    """Generated same-budget families (auto_candidates, Owner 2026-11-22 21:31). Each returns <= 60 points; the
+    remaining points are the first delivered tickets, so every variant spends what the champion spends."""
+    fam, k = parse_gen(name)
+    p2, w = _p2(summary)
+    base = base if base is not None else signed(summary)[:CAP]
+    rank = [int(n) for n in summary['ranking']]
+    fill = lambda extra: extra[:CAP] + [t for t in base if t not in extra][:max(0, CAP - len(extra[:CAP]))]
+    if fam == 'TRIOBOX':        # 三連複 box of the top-n P2 horses
+        return fill([('TRIO', sorted(c)) for c in combinations(p2[:k['n']], 3)])
+    if fam == 'WAXTRIO':        # 三連複 of the top-n P2 that contain a W horse
+        return fill([('TRIO', sorted(c)) for c in combinations(p2[:k['n']], 3) if set(c) & set(w)])
+    if fam == 'THIRDK':         # 三連単 W -> P2 -> best-k other horses
+        third = []
+        for a in w:
+            for b in p2:
+                if b != a:
+                    third += [('TRIFECTA', [a, b, c]) for c in [x for x in rank if x not in (a, b)][:k['k']]]
+        return third[:CAP] if third else base
+    if fam == 'WPLUS':          # W + the `add` shortest-odds horses as extra heads (same rule as C24)
+        return w_plus_market(summary, base, rank, w, p2, add=k['add'])
+    if fam == 'P2PLUS':         # the `add` shortest-odds horses outside W/P2 as extra seconds behind each W head
+        pops = [h for h in summary.get('_market_order') or [] if h not in w and h not in p2][:k['add']]
+        extra = []
+        for h in w:
+            for b in pops:
+                extra.append(('EXACTA', [h, b]))
+                extra += [('TRIFECTA', [h, b, c]) for c in p2[:2] if c != h]
+        extra = extra[:20]
+        return [t for t in base if t not in extra][:max(0, CAP - len(extra))] + extra if extra else base
+    if fam == 'CORE':           # CORE_LAYER_60 with the core pair set = top-n P2
+        return core_layer(summary, base, w, p2, core_n=k['n'])
+    raise ValueError(f'unknown family {fam}')
+
+
+def _fixed_variants(summary):
     p2, w = _p2(summary)
     box = [('TRIO', sorted(c)) for c in combinations(p2, 3)]
     wax = [t for t in box if set(t[1]) & set(w)]
@@ -74,7 +140,7 @@ def low_info(summary):
     return st['spd_horses'] / n < LOW_INFO_SPD_SHARE
 
 
-def core_layer(summary, base, w, p2):
+def core_layer(summary, base, w, p2, core_n=3):
     """C28 (FNB 第313〜315条 3層Capital / OHI 第331条 Capital 4層, Owner 2026-11-21 23:57): the same 60 points
     re-drawn from the signed full MEC (pre-cap) by layer: 1) head in W and second in the top-3 P2 (Core-Pair Deep),
     2) head in W and second in P2 (Head-local Wide), 3) the rest in MEC order (Peripheral Thin). Stable within a
@@ -82,7 +148,7 @@ def core_layer(summary, base, w, p2):
     mec = [(t['bet_type'], [int(x) for x in t['selection']]) for t in summary.get('signed_final_tickets') or []]
     if not mec:
         return base[:CAP]
-    core2 = set(p2[:3])
+    core2 = set(p2[:core_n])
 
     def layer(t):
         sel = t[1]
@@ -131,6 +197,7 @@ def w_plus_market(summary, base, rank, w, p2, add=2):
 
 def races(root, since=None):
     out = []
+    gen = _gen_names(root)
     for sp in sorted(Path(root).glob('20*/formal/*.summary.json')):
         key = sp.name.split('.')[0]
         row_day = sp.parent.parent.name
@@ -154,11 +221,19 @@ def races(root, since=None):
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
         row = {'day': row_day, 'key': key}
         summ['_market_order'] = _market_order(Path(root) / row_day, key)
-        for name, t in variants(summ).items():
+        for name, t in variants(summ, gen).items():
             i, p, h = sm.settle(t, res['payouts'], ns)
             row[name] = (i, p, h, len(t))
         out.append(row)
     return out
+
+
+def _gen_names(root):
+    try:
+        st = json.loads((Path(root) / 'auto_candidates.json').read_text())
+        return tuple(c['variant'] for c in (st.get('candidates') or {}).values())
+    except (OSError, ValueError, KeyError):
+        return ()
 
 
 def _market_order(day_dir, key):

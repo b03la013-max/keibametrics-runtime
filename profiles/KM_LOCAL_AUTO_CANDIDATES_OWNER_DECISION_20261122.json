@@ -1,0 +1,14 @@
+{
+ "profile": "KM-LOCAL-AUTO-CANDIDATES-OWNER-DECISION-20261122",
+ "decided_at": "2026-11-22T21:31:00+09:00",
+ "owner_words": "自動にして欲しいです。その形で作って欲しいです",
+ "proposal": "Claude 21:29：(1) 毎晩、反省の優先順位の上位（当たったのに赤字・2着の取りこぼし・1着の取りこぼし）から同じ予算の改善案を自動で作る (2) 次の開催日の前に自動で事前登録し、同時に比べる数に上限 (3) 判定条件は今と同じ（100R・PFS・最大払戻除くPFS・的中・2場以上） (4) 昇格中の候補があっても、ほかの候補は配信中の券面と比べて判定を続ける",
+ "implementation": {
+  "generator": "runtime/local_autopilot/auto_candidates.py (KM-LOCAL-AUTO-CANDIDATES-v1.0-20261122)",
+  "families": "formal_mix.gen_variant: TRIOBOX / WAXTRIO / THIRDK / WPLUS / P2PLUS / CORE（いずれも60点以内、残りは配信券面の先頭）",
+  "limits": {"max_evaluating": 6, "max_new_per_day": 2, "retire_after_races": 200, "retire_if_worse_after": 100},
+  "registry": "<data root>/auto_candidates.json（first_eligible_post は登録日の翌日 00:00 JST）",
+  "promotion": "auto_promote の条件は変えない。昇格中は、挑戦者を配信中の券面（昇格中の案）と比べ、上回れば交代。昇格中の案の降格判定は従来どおり R54_60 と比べる"
+ },
+ "unchanged": "29指数・KRS・MEC・60点上限・購入方針（推薦のみ）・三布告 v1.1・昇格条件の数値"
+}

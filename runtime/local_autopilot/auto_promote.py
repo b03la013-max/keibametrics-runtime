@@ -1,7 +1,8 @@
 """Automatic promotion / demotion of pre-registered same-budget ticket variants (Owner 2026-11-21 20:00 JST
 「作って下さい」 for the proposal of 19:59: reflections -> improvements applied automatically, with safeguards).
 
-Rules (fixed before any decision; changing them needs the Owner):
+Rules (fixed before any decision; changing them needs the Owner; 2026-11-22 21:31 Owner: generated candidates
+from auto_candidates.py join the list, and challengers keep being judged while a variant is promoted):
   * Only PRE-REGISTERED candidates that are complete same-budget ticket sets built from the signed formal
     summary are eligible (formal_mix variants: C13 MIX_P2BOX20, C15 MIX_WAXIS_TRIO, C22 KEEP_MEC_TRIO20,
     C24 W_PLUS_TOP2POP_60, C28 CORE_LAYER_60 from 2026-11-22). Same races, same 60 points, official payouts.
@@ -37,6 +38,26 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C24-W-PLUS-TOP2POP-SAME-BUDGET': ('W_PLUS_TOP2POP_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261120_R9.json'),
     'C28-CORE-LAYER-60': ('CORE_LAYER_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261122_R12.json'),
 }
+
+
+def candidates(root):
+    """-> {id: (variant, first_eligible_day)}: the fixed pre-registered candidates + the generated ones still
+    being evaluated (auto_candidates.json in the data root, registered before their first eligible day)."""
+    out = {}
+    for cid, (variant, prereg) in CANDIDATES.items():
+        try:
+            p = json.loads((REPO / 'profiles' / prereg).read_text())
+        except (OSError, ValueError):
+            continue
+        out[cid] = (variant, p['first_eligible_post'][:10])
+    try:
+        g = json.loads((Path(root) / 'auto_candidates.json').read_text())
+        for cid, c in (g.get('candidates') or {}).items():
+            if c.get('status') == 'EVALUATING':
+                out[cid] = (c['variant'], c['first_eligible_post'][:10])
+    except (OSError, ValueError, KeyError):
+        pass
+    return out
 
 
 def state_path(root):
@@ -99,9 +120,10 @@ def decide(root, today, rows_fn=None):
     nxt = (date.fromisoformat(today) + timedelta(days=1)).isoformat()
     rec = {'decided_at': datetime.now().astimezone().isoformat(), 'day': today}
     a = st.get('active')
+    champ_variant = CHAMPION
     if a:   # probation of the promoted variant against the original champion on its own races
         since = datetime.fromisoformat(a['effective_from'] + 'T00:00:00+09:00')
-        rows = rows_fn(root, since)
+        rows = [r for r in rows_fn(root, since) if a['variant'] in r]
         cmpd = compare(rows, a['variant'], CHAMPION)
         rec.update(action='PROBATION', candidate=a['candidate'], races=len(rows), detail=cmpd)
         if len(rows) >= MIN_RACES and cmpd['candidate']['pfs'] < cmpd['champion']['pfs'] \
@@ -109,25 +131,31 @@ def decide(root, today, rows_fn=None):
             st['active'] = None
             st.setdefault('blocked_until', {})[a['candidate']] = nxt
             rec.update(action='DEMOTE', effective_from=nxt)
-    else:
+            a = None
+        else:
+            champ_variant = a['variant']
+    if rec.get('action') != 'DEMOTE':
+        # challengers are compared with what is delivered now (the promoted variant, or R54_60), on races after
+        # both their first eligible day and the current variant's start (Owner 2026-11-22 21:31)
         best = None
-        for cid, (variant, prereg) in CANDIDATES.items():
-            try:
-                p = json.loads((REPO / 'profiles' / prereg).read_text())
-            except (OSError, ValueError):
+        for cid, (variant, first_day) in candidates(root).items():
+            if a and cid == a['candidate']:
                 continue
-            start = max(p['first_eligible_post'][:10], st.get('blocked_until', {}).get(cid, '0000-00-00'))
-            rows = [r for r in rows_fn(root, datetime.fromisoformat(start + 'T00:00:00+09:00')) if variant in r]
-            cmpd = compare(rows, variant, CHAMPION)
+            start = max(first_day, st.get('blocked_until', {}).get(cid, '0000-00-00'), a['effective_from'] if a else '')
+            rows = [r for r in rows_fn(root, datetime.fromisoformat(start + 'T00:00:00+09:00'))
+                    if variant in r and champ_variant in r]
+            cmpd = compare(rows, variant, champ_variant)
             rec.setdefault('evaluated', {})[cid] = {'races': len(rows), 'passes': cmpd['passes'], 'checks': cmpd['checks'],
                                                     'candidate': cmpd['candidate'], 'champion': cmpd['champion'],
-                                                    'venues': cmpd['venues']}
+                                                    'venues': cmpd['venues'], 'against': champ_variant}
             if cmpd['passes'] and (best is None or cmpd['candidate']['pfs_ex_top1'] > best[2]['candidate']['pfs_ex_top1']):
                 best = (cid, variant, cmpd)
         if best:
+            if a:
+                rec['replaced'] = a['candidate']
             st['active'] = {'candidate': best[0], 'variant': best[1], 'effective_from': nxt, 'promoted_on': today}
             rec.update(action='PROMOTE', candidate=best[0], variant=best[1], effective_from=nxt)
-        else:
+        elif not a:
             rec.update(action='KEEP_CHAMPION')
     st['profile'] = PROFILE
     st['last_decision'] = rec
@@ -142,7 +170,7 @@ def apply_to_cap(capped, ranking, roles, signed_tickets, market_order, promo):
     from runtime.local_autopilot import formal_mix
     summ = {'ranking': [str(x) for x in ranking], 'roles': {str(k): v for k, v in roles.items()},
             'tickets': capped['tickets'], 'signed_final_tickets': signed_tickets, '_market_order': market_order}
-    vt = formal_mix.variants(summ)[promo['variant']]
+    vt = formal_mix.variant_of(summ, promo['variant'])
     by_key = {(str(t.get('bet_type')), tuple(str(x) for x in t['selection'])): t for t in signed_tickets}
     out = []
     for bt, sel in vt:
@@ -157,14 +185,15 @@ def apply_to_cap(capped, ranking, roles, signed_tickets, market_order, promo):
 
 def md(rec):
     a = rec.get('action')
-    head = {'PROMOTE': f"自動昇格：{rec.get('candidate')}（{rec.get('effective_from')}から配信券面に採用）",
+    head = {'PROMOTE': f"自動昇格：{rec.get('candidate')}（{rec.get('effective_from')}から配信券面に採用"
+                       + (f"、{rec['replaced']} と交代" if rec.get('replaced') else '') + '）',
             'DEMOTE': f"自動降格：{rec.get('candidate')} → 元の60点（{rec.get('effective_from')}から）",
             'PROBATION': f"昇格中の {rec.get('candidate')} を監視中（{rec.get('races')}R）",
             'KEEP_CHAMPION': '昇格条件を満たす候補なし（現行の60点を継続）'}.get(a, a)
     L = [f'## 自動改善の判定（{rec.get("day")}）', '', head, '']
     for cid, e in (rec.get('evaluated') or {}).items():
         c, h = e['candidate'], e['champion']
-        L.append(f"- {cid}：{e['races']}R／PFS {c['pfs']}% 対 現行 {h['pfs']}%／最大払戻除く {c['pfs_ex_top1']}% 対 "
+        L.append(f"- {cid}：{e['races']}R／PFS {c['pfs']}% 対 {'現行' if e.get('against', CHAMPION) == CHAMPION else e['against']} {h['pfs']}%／最大払戻除く {c['pfs_ex_top1']}% 対 "
                  f"{h['pfs_ex_top1']}%／的中 {c['hit_races']} 対 {h['hit_races']}／"
                  + ('条件をすべて満たす' if e['passes'] else '未達：' + '・'.join(k for k, v in e['checks'].items() if not v)))
     return '\n'.join(L) + '\n'
