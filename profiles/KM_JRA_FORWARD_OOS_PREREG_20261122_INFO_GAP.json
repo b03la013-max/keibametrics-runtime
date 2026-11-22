@@ -1,0 +1,27 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-INFO-GAP-v1",
+  "registered_at": "2026-11-22",
+  "owner_approval": "2026-11-22 17:08 JST (items 2 and 3 of the KYO-20261122-R11 review)",
+  "case": "KM-JRA-KYO-20261122-R11: French-trained winner frozen as NEWCOMER (JRA card 0.0.0.0) -> 24 domestic-only features absent -> DCR Art.3 shrink -> rank 18/18",
+  "production_change": false,
+  "arms": {
+    "C1_FOREIGN": "career_starts == 0 with dated official pre-race history runs -> profile by that run count (lower bound). Classification only, no new weight. Production switch prepared behind KM_JRA_FOREIGN_HISTORY_PROFILE (default 0); enabling it needs a separate Owner decision.",
+    "C2_UNCERT": "index below the profile minimum coverage keeps the acquired-feature mean instead of 50+(raw-50)*share; no acquired feature -> 50. Uncertainty is recorded, not converted into rank loss.",
+    "C12": "C1 + C2",
+    "PRERATING_RECORD": "JRA G1 pre-ratings (https://www.jra.go.jp/datafile/ranking/g1/2026/) recorded per race, record only; no formula uses them yet."
+  },
+  "ranking": "ZAI_WIN descending (same as Production static ranking)",
+  "primary": "paired top3_mean_rank (arm - PROD), lower is better; 95% bootstrap CI upper bound < 0",
+  "secondary": ["winner_in_top3", "winner_mean_rank", "foreign-trained winner rank", "domestic-runner ranking unchanged under C1 (must hold exactly)"],
+  "promotion_eligible": "C2/C12: forward OOS >= 100 races AND primary CI upper < 0 AND winner_in_top3 not worse by > 2 points",
+  "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+  "known_result_replay_context_only": {
+    "window": "2026-10-11 .. 2026-11-22, 349 races (332 with results), formula_mismatch 0",
+    "PROD": {"top3_mean_rank": 5.205, "winner_in_top3_pct": 49.7},
+    "C1_FOREIGN": {"top3_mean_rank": 5.199, "winner_in_top3_pct": 49.7, "affected_races": 1},
+    "C2_UNCERT": {"top3_mean_rank": 5.169, "winner_in_top3_pct": 51.2},
+    "C12": {"top3_mean_rank": 5.164, "winner_in_top3_pct": 51.2},
+    "KYO_20261122_R11_winner_rank": {"PROD": 18, "C1_FOREIGN": 12, "C2_UNCERT": 17, "C12": 12}
+  },
+  "note": "Known-result replay is context only and is not forward OOS evidence."
+}

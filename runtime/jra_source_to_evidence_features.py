@@ -16,6 +16,21 @@ POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
 TRACE_SCHEMA = "KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
+import os as _os
+FOREIGN_HISTORY_PROFILE_RULE = "KM-JRA-FOREIGN-HISTORY-PROFILE-v1-20261122"
+def _switch(name: str) -> bool:
+    # Owner-controlled runtime switches (auditable in git). Missing file / key = OFF.
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        p = _Path(__file__).resolve().parents[1] / "profiles/KM_JRA_RUNTIME_SWITCHES.json"
+        return bool((_json.loads(p.read_text(encoding="utf-8")).get("switches") or {}).get(name, {}).get("enabled") is True)
+    except Exception:
+        return False
+FOREIGN_HISTORY_PROFILE_ENABLED = (_os.environ.get("KM_JRA_FOREIGN_HISTORY_PROFILE") == "1"
+                                   or (_os.environ.get("KM_JRA_FOREIGN_HISTORY_PROFILE") != "0"
+                                       and _switch("foreign_history_profile")))
+
 class SourceToFeatureError(ValueError):
     pass
 
@@ -133,11 +148,20 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
         "JRA_TRAINER_STATS":{"available":False,"identity_available":bool(x.get("trainer"))},
     }
     ref=artifact.get("jra_official_race_card_detail_sha256")
+    card_starts=(x.get("career_record") or {}).get("starts")
+    career_starts, newcomer, starts_basis = card_starts, (card_starts==0) if card_starts is not None else None, "JRA_RACE_CARD_CAREER_RECORD"
+    # Foreign-trained runners show 0.0.0.0 on the JRA card even with an official
+    # overseas record. Owner decision pending (KYO-20261122-R11 case); default OFF.
+    # When enabled, a 0-start card with dated official pre-race runs is profiled by
+    # that run count (a lower bound), never as a newcomer. No weight changes.
+    if FOREIGN_HISTORY_PROFILE_ENABLED and card_starts == 0 and runs:
+        career_starts, newcomer, starts_basis = len(runs), False, FOREIGN_HISTORY_PROFILE_RULE
     return {
         "available":True,
         "source_ref":ref,
-        "career_starts":((x.get("career_record") or {}).get("starts")),
-        "newcomer":(((x.get("career_record") or {}).get("starts"))==0) if (x.get("career_record") or {}).get("starts") is not None else None,
+        "career_starts":career_starts,
+        "newcomer":newcomer,
+        "career_starts_basis":starts_basis,
         "runner_fact":x,
         "source_family_inputs":source_inputs,
         "feature_inputs":feature_inputs,
@@ -817,6 +841,12 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         if factual_runner.get("career_starts") is None and detail_inputs.get("career_starts") is not None:
             factual_runner["career_starts"] = int(detail_inputs["career_starts"])
             factual_runner["newcomer"] = bool(detail_inputs.get("newcomer"))
+        elif (detail_inputs.get("career_starts_basis") == FOREIGN_HISTORY_PROFILE_RULE
+              and int(factual_runner.get("career_starts") or 0) == 0):
+            factual_runner["career_starts"] = int(detail_inputs["career_starts"])
+            factual_runner["newcomer"] = False
+        if detail_inputs.get("career_starts_basis") == FOREIGN_HISTORY_PROFILE_RULE:
+            factual_runner["career_starts_basis"] = FOREIGN_HISTORY_PROFILE_RULE
         generated = {}
         w = _equal_weight_feature(rid,r,official,source_artifact)
         if w is not None:
@@ -851,6 +881,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             "factual_runner_updates":{
                 "career_starts":factual_runner.get("career_starts"),
                 "newcomer":factual_runner.get("newcomer"),
+                "career_starts_basis":factual_runner.get("career_starts_basis"),
             },
             "rule_evaluator_inputs":detail_inputs,
             "source_fact_availability":source_fact_availability,
@@ -940,6 +971,12 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
         if by_id[rid].get("career_starts") is None and rr["factual_runner_updates"].get("career_starts") is not None:
             by_id[rid]["career_starts"] = int(rr["factual_runner_updates"]["career_starts"])
             by_id[rid]["newcomer"] = bool(rr["factual_runner_updates"].get("newcomer"))
+        elif (rr["factual_runner_updates"].get("career_starts_basis") == FOREIGN_HISTORY_PROFILE_RULE
+              and int(by_id[rid].get("career_starts") or 0) == 0):
+            by_id[rid]["career_starts"] = int(rr["factual_runner_updates"]["career_starts"])
+            by_id[rid]["newcomer"] = False
+        if rr["factual_runner_updates"].get("career_starts_basis") == FOREIGN_HISTORY_PROFILE_RULE:
+            by_id[rid]["career_starts_basis"] = FOREIGN_HISTORY_PROFILE_RULE
         by_id[rid]["bvi_acquisition_failure"] = rr.get("bvi_acquisition_failure")
         by_id[rid]["evidence_features"] = copy.deepcopy(rr["merged_evidence_features"])
         by_id[rid]["source_shadow_observations"] = copy.deepcopy(rr["shadow_observations"])
