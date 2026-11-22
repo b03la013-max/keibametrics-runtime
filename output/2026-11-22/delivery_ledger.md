@@ -1,8 +1,8 @@
-# 地方版 配送台帳 2026-11-22（20:06時点）
+# 地方版 配送台帳 2026-11-22（20:10時点）
 
-- 管理Race 34／発走済み 30
-- PAPER：凍結 34・Push検証 33・送信 33（発走前 33）・読み戻し一致 33・本人確認 0
-- 正式：試行 33・Signed FINAL 33（NO-BET 0）・発走前送信 33・読み戻し一致 33・本人確認 0
+- 管理Race 34／発走済み 31
+- PAPER：凍結 34・Push検証 34・送信 34（発走前 34）・読み戻し一致 34・本人確認 0
+- 正式：試行 34・Signed FINAL 34（NO-BET 0）・発走前送信 34・読み戻し一致 34・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
@@ -21,7 +21,7 @@
 | KOC_08 | 19:15 | POSTRESULT_DIAGNOSTIC | 18:30 | ○ | SIGNED_FINAL | 19:06 | ○ |  |
 | KOC_09 | 19:45 | POSTRESULT_DIAGNOSTIC | 19:01 | ○ | SIGNED_FINAL | 19:02 | ○ |  |
 | KOC_10 | 20:20 | PRESTART_PUSH_VERIFIED | 19:39 | ○ | SIGNED_FINAL | 19:40 | ○ |  |
-| KOC_11 | 20:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_11 | 20:50 | PRESTART_PUSH_VERIFIED | 20:09 | ○ | SIGNED_FINAL | 20:10 | ○ |  |
 | MIZ_01 | 12:00 | POSTRESULT_DIAGNOSTIC | 11:18 | ○ | SIGNED_FINAL | 11:52 | ○ |  |
 | MIZ_02 | 12:35 | POSTRESULT_DIAGNOSTIC | 11:54 | ○ | SIGNED_FINAL | 12:27 | ○ |  |
 | MIZ_03 | 13:10 | POSTRESULT_DIAGNOSTIC | 12:29 | ○ | SIGNED_FINAL | 13:02 | ○ |  |
