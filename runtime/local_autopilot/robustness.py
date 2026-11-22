@@ -10,6 +10,9 @@
   - Drive「福島競馬場コース攻略」（n258）: 荒れ度の層ごとに PFS と的中赤字率を分けて出す。
     発走前の層は締切前に固定した出馬表の1番人気の単勝オッズ（2.0倍未満=SOLID／4.0倍未満=MID／それ以上=OPEN）、
     結果の層は三連複の払戻（1,000円以下=LOW／10,000円以下=MID／それ超=HIGH）。
+  - Drive「競馬予想で始める機械学習 リメイク版」#11（n268）: 市場ミラーとの差。同じ構造・同じ点数のまま、
+    予測順位 k 位の馬を締切前に固定した人気 k 位の馬へ入れ替えた券面（市場ミラー）の払戻と比べる。
+    集計は Δ（実績 PFS − ミラー PFS）、レース単位 bootstrap 95%区間、実績の最高払戻1Rを除いた Δ。
 """
 from collections import defaultdict
 
@@ -36,7 +39,57 @@ def _key(bt, sel):
     return '-'.join(map(str, sorted(sel) if bt in UNORDERED else sel))
 
 
-def race(tickets, order, payouts=None, effective_invest=None, payout=None, fav_odds=None):
+def mirror_map(model_order, pop_order):
+    """予測 k 位 → 人気 k 位 の対応（両方に順位がある範囲だけ）。"""
+    model_order = [int(x) for x in model_order or []]
+    pop_order = [int(x) for x in pop_order or []]
+    return {m: p for m, p in zip(model_order, pop_order)}
+
+
+def market_mirror(tickets, payouts, model_order, pop_order):
+    """n268 市場ミラー（証拠のみ）。券面の馬が1頭でも対応外なら None。"""
+    mp = mirror_map(model_order, pop_order)
+    if not tickets or not mp:
+        return None
+    act = mir = 0
+    for t in tickets:
+        bt, st = t['bet_type'], int(t.get('stake') or UNIT)
+        sel = [int(x) for x in t['selection']]
+        if any(h not in mp for h in sel):
+            return None
+        pay = (payouts.get(bt) or {}).get(_key(bt, sel))
+        act += int(pay) * st // UNIT if pay else 0
+        msel = [mp[h] for h in sel]
+        mpay = (payouts.get(bt) or {}).get(_key(bt, msel))
+        mir += int(mpay) * st // UNIT if mpay else 0
+    stake = sum(int(t.get('stake') or UNIT) for t in tickets)
+    return {'stake': stake, 'payout': act, 'mirror_payout': mir, 'same_as_market': all(k == v for k, v in mp.items())}
+
+
+def mirror_summary(rows, n_boot=2000, seed=20261123):
+    """rows: market_mirror() outputs. Δ = 実績PFS − ミラーPFS（pt）。"""
+    import random
+    rows = [r for r in rows if r and r.get('stake')]
+    if not rows:
+        return None
+
+    def d(rs):
+        st = sum(r['stake'] for r in rs)
+        return round(100 * (sum(r['payout'] for r in rs) - sum(r['mirror_payout'] for r in rs)) / st, 1) if st else None
+    st = sum(r['stake'] for r in rows)
+    rng = random.Random(seed)
+    boots = sorted(d([rows[rng.randrange(len(rows))] for _ in rows]) for _ in range(n_boot))
+    best = max(range(len(rows)), key=lambda i: rows[i]['payout'])
+    rest = rows[:best] + rows[best + 1:]
+    return {'races': len(rows), 'stake': st,
+            'pfs': round(100 * sum(r['payout'] for r in rows) / st, 1),
+            'mirror_pfs': round(100 * sum(r['mirror_payout'] for r in rows) / st, 1),
+            'delta': d(rows), 'delta_ci95': [boots[int(0.025 * n_boot)], boots[int(0.975 * n_boot) - 1]],
+            'delta_without_best': d(rest) if rest else None,
+            'races_same_as_market': sum(1 for r in rows if r.get('same_as_market')), 'evidence_only': True}
+
+
+def race(tickets, order, payouts=None, effective_invest=None, payout=None, fav_odds=None, mirror=None):
     """tickets: [{'bet_type', 'selection':[int], 'stake':int, 'tier':str|None}] (delivered set only).
     order: official finishing order. payouts: {'TRIO': {'4-8-14': 2120}, ...} (per 100 yen)."""
     order = [int(x) for x in order or []]
@@ -111,6 +164,8 @@ def race(tickets, order, payouts=None, effective_invest=None, payout=None, fav_o
                        'hit_but_loss': bool(pay and eff and pay < eff)},
         'random_same_points': {'expected_payout': round(rnd) if rnd_ok else None, 'field': nf},
         'roughness': dict(roughness(fav_odds, payouts), effective_invest=eff, payout=pay),
+        'market_mirror': (market_mirror(tickets, payouts, mirror.get('model_order'), mirror.get('pop_order'))
+                          if mirror else None),
         'evidence_only': True,
     }
 
@@ -151,6 +206,7 @@ def aggregate(rows):
                               hit_but_loss_rate=round(v['hit_but_loss_races'] / v['hit_races'], 3) if v['hit_races'] else None)
                       for k, v in sorted(d.items())} for dim, d in lay.items()}
     return {'races': len(rows), 'stake': stake, 'by_roughness': by_rough,
+            'market_mirror': mirror_summary([r.get('market_mirror') for r in rows]),
             'cross_bet_extra_stake': extra, 'cross_bet_extra_share': round(extra / stake, 3) if stake else None,
             'protection_burden_ratio': round(sum(p * s for p, s in pb) / sum(s for _, s in pb), 3) if pb else None,
             'protection_races': len(pb),
@@ -175,4 +231,7 @@ def line(a):
             f"／券種別 {bt}"
             + ('／荒れ度（発走前・1番人気オッズ）' + '／'.join(f"{k} {v['races']}R PFS {v['pfs']}% 的中赤字 {v['hit_but_loss_races']}/{v['hit_races']}"
                                              for k, v in (a.get('by_roughness') or {}).get('pre_race', {}).items())
-               if a.get('by_roughness') else ''))
+               if a.get('by_roughness') else '')
+            + (lambda m: f"／市場ミラーとの差 {m['races']}R：実績 {m['pfs']}% − ミラー {m['mirror_pfs']}% = Δ {m['delta']}pt"
+                         f"（95%区間 {m['delta_ci95'][0]}〜{m['delta_ci95'][1]}、最高1R除き {m['delta_without_best']}pt）"
+               if m else '')(a.get('market_mirror')))

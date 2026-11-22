@@ -286,9 +286,20 @@ def build(day_dir, key, r):
     if pf:
         wins = [float(x['win']) for x in pf['prediction'].get('ranking') or [] if isinstance(x.get('win'), (int, float)) and x['win'] > 0]
         fav_odds = min(wins) if wins else None
+    # n268 市場ミラー：予測順位 k 位 → 締切前に固定した人気 k 位（PAPER 出馬表の単勝オッズ順）
+    paper_mirror = formal_mirror = None
+    if pf:
+        rk = [x for x in pf['prediction'].get('ranking') or [] if x.get('no') is not None]
+        pop = [int(x['no']) for x in sorted((x for x in rk if isinstance(x.get('win'), (int, float)) and x['win'] > 0),
+                                             key=lambda x: (x['win'], int(x['no'])))]
+        if pop:
+            paper_mirror = {'model_order': [int(x['no']) for x in rk], 'pop_order': pop}
+            fo = [int(x) for x in (sm or {}).get('ranking') or []]
+            formal_mirror = {'model_order': fo or paper_mirror['model_order'], 'pop_order': pop}
     if paper:
         paper['robustness'] = robustness.race([{'bet_type': bt, 'selection': sel, 'stake': 100}
-                                               for bt, sel in _paper_tickets(pf['prediction'])], order, off_pay, fav_odds=fav_odds)
+                                               for bt, sel in _paper_tickets(pf['prediction'])], order, off_pay, fav_odds=fav_odds,
+                                               mirror=paper_mirror)
     if formal:
         tier = {(t.get('bet_type'), tuple(int(x) for x in t.get('selection') or [])): t.get('mec_tier')
                 for t in sm.get('signed_final_tickets') or []}
@@ -297,7 +308,8 @@ def build(day_dir, key, r):
               'tier': tier.get((t['bet_type'], tuple(int(x) for x in t['selection'])))
               or ('AUTO_ADDED' if str(t.get('source') or '').startswith('AUTO_PROMOTED') else None)}
              for t in sm.get('tickets') or []],
-            order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'], fav_odds=fav_odds)
+            order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'], fav_odds=fav_odds,
+            mirror=formal_mirror)
 
     # layer analysis
     layers = {}
