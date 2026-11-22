@@ -1,13 +1,13 @@
-# 地方版 配送台帳 2026-11-23（21:31時点）
+# 地方版 配送台帳 2026-11-23（21:34時点）
 
 - 管理Race 33／発走済み 0
-- PAPER：凍結 28・Push検証 20・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 29・Push検証 28・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
 - 10分前チェック：確認 0／重要変更 0／Revision 2署名 0
-- 停止工程：なし／配送再試行：なし
+- 停止工程：{'SAG_08': 'SOURCE_READY'}／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
@@ -18,9 +18,9 @@
 | KNZ_05 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_06 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_07 | 17:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KNZ_08 | 17:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KNZ_09 | 18:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KNZ_10 | 18:55 | DISCOVERED |  | … | - | - | - |  |
+| KNZ_08 | 17:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_09 | 18:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_10 | 18:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | MIZ_01 | 11:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_02 | 12:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_03 | 12:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
@@ -31,16 +31,16 @@
 | MIZ_08 | 15:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_09 | 16:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_10 | 16:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| MIZ_11 | 17:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| MIZ_12 | 18:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| MIZ_11 | 17:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| MIZ_12 | 18:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_01 | 15:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_02 | 16:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_03 | 16:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SAG_04 | 17:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_05 | 17:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_06 | 18:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_07 | 18:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_08 | 19:15 | DISCOVERED |  | … | - | - | - |  |
+| SAG_04 | 17:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_05 | 17:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_06 | 18:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_07 | 18:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_08 | 19:15 | SOURCE_HOLD |  | … | - | - | - | SOURCE_READY |
 | SAG_09 | 19:45 | DISCOVERED |  | … | - | - | - |  |
 | SAG_10 | 20:20 | DISCOVERED |  | … | - | - | - |  |
 | SAG_11 | 20:50 | DISCOVERED |  | … | - | - | - |  |
