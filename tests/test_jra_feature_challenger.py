@@ -50,3 +50,12 @@ def test_challenger_fills_only_unobserved_and_prod_matches_frozen():
     add = {no: {observed: FC._spec("WEAK", "x", "x", "x"), "workout_load": FC._spec("STRONG", "x", "x", "x")}}
     _, filled = FC.rank_arm(req, mapping, add, a4, "CH")
     assert filled == 1                      # the observed Production feature is never overwritten
+
+
+def test_equipment_blinker_positive_only_when_declared():
+    req = {"race_id": "R", "source_snapshot": {"jra_official_equipment_declarations": {"complete": True, "runners": {
+        "1": {"blinker_declared": True}, "2": {"blinker_declared": False}}}}}
+    out = FC.equip_features(req)
+    assert list(out) == ["1"] and out["1"]["equipment_effect"]["category"] == "POSITIVE"
+    req["source_snapshot"]["jra_official_equipment_declarations"]["complete"] = False
+    assert FC.equip_features(req) == {}

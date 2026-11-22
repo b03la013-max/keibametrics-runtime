@@ -11,6 +11,10 @@ Groups (band files under runtime/jra_challenger_features/<date>/, bands only, no
            workout_consistency, stable_readiness (rules profiles/KM_JRA_CHALLENGER_FEATURE_RULES_20261122_KB.json)
   EXPERT   tsl_expert_bands.json -> expert_support (TSL 推奨: 軸 STRONG / 本線 POSITIVE / 次点・おさえ NEUTRAL),
            taken only from the last TSL capture strictly before the post time
+  EQUIP    JRA official equipment declaration in the frozen request -> equipment_effect
+           (blinker declared POSITIVE; hypothesis KM-JRA-CH-EQUIP-BLINKER-v1)
+  TSL / paddock band files are paid-source derived and stay in the PRIVATE repo
+  (jra/<date>/challenger_bands/); public outputs carry rankings only.
   PADDOCK  kb_paddock_bands.json -> body_condition_comment (競馬ブック パドック評価 A STRONG / B・穴 POSITIVE),
            taken only from a capture strictly before the post time
   ALL      all groups
@@ -52,6 +56,7 @@ GROUPS = {
     "KB4": ["workout_load", "workout_partner_level", "workout_consistency", "stable_readiness"],
     "EXPERT": ["expert_support"],
     "PADDOCK": ["body_condition_comment"],
+    "EQUIP": ["equipment_effect"],
 }
 ARMS = ["PROD"] + [f"CH_{g}" for g in GROUPS] + ["CH_ALL"]
 JRA_VENUE = {"01": "SAP", "02": "HKD", "03": "FKS", "04": "NGT", "05": "TKY", "06": "NKY",
@@ -181,7 +186,7 @@ def build_paddock_bands(date, posts, a4):
 def cmd_bands(a):
     a4 = A4()
     posts = post_times(a.date)
-    out_dir = FEAT_DIR / a.date
+    out_dir = PRIVATE_BANDS(a.date)   # paid sources: bands stay private (no 1:1 recoverable marks in public)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, fn, rule in (("tsl_expert_bands.json", build_tsl_bands, "KM-JRA-CH-TSL-RECOMMEND-BAND-v1"),
                            ("kb_paddock_bands.json", build_paddock_bands, "KM-JRA-CH-KB-PADDOCK-GRADE-BAND-v1")):
@@ -238,8 +243,12 @@ def kb4_features(date, a4):
     return out
 
 
+def PRIVATE_BANDS(date):
+    return PRIVATE / f"jra/{date}/challenger_bands"
+
+
 def band_features(date, name, feature, rule):
-    p = FEAT_DIR / date / name
+    p = PRIVATE_BANDS(date) / name
     out = {}
     if not p.exists():
         return out
@@ -247,6 +256,20 @@ def band_features(date, name, feature, rule):
         for no, cat in r["bands"].items():
             out.setdefault(rid, {})[no] = {feature: _spec(cat, f"CH:{rule}:{rid}:{r['capture']}:{no}",
                                                           f"{feature} band={cat} (capture {r['capture']})", rule)}
+    return out
+
+
+def equip_features(req):
+    """JRA official equipment declaration (blinker). Hypothesis KM-JRA-CH-EQUIP-BLINKER-v1:
+    a declared blinker is an intended improvement -> POSITIVE; no declaration -> unobserved."""
+    snap = ((req.get("source_snapshot") or {}).get("jra_official_equipment_declarations") or {})
+    out = {}
+    if not snap.get("complete"):
+        return out
+    for no, r in (snap.get("runners") or {}).items():
+        if (r or {}).get("blinker_declared") is True:
+            out[str(no)] = {"equipment_effect": _spec("POSITIVE", f"JRA_OFFICIAL_EQUIPMENT:{req['race_id']}:{no}",
+                                                      "JRA公式 馬具申告 ブリンカー着用", "KM-JRA-CH-EQUIP-BLINKER-v1")}
     return out
 
 
@@ -289,6 +312,7 @@ def race_arms(rid, mapping, groups, a4):
     req = json.loads(p.read_text())
     out = {"race_id": rid, "source_request_sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
            "rankings": {}, "filled_features": {}}
+    groups = dict(groups, EQUIP={rid: equip_features(req)})
     for arm in ARMS:
         if arm == "PROD":
             add = {}
@@ -396,10 +420,59 @@ def cmd_evaluate(a):
     print(json.dumps(summ, ensure_ascii=False, indent=1)[:4000])
 
 
+def coverage_weights(req, mapping, add):
+    """Per index: mean share of the profile's mapping weight that is observed (0..1)."""
+    acc = {}
+    for r in req["runners"]:
+        feats = dict(r.get("evidence_features") or {})
+        for k, v in (add.get(str(r["runner_id"])) or {}).items():
+            if not (isinstance(feats.get(k), dict) and feats[k].get("category")):
+                feats[k] = v
+        prof = P._profile_for_runner(r)
+        for idx, w in (mapping["index_profiles"].get(prof) or {}).items():
+            tot = sum(w.values()) or 1
+            obs = sum(x for f, x in w.items() if isinstance(feats.get(f), dict) and feats[f].get("category"))
+            acc.setdefault(idx, []).append(obs / tot)
+    return {k: sum(v) / len(v) for k, v in acc.items()}
+
+
+def cmd_coverage(a):
+    a4 = A4()
+    mapping, groups = _mapping(), load_groups(a.date, a4)
+    prod, ch = {}, {}
+    n = 0
+    for p in sorted(glob.glob(str(ROOT / f"runtime/requests/KM-JRA-*-{d8(a.date)}-R*-LIVE-R1-FORMAL.json"))):
+        req = json.loads(Path(p).read_text())
+        rid = req["race_id"]
+        add = {}
+        for g in list(GROUPS)[:-1]:
+            for no, f in (groups[g].get(rid) or {}).items():
+                add.setdefault(no, {}).update(f)
+        for no, f in equip_features(req).items():
+            add.setdefault(no, {}).update(f)
+        for dst, ad in ((prod, {}), (ch, add)):
+            for k, v in coverage_weights(req, mapping, ad).items():
+                dst.setdefault(k, []).append(v)
+        n += 1
+    rows = sorted(prod)
+    lines = [f"# 指数ごとの観測重み {a.date}（{n}R、本番 → 挑戦者 CH_ALL）", "",
+             "| 指数 | 本番 | 挑戦者込み | 差 |", "|---|---|---|---|"]
+    out = {}
+    for k in rows:
+        pv, cv = sum(prod[k]) / len(prod[k]), sum(ch[k]) / len(ch[k])
+        out[k] = {"production": round(pv, 3), "with_challengers": round(cv, 3)}
+        lines.append(f"| {k} | {pv:.0%} | {cv:.0%} | {cv - pv:+.0%} |")
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / f"coverage_{a.date}.md").write_text("\n".join(lines) + "\n")
+    (OUT / f"coverage_{a.date}.json").write_text(json.dumps({"date": a.date, "races": n, "indices": out}, ensure_ascii=False, indent=1))
+    print("\n".join(lines))
+    _report_a4(a4)
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for c in ("bands", "freeze", "replay"):
+    for c in ("bands", "freeze", "replay", "coverage"):
         s = sub.add_parser(c)
         s.add_argument("date")
     s = sub.add_parser("evaluate")
@@ -411,6 +484,8 @@ def main():
         cmd_freeze(a)
     elif a.cmd == "replay":
         cmd_freeze(a, replay=True)
+    elif a.cmd == "coverage":
+        cmd_coverage(a)
     else:
         cmd_evaluate(a)
 

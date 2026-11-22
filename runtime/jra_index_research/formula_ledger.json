@@ -1,0 +1,866 @@
+{
+ "profile": "KM-JRA-FORMULA-LEDGER-v1",
+ "generated_at": "2026-11-22T21:00:00+09:00",
+ "production_change": false,
+ "evidence_stages": {
+  "INITIAL_DESIGN": "初期値・要較正（人が決めた値）",
+  "KNOWN_RESULT_FIT": "過去データで合わせた",
+  "WALK_FORWARD": "時間順に分けて検証",
+  "FORWARD_OOS": "発走前凍結で比較済み"
+ },
+ "conversion": {
+  "rule": "特徴ごとに帯域（9段階）を付け、共通の点数表で数値化",
+  "category_scale": {
+   "EXCEPTIONAL": 94,
+   "VERY_STRONG": 88,
+   "STRONG": 82,
+   "POSITIVE": 74,
+   "NEUTRAL": 64,
+   "MIXED": 54,
+   "CAUTION": 44,
+   "WEAK": 34,
+   "VERY_WEAK": 24
+  },
+  "stage": "INITIAL_DESIGN",
+  "check_20261122": "train 10/11-11/09 3,158頭：帯域が上がるほど3着内率が上がる（VERY_WEAK 6.5% → EXCEPTIONAL 35.6%、単調）。ただし market_mismatch（相関 -0.146）・opponent_strength（-0.048）・weight_load_fit（-0.007）は向きが逆か無関係"
+ },
+ "missing_policy": {
+  "rule": "取れなかった特徴は除いて残りの重みで再正規化。指数ごとの最低被覆率（プロファイル別）を下回ると 50+(raw-50)×被覆率 に縮める（第3条 DCR）",
+  "stage": "INITIAL_DESIGN",
+  "note": "京都11R（2026-11-22）で、情報不足が能力の減点として働いた例あり → 挑戦者 C2_UNCERT（PR #456）"
+ },
+ "indices": {
+  "HPI": {
+   "name": "能力（近走・クラス・相手）",
+   "type": "BASE",
+   "inputs": [
+    "class_performance",
+    "finish_margin",
+    "opponent_strength",
+    "pace_resilience",
+    "physical_readiness",
+    "recent_performance",
+    "recent_speed",
+    "workout_capability"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "recent_performance": 0.24,
+     "recent_speed": 0.2,
+     "class_performance": 0.16,
+     "opponent_strength": 0.12,
+     "finish_margin": 0.1,
+     "pace_resilience": 0.08,
+     "workout_capability": 0.05,
+     "physical_readiness": 0.05
+    },
+    "LOW_CAREER": {
+     "recent_performance": 0.18,
+     "recent_speed": 0.14,
+     "class_performance": 0.1,
+     "opponent_strength": 0.08,
+     "workout_capability": 0.16,
+     "pedigree_class": 0.1,
+     "gate_quality": 0.08,
+     "dash_quality": 0.06,
+     "stable_readiness": 0.05,
+     "physical_readiness": 0.05
+    },
+    "NEWCOMER": {
+     "workout_capability": 0.28,
+     "pedigree_class": 0.18,
+     "gate_quality": 0.14,
+     "dash_quality": 0.1,
+     "stable_readiness": 0.1,
+     "jockey_quality": 0.08,
+     "physical_readiness": 0.12
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.927,
+    "2026-11-22": 0.854
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.246,
+    "missing_rate": 0.12
+   }
+  },
+  "SSI": {
+   "name": "スピード",
+   "type": "BASE",
+   "inputs": [
+    "closing_quality",
+    "dash_quality",
+    "gate_quality",
+    "pace_resilience",
+    "recent_speed",
+    "speed_reliability",
+    "workout_speed"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "recent_speed": 0.28,
+     "speed_reliability": 0.18,
+     "closing_quality": 0.14,
+     "dash_quality": 0.12,
+     "pace_resilience": 0.1,
+     "workout_speed": 0.1,
+     "gate_quality": 0.08
+    },
+    "LOW_CAREER": {
+     "recent_speed": 0.18,
+     "dash_quality": 0.18,
+     "gate_quality": 0.12,
+     "workout_speed": 0.2,
+     "sprint_pedigree": 0.12,
+     "forward_speed_comment": 0.1,
+     "speed_reliability": 0.1
+    },
+    "NEWCOMER": {
+     "dash_quality": 0.24,
+     "gate_quality": 0.16,
+     "workout_speed": 0.28,
+     "sprint_pedigree": 0.14,
+     "forward_speed_comment": 0.1,
+     "workout_finish": 0.08
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.903,
+    "2026-11-22": 0.84
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.372,
+    "missing_rate": 0.283
+   }
+  },
+  "CFI": {
+   "name": "コース・距離適性",
+   "type": "BASE",
+   "inputs": [
+    "course_geometry_fit",
+    "draw_course_fit",
+    "going_fit",
+    "same_course_fit",
+    "same_distance_fit",
+    "similar_geometry_fit",
+    "surface_fit",
+    "turn_direction_fit"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "same_course_fit": 0.2,
+     "same_distance_fit": 0.2,
+     "similar_geometry_fit": 0.12,
+     "surface_fit": 0.16,
+     "turn_direction_fit": 0.08,
+     "draw_course_fit": 0.08,
+     "course_geometry_fit": 0.1,
+     "going_fit": 0.06
+    },
+    "LOW_CAREER": {
+     "same_course_fit": 0.12,
+     "same_distance_fit": 0.14,
+     "similar_geometry_fit": 0.1,
+     "surface_fit": 0.2,
+     "pedigree_surface": 0.1,
+     "pedigree_distance": 0.1,
+     "turn_direction_fit": 0.07,
+     "course_geometry_fit": 0.1,
+     "draw_course_fit": 0.07
+    },
+    "NEWCOMER": {
+     "surface_fit": 0.24,
+     "pedigree_surface": 0.14,
+     "pedigree_distance": 0.14,
+     "distance_fit": 0.16,
+     "turn_direction_fit": 0.08,
+     "course_geometry_fit": 0.1,
+     "draw_course_fit": 0.06,
+     "physical_readiness": 0.08
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.703,
+    "2026-11-22": 0.685
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.929,
+    "missing_rate": 0.343
+   }
+  },
+  "RFI": {
+   "name": "ローテ・状態",
+   "type": "BASE",
+   "inputs": [
+    "layoff_readiness",
+    "physical_readiness",
+    "position_reproducibility",
+    "preparation_continuity",
+    "recent_consistency",
+    "rotation_fit",
+    "workout_consistency"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "recent_consistency": 0.26,
+     "rotation_fit": 0.16,
+     "position_reproducibility": 0.18,
+     "preparation_continuity": 0.12,
+     "layoff_readiness": 0.1,
+     "workout_consistency": 0.1,
+     "physical_readiness": 0.08
+    },
+    "LOW_CAREER": {
+     "recent_consistency": 0.18,
+     "preparation_continuity": 0.18,
+     "workout_consistency": 0.18,
+     "stable_readiness": 0.14,
+     "rotation_fit": 0.1,
+     "layoff_readiness": 0.1,
+     "gate_quality": 0.06,
+     "physical_readiness": 0.06
+    },
+    "NEWCOMER": {
+     "workout_consistency": 0.3,
+     "preparation_continuity": 0.24,
+     "stable_readiness": 0.18,
+     "gate_quality": 0.1,
+     "physical_readiness": 0.1,
+     "stable_comment_state": 0.08
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.765,
+    "2026-11-22": 0.648
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 6.151,
+    "missing_rate": 0.304
+   }
+  },
+  "BVI": {
+   "name": "血統",
+   "type": "BASE",
+   "inputs": [
+    "maternal_class_signal",
+    "pedigree_class",
+    "pedigree_distance",
+    "pedigree_surface",
+    "physical_pedigree_fit",
+    "sire_track_signal"
+   ],
+   "source": "血統（JRA公式・BB）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "pedigree_surface": 0.3,
+     "pedigree_distance": 0.24,
+     "pedigree_class": 0.16,
+     "physical_pedigree_fit": 0.12,
+     "maternal_class_signal": 0.1,
+     "sire_track_signal": 0.08
+    },
+    "LOW_CAREER": {
+     "pedigree_surface": 0.32,
+     "pedigree_distance": 0.26,
+     "pedigree_class": 0.16,
+     "sire_track_signal": 0.1,
+     "maternal_class_signal": 0.1,
+     "physical_pedigree_fit": 0.06
+    },
+    "NEWCOMER": {
+     "pedigree_surface": 0.34,
+     "pedigree_distance": 0.26,
+     "pedigree_class": 0.16,
+     "sire_newcomer_signal": 0.1,
+     "maternal_class_signal": 0.1,
+     "physical_pedigree_fit": 0.04
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.95,
+    "2026-11-22": 0.942
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 6.641,
+    "missing_rate": 0.121
+   }
+  },
+  "JTI": {
+   "name": "騎手・調教師",
+   "type": "BASE",
+   "inputs": [
+    "jockey_horse_fit",
+    "jockey_quality",
+    "jockey_style_fit",
+    "jockey_venue_fit"
+   ],
+   "source": "JRA公式 騎手・調教師",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "jockey_quality": 0.36,
+     "jockey_venue_fit": 0.22,
+     "jockey_style_fit": 0.22,
+     "jockey_horse_fit": 0.2
+    },
+    "LOW_CAREER": {
+     "jockey_quality": 0.4,
+     "jockey_venue_fit": 0.22,
+     "jockey_style_fit": 0.22,
+     "jockey_horse_fit": 0.16
+    },
+    "NEWCOMER": {
+     "jockey_quality": 0.44,
+     "jockey_venue_fit": 0.24,
+     "jockey_style_fit": 0.22,
+     "trainer_jockey_fit": 0.1
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.528,
+    "2026-11-22": 0.529
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.156,
+    "missing_rate": 0.47
+   }
+  },
+  "CSI": {
+   "name": "厩舎の意図・仕上がり",
+   "type": "BASE",
+   "inputs": [
+    "layoff_readiness",
+    "preparation_continuity",
+    "stable_comment_state",
+    "stable_readiness",
+    "target_intent",
+    "trainer_quality"
+   ],
+   "source": "競馬ブック厩舎の話／JRA公式",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "stable_readiness": 0.28,
+     "trainer_quality": 0.18,
+     "target_intent": 0.18,
+     "preparation_continuity": 0.14,
+     "stable_comment_state": 0.12,
+     "layoff_readiness": 0.1
+    },
+    "LOW_CAREER": {
+     "stable_readiness": 0.3,
+     "trainer_quality": 0.2,
+     "target_intent": 0.2,
+     "preparation_continuity": 0.16,
+     "stable_comment_state": 0.14
+    },
+    "NEWCOMER": {
+     "stable_readiness": 0.34,
+     "trainer_quality": 0.22,
+     "target_intent": 0.2,
+     "preparation_continuity": 0.14,
+     "stable_comment_state": 0.1
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.686,
+    "2026-11-22": 0.641
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.491,
+    "missing_rate": 0.456
+   }
+  },
+  "TRI": {
+   "name": "調教",
+   "type": "BASE",
+   "inputs": [
+    "workout_capability",
+    "workout_consistency",
+    "workout_finish",
+    "workout_load",
+    "workout_partner_level",
+    "workout_speed"
+   ],
+   "source": "競馬ブック調教",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "workout_capability": 0.28,
+     "workout_speed": 0.22,
+     "workout_partner_level": 0.14,
+     "workout_finish": 0.14,
+     "workout_consistency": 0.12,
+     "workout_load": 0.1
+    },
+    "LOW_CAREER": {
+     "workout_capability": 0.3,
+     "workout_speed": 0.24,
+     "workout_partner_level": 0.14,
+     "workout_finish": 0.14,
+     "workout_consistency": 0.1,
+     "workout_load": 0.08
+    },
+    "NEWCOMER": {
+     "workout_capability": 0.32,
+     "workout_speed": 0.26,
+     "workout_partner_level": 0.14,
+     "workout_finish": 0.14,
+     "workout_consistency": 0.1,
+     "workout_load": 0.04
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.648,
+    "2026-11-22": 0.654
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.976,
+    "missing_rate": 0.579
+   }
+  },
+  "BWI": {
+   "name": "馬体重・馬体・馬具",
+   "type": "BASE",
+   "inputs": [
+    "body_condition_comment",
+    "bodyweight_delta_fit",
+    "bodyweight_range_fit",
+    "equipment_effect",
+    "physical_readiness",
+    "weight_load_fit"
+   ],
+   "source": "JRA公式 馬体重",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "bodyweight_range_fit": 0.24,
+     "bodyweight_delta_fit": 0.18,
+     "weight_load_fit": 0.2,
+     "physical_readiness": 0.2,
+     "equipment_effect": 0.1,
+     "body_condition_comment": 0.08
+    },
+    "LOW_CAREER": {
+     "bodyweight_range_fit": 0.18,
+     "bodyweight_delta_fit": 0.18,
+     "weight_load_fit": 0.2,
+     "physical_readiness": 0.24,
+     "equipment_effect": 0.1,
+     "body_condition_comment": 0.1
+    },
+    "NEWCOMER": {
+     "bodyweight_delta_fit": 0.2,
+     "weight_load_fit": 0.2,
+     "physical_readiness": 0.3,
+     "equipment_effect": 0.1,
+     "body_condition_comment": 0.2
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.741,
+    "2026-11-22": 0.602
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 6.895,
+    "missing_rate": 0.318
+   }
+  },
+  "GCI": {
+   "name": "馬場・当日傾向",
+   "type": "BASE",
+   "inputs": [
+    "going_fit",
+    "physical_pedigree_fit",
+    "same_day_track_fit",
+    "surface_fit",
+    "track_bias_fit",
+    "weather_fit"
+   ],
+   "source": "JRA公式 馬場・当日結果",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "going_fit": 0.26,
+     "surface_fit": 0.2,
+     "same_day_track_fit": 0.24,
+     "physical_pedigree_fit": 0.1,
+     "track_bias_fit": 0.12,
+     "weather_fit": 0.08
+    },
+    "LOW_CAREER": {
+     "going_fit": 0.24,
+     "surface_fit": 0.2,
+     "same_day_track_fit": 0.24,
+     "pedigree_surface": 0.1,
+     "physical_pedigree_fit": 0.1,
+     "track_bias_fit": 0.12
+    },
+    "NEWCOMER": {
+     "surface_fit": 0.24,
+     "pedigree_surface": 0.18,
+     "going_fit": 0.18,
+     "same_day_track_fit": 0.24,
+     "physical_pedigree_fit": 0.08,
+     "track_bias_fit": 0.08
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.638,
+    "2026-11-22": 0.632
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 6.32,
+    "missing_rate": 0.352
+   }
+  },
+  "PRI": {
+   "name": "位置取り・展開",
+   "type": "BASE",
+   "inputs": [
+    "dash_quality",
+    "draw_course_fit",
+    "forward_speed_comment",
+    "gate_quality",
+    "position_quality",
+    "position_reproducibility",
+    "pressure_resilience",
+    "progression_ability"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "gate_quality": 0.16,
+     "dash_quality": 0.18,
+     "position_quality": 0.16,
+     "position_reproducibility": 0.12,
+     "draw_course_fit": 0.1,
+     "pressure_resilience": 0.12,
+     "progression_ability": 0.1,
+     "forward_speed_comment": 0.06
+    },
+    "LOW_CAREER": {
+     "gate_quality": 0.22,
+     "dash_quality": 0.2,
+     "position_quality": 0.1,
+     "draw_course_fit": 0.12,
+     "pressure_resilience": 0.1,
+     "progression_ability": 0.08,
+     "forward_speed_comment": 0.1,
+     "jockey_style_fit": 0.08
+    },
+    "NEWCOMER": {
+     "gate_quality": 0.26,
+     "dash_quality": 0.24,
+     "forward_speed_comment": 0.16,
+     "draw_course_fit": 0.1,
+     "pressure_resilience": 0.08,
+     "jockey_style_fit": 0.08,
+     "course_geometry_fit": 0.08
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.762,
+    "2026-11-22": 0.685
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 6.245,
+    "missing_rate": 0.279
+   }
+  },
+  "KGI": {
+   "name": "格・隠れた実力",
+   "type": "BASE",
+   "inputs": [
+    "class_performance",
+    "hidden_class",
+    "jockey_quality",
+    "opponent_strength",
+    "pedigree_class",
+    "recent_performance",
+    "trainer_quality",
+    "workout_partner_level"
+   ],
+   "source": "JRA公式の出馬表・過去成績・競馬ブック・TSL（特徴ごと）",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "class_performance": 0.28,
+     "opponent_strength": 0.22,
+     "hidden_class": 0.16,
+     "recent_performance": 0.12,
+     "pedigree_class": 0.08,
+     "trainer_quality": 0.06,
+     "jockey_quality": 0.04,
+     "workout_partner_level": 0.04
+    },
+    "LOW_CAREER": {
+     "class_performance": 0.18,
+     "opponent_strength": 0.14,
+     "pedigree_class": 0.22,
+     "workout_partner_level": 0.16,
+     "stable_trainer_class": 0.1,
+     "jockey_quality": 0.08,
+     "maternal_class_signal": 0.12
+    },
+    "NEWCOMER": {
+     "pedigree_class": 0.26,
+     "workout_partner_level": 0.22,
+     "stable_trainer_class": 0.14,
+     "jockey_quality": 0.12,
+     "maternal_class_signal": 0.16,
+     "workout_capability": 0.1
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.895,
+    "2026-11-22": 0.878
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 5.291,
+    "missing_rate": 0.142
+   }
+  },
+  "VMI": {
+   "name": "市場・外部評価",
+   "type": "BASE",
+   "inputs": [
+    "expert_support",
+    "external_index_support",
+    "market_mismatch",
+    "market_rank",
+    "market_stability"
+   ],
+   "source": "JRA公式オッズ・人気／TSL印",
+   "weights_by_profile": {
+    "ESTABLISHED": {
+     "market_rank": 0.34,
+     "market_stability": 0.24,
+     "expert_support": 0.18,
+     "external_index_support": 0.14,
+     "market_mismatch": 0.1
+    },
+    "LOW_CAREER": {
+     "market_rank": 0.36,
+     "market_stability": 0.24,
+     "expert_support": 0.18,
+     "external_index_support": 0.14,
+     "market_mismatch": 0.08
+    },
+    "NEWCOMER": {
+     "market_rank": 0.38,
+     "market_stability": 0.24,
+     "expert_support": 0.2,
+     "external_index_support": 0.18
+    }
+   },
+   "min_coverage_by_profile": {
+    "ESTABLISHED": 0.42,
+    "LOW_CAREER": 0.38,
+    "NEWCOMER": 0.34
+   },
+   "stage": "INITIAL_DESIGN",
+   "observed_weight": {
+    "2026-11-21": 0.825,
+    "2026-11-22": 0.712
+   },
+   "discrimination_207R": {
+    "top3_mean_rank": 4.586,
+    "missing_rate": 0.387
+   }
+  },
+  "DCR": {
+   "type": "DERIVED",
+   "formula": "データの信頼度（6項目の点数）",
+   "rule_id": "JRA-DCR-SCORE-v1",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.76
+   }
+  },
+  "TPI": {
+   "type": "DERIVED",
+   "formula": "総合力：HPI.15 SSI.14 CFI.10 RFI.10 BVI.05 JTI.06 CSI.05 TRI.07 BWI.06 GCI.08 PRI.08 KGI.06、弱点減点 0.40×max(0,60−最弱)+0.20×max(0,65−2番目)、DCR係数で50へ縮める",
+   "rule_id": "JRA-TPI-FINAL-v1.0",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.093
+   }
+  },
+  "ZAI_WIN": {
+   "type": "DERIVED",
+   "formula": "勝ち指数。v1.0：HPI.20 SSI.17 CFI.10 RFI.08 JTI.05 CSI.05 TRI.05 BWI.05 GCI.08 PRI.12 KGI.05。v1.1（11/15〜）：v1.0×0.80＋BVI.15＋VMI.05。本番の順位はこれ",
+   "rule_id": "JRA-ZAI-WIN-v1.1",
+   "stage": "INITIAL_DESIGN（v1.1 は Owner 判断 11/14）＋FORWARD_OOS 進行中（ZAI-V11-VS-V10、11/21〜）",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.081
+   }
+  },
+  "ZAI_PLACE": {
+   "type": "DERIVED",
+   "formula": "複勝指数（同型、重み違い）",
+   "rule_id": "JRA-ZAI-PLACE-v1.1",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.082
+   }
+  },
+  "SRI": {
+   "type": "DERIVED",
+   "formula": "安定度：ZAI_PLACE.45 TPI.25 RFI.10 PRI.08 KGI.07 BWI.05",
+   "rule_id": "JRA-SRI-v1.0",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.176
+   }
+  },
+  "F3S": {
+   "type": "DERIVED",
+   "formula": "最終3着内：ZAI_WIN.30 ZAI_PLACE.25 TPI.25 SRI.15 シナリオ.05",
+   "rule_id": "JRA-F3S-v1.0",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.093
+   }
+  },
+  "T3I": {
+   "type": "DERIVED",
+   "formula": "3着候補：ZAI_PLACE.35 TPI.20 RFI.15 PRI.10 GCI.08 CFI.07 VMI.05",
+   "rule_id": "JRA-T3I-v1.0",
+   "stage": "INITIAL_DESIGN",
+   "missing": "基礎指数の値をそのまま使う（基礎指数の欠測処理に従う）",
+   "discrimination_207R": {
+    "top3_mean_rank": 5.166
+   }
+  }
+ },
+ "weakest_stage_analysis": {
+  "data": "index_analysis（207R・結果既知）、特徴の相関（train 3,158頭）、11/10以降97Rのリプレイ（参考値）",
+  "1_conversion": "帯域→点数は全体として単調。逆向き・無関係の特徴が3つ（market_mismatch -0.146 が最大）",
+  "2_index_formula": "基礎指数の上位3頭平均順位は JTI 5.16〜BWI 6.90。BVI 6.64（v1.1で重み.15）・GCI 6.32・PRI 6.24・RFI 6.15 が弱い",
+  "3_composite": "ZAI_WIN 5.08 に対し VMI 単独 4.59、特徴では market_rank の相関 .378 が最大。合成が市場の情報を十分使えていない（約0.5順位の差）",
+  "4_role": "本番の順位で勝ち馬が3位以内は約50%だが回収率は約31%。役割の挑戦者（P3_MARKET_TOP5 等、結果既知の参考値）で改善が大きい",
+  "verdict": "数字で一番弱いのは③合成（市場情報の使い方）と④役割。①変換は全体として機能しているが、向きの逆な特徴がある"
+ },
+ "challengers_registered_20261122": {
+  "CV1_SIGN_FIX": {
+   "stage": "①変換",
+   "rule": "train で相関≦0 の3特徴を未観測扱い",
+   "replay_97R_since_1110": {
+    "top3_mean_rank": 5.244,
+    "PROD": 5.237,
+    "top3_in_top5_pct": 59.1,
+    "PROD_pct": 59.8
+   },
+   "status": "FORWARD_OOS 開始 11/23"
+  },
+  "CV2_ISO_SCALE": {
+   "stage": "①変換",
+   "rule": "共通点数表を train の3着内 log-odds で引き直し（24〜94）",
+   "replay_97R_since_1110": {
+    "top3_mean_rank": 5.289,
+    "PROD": 5.237,
+    "top3_in_top5_pct": 59.1,
+    "PROD_pct": 59.8
+   },
+   "status": "FORWARD_OOS 開始 11/23"
+  }
+ },
+ "tried_not_registered": [
+  {
+   "id": "CV1 閾値 0.02（9特徴を除外）",
+   "reason": "同時評価の上限（段ごと最大2）のため。閾値0の版を代表に登録"
+  },
+  {
+   "id": "特徴別の点数表（57特徴×9帯域）",
+   "reason": "自由度が大きく過学習の恐れ。共通表の再較正（CV2）を先に評価"
+  },
+  {
+   "id": "市場重みを上げた ZAI",
+   "reason": "③合成段の案のため今回は対象外（jra_index_research の ZAI 枠と 11/27 の改善の仕組みで扱う）"
+  }
+ ],
+ "related_challengers": {
+  "C1_FOREIGN / C2_UNCERT": "PR #456（欠測の扱い）",
+  "CH_KB4 / CH_EXPERT / CH_PADDOCK / CH_EQUIP": "PR #458・#459（未観測特徴を埋める）",
+  "ZAI weight challengers": "runtime/analysis/jra_index_research.py（3案、各44R評価中）"
+ },
+ "brier_logloss": "今回の挑戦者は確率を出さないため対象外"
+}

@@ -1,0 +1,17 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-CONVERSION-v1",
+  "registered_at": "2026-11-22T21:00:00+09:00",
+  "task": "2026-11-21 20:16 (formula ledger; at most two conversion challengers, record only)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-23",
+  "tracker": "runtime/analysis/jra_conversion_challenger.py",
+  "train_window": "2026-10-11..2026-11-09 (used to fix both arms; never re-fit inside the evaluation)",
+  "arms": {"CV1_SIGN_FIX": "drop market_mismatch, opponent_strength, weight_load_fit", "CV2_ISO_SCALE": "category scale = train top-3 log-odds rescaled to 24..94"},
+  "primary": "paired top-3 mean rank (arm - PROD), lower is better",
+  "secondary": ["winner rank", "top-3 capture inside the top 5 (same candidate count)", "venue x surface (jra_oos_strata)"],
+  "brier_logloss": "not applicable (no probabilities)",
+  "stages": [30, 100, 300],
+  "promotion_eligible": ">= 100 forward races, 95% bootstrap CI upper < 0 on the primary, venue_rule not CONSISTENT_DEGRADATION; Owner decision only",
+  "reject": ">= 30 forward races with CI lower > 0",
+  "known_result_replay_context_only": {"since": "2026-11-10", "races": 97, "PROD": 5.237, "CV1_SIGN_FIX": 5.244, "CV2_ISO_SCALE": 5.289}
+}
