@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-22（17:53時点）
+# 地方版 配送台帳 2026-11-22（17:56時点）
 
 - 管理Race 34／発走済み 21
 - PAPER：凍結 34・Push検証 34・送信 25（発走前 25）・読み戻し一致 25・本人確認 0
@@ -6,7 +6,7 @@
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 21／重要変更 16／Revision 2署名 16
+- 10分前チェック：確認 22／重要変更 17／Revision 2署名 17
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -38,8 +38,8 @@
 | SAG_02 | 15:50 | POSTRESULT_DIAGNOSTIC | 15:07 | ○ | SIGNED_FINAL | 15:08 | ○ |  |
 | SAG_03 | 16:25 | POSTRESULT_DIAGNOSTIC | 15:42 | ○ | SIGNED_FINAL | 16:17 | ○ |  |
 | SAG_04 | 17:00 | POSTRESULT_DIAGNOSTIC | 16:17 | ○ | SIGNED_FINAL | 16:18 | ○ |  |
-| SAG_05 | 17:35 | PRESTART_PUSH_VERIFIED | 16:52 | ○ | SIGNED_FINAL | 16:53 | ○ |  |
-| SAG_06 | 18:05 | PRESTART_PUSH_VERIFIED | 17:22 | ○ | SIGNED_FINAL | 17:23 | ○ |  |
+| SAG_05 | 17:35 | POSTRESULT_DIAGNOSTIC | 16:52 | ○ | SIGNED_FINAL | 16:53 | ○ |  |
+| SAG_06 | 18:05 | PRESTART_PUSH_VERIFIED | 17:22 | ○ | SIGNED_FINAL | 17:55 | ○ |  |
 | SAG_07 | 18:35 | PRESTART_PUSH_VERIFIED | 17:51 | ○ | SIGNED_FINAL | 17:53 | ○ |  |
 | SAG_08 | 19:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_09 | 19:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
