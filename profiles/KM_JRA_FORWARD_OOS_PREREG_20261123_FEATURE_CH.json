@@ -1,0 +1,20 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-FEATURE-CHALLENGER-v1",
+  "registered_at": "2026-11-22T20:00:00+09:00",
+  "owner_approval": "2026-11-21 13:13 (connect collected information and Drive reading to Challenger indices; Production unchanged)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-23",
+  "tracker": "runtime/analysis/jra_feature_challenger.py (freeze before post time only; known-result replays never count)",
+  "arms": {
+    "CH_KB4": {"features": ["workout_load", "workout_partner_level", "workout_consistency", "stable_readiness"], "indices": ["TRI", "RFI", "KGI", "CSI", "HPI"], "source": "競馬ブック調教・厩舎の話（bands: keibabook_challenger_bands.json, rules KM_JRA_CHALLENGER_FEATURE_RULES_20261122_KB.json）"},
+    "CH_EXPERT": {"features": ["expert_support"], "indices": ["VMI"], "source": "TSL 推奨（軸 STRONG / 本線 POSITIVE / 次点・おさえ NEUTRAL）, last capture strictly before post"},
+    "CH_PADDOCK": {"features": ["body_condition_comment"], "indices": ["BWI"], "source": "競馬ブック パドック評価（A STRONG / B・穴 POSITIVE）, capture strictly before post"},
+    "CH_ALL": {"features": "union of the above"}
+  },
+  "rule": "Challenger features fill only features that are unobserved in the frozen Production request; Production-observed features are never overwritten. Same mapping weights; ranking = ZAI_WIN.",
+  "primary": "paired top-3 mean rank gain (PROD - arm), positive = challenger better",
+  "evidence_rule": {"unit": "venue x surface (jra_oos_strata)", "min_cell_races": 12, "venue_rule": "promote needs >= 2 decisive venue x surface cells improving and none degrading", "stages": [30, 100, 300]},
+  "promotion_eligible": ">= 100 forward races, venue_rule CONSISTENT_IMPROVEMENT, mean gain > 0; adoption only by Owner decision (12/7 or 12/28)",
+  "a4": "Any A4 ERROR (provider parse failure, unknown venue code, missing post time, PROD replay mismatch, result annotation inside a pre-race capture) is recorded per race; races with A4 errors are reported and excluded from promotion evidence until explained.",
+  "known_result_replay_context_only": {"date": "2026-11-22", "races": 22, "PROD_top3_mean_rank": 5.061, "mean_top3_rank_gain": {"CH_KB4": -0.045, "CH_EXPERT": -0.015, "CH_PADDOCK": 0.0, "CH_ALL": -0.061}, "a4_errors": 0, "note": "PADDOCK filled only 1 race: paddock pages appear ~30 min before post, captures at 12:00/14:30 rarely precede it"}
+}
