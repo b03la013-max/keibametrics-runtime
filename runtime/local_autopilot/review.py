@@ -282,9 +282,13 @@ def build(day_dir, key, r):
     # B2 回収の頑健性の追加列（Drive 精読 2026-11-23、証拠のみ・券面は変えない）
     from runtime.local_autopilot import robustness
     off_pay = (_load(day_dir / f'{key}.result.json') or {}).get('payouts') or {}
+    fav_odds = None   # n258 荒れ度の層：締切前に固定した PAPER の出馬表から1番人気の単勝オッズ
+    if pf:
+        wins = [float(x['win']) for x in pf['prediction'].get('ranking') or [] if isinstance(x.get('win'), (int, float)) and x['win'] > 0]
+        fav_odds = min(wins) if wins else None
     if paper:
         paper['robustness'] = robustness.race([{'bet_type': bt, 'selection': sel, 'stake': 100}
-                                               for bt, sel in _paper_tickets(pf['prediction'])], order, off_pay)
+                                               for bt, sel in _paper_tickets(pf['prediction'])], order, off_pay, fav_odds=fav_odds)
     if formal:
         tier = {(t.get('bet_type'), tuple(int(x) for x in t.get('selection') or [])): t.get('mec_tier')
                 for t in sm.get('signed_final_tickets') or []}
@@ -293,7 +297,7 @@ def build(day_dir, key, r):
               'tier': tier.get((t['bet_type'], tuple(int(x) for x in t['selection'])))
               or ('AUTO_ADDED' if str(t.get('source') or '').startswith('AUTO_PROMOTED') else None)}
              for t in sm.get('tickets') or []],
-            order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'])
+            order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'], fav_odds=fav_odds)
 
     # layer analysis
     layers = {}

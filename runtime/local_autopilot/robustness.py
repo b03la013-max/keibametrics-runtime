@@ -7,6 +7,9 @@
   - 大井 v2.3-OHI 第315〜316条 Set/Order の分離: 三連複の組は当たり三連単の着順は外れ、を別に数える
   - 地方 FORMAL-PRE-RACE Rev16 27節 Protection Burden Ratio: PROTECTION 層の資金 / 総資金
   - 地方 2026-11-21 全35R反省 P1-3: 的中赤字（的中したのに収支マイナス）
+  - Drive「福島競馬場コース攻略」（n258）: 荒れ度の層ごとに PFS と的中赤字率を分けて出す。
+    発走前の層は締切前に固定した出馬表の1番人気の単勝オッズ（2.0倍未満=SOLID／4.0倍未満=MID／それ以上=OPEN）、
+    結果の層は三連複の払戻（1,000円以下=LOW／10,000円以下=MID／それ超=HIGH）。
 """
 from collections import defaultdict
 
@@ -14,13 +17,26 @@ UNORDERED = {'TRIO', 'QUINELLA', 'WIDE', 'PLACE', 'BRACKET_QUINELLA'}
 ORDERED = {'EXACTA', 'TRIFECTA', 'WIN'}
 PRIMARY = {3: 'TRIO', 2: 'QUINELLA'}      # 同じ骨格の「基本の券種」。これ以外の券種で同じ組を持つ分を追加投資と数える
 UNIT = 100
+PRE_LAYERS = ((2.0, 'SOLID'), (4.0, 'MID'))       # 1番人気の単勝オッズ（締切前固定）
+RESULT_LAYERS = ((1000, 'LOW'), (10000, 'MID'))   # 三連複の払戻（100円あたり）
+
+
+def roughness(fav_odds, payouts):
+    """荒れ度の層（n258、証拠のみ）。fav_odds: 締切前に固定した1番人気の単勝オッズ。"""
+    pre = None
+    if fav_odds:
+        pre = next((name for lim, name in PRE_LAYERS if float(fav_odds) < lim), 'OPEN')
+    trio = [int(v) for v in ((payouts or {}).get('TRIO') or {}).values() if v]
+    res = next((name for lim, name in RESULT_LAYERS if max(trio) <= lim), 'HIGH') if trio else None
+    return {'pre_race': pre, 'fav_odds': float(fav_odds) if fav_odds else None,
+            'result': res, 'trio_payout': max(trio) if trio else None}
 
 
 def _key(bt, sel):
     return '-'.join(map(str, sorted(sel) if bt in UNORDERED else sel))
 
 
-def race(tickets, order, payouts=None, effective_invest=None, payout=None):
+def race(tickets, order, payouts=None, effective_invest=None, payout=None, fav_odds=None):
     """tickets: [{'bet_type', 'selection':[int], 'stake':int, 'tier':str|None}] (delivered set only).
     order: official finishing order. payouts: {'TRIO': {'4-8-14': 2120}, ...} (per 100 yen)."""
     order = [int(x) for x in order or []]
@@ -94,6 +110,7 @@ def race(tickets, order, payouts=None, effective_invest=None, payout=None):
                        'hit': bool(pay), 'hit_multiple': round(pay / UNIT, 1) if pay else None,
                        'hit_but_loss': bool(pay and eff and pay < eff)},
         'random_same_points': {'expected_payout': round(rnd) if rnd_ok else None, 'field': nf},
+        'roughness': dict(roughness(fav_odds, payouts), effective_invest=eff, payout=pay),
         'evidence_only': True,
     }
 
@@ -119,7 +136,21 @@ def aggregate(rows):
     rr = [r for r in rows if (r.get('random_same_points') or {}).get('expected_payout') is not None]
     rs = sum(r['stake'] for r in rr)
     act = sum(sum(v['payout'] for v in r['by_bet_type'].values()) for r in rr)
-    return {'races': len(rows), 'stake': stake,
+    lay = {'pre_race': defaultdict(lambda: {'races': 0, 'invest': 0, 'payout': 0, 'hit_races': 0, 'hit_but_loss_races': 0}),
+           'result': defaultdict(lambda: {'races': 0, 'invest': 0, 'payout': 0, 'hit_races': 0, 'hit_but_loss_races': 0})}
+    for r in rows:
+        rg = r.get('roughness') or {}
+        for dim in ('pre_race', 'result'):
+            b = lay[dim][rg.get(dim) or 'UNKNOWN']
+            b['races'] += 1
+            b['invest'] += rg.get('effective_invest') or 0
+            b['payout'] += rg.get('payout') or 0
+            b['hit_races'] += bool(r['low_payout']['hit'])
+            b['hit_but_loss_races'] += bool(r['low_payout']['hit_but_loss'])
+    by_rough = {dim: {k: dict(v, pfs=round(100 * v['payout'] / v['invest'], 1) if v['invest'] else None,
+                              hit_but_loss_rate=round(v['hit_but_loss_races'] / v['hit_races'], 3) if v['hit_races'] else None)
+                      for k, v in sorted(d.items())} for dim, d in lay.items()}
+    return {'races': len(rows), 'stake': stake, 'by_roughness': by_rough,
             'cross_bet_extra_stake': extra, 'cross_bet_extra_share': round(extra / stake, 3) if stake else None,
             'protection_burden_ratio': round(sum(p * s for p, s in pb) / sum(s for _, s in pb), 3) if pb else None,
             'protection_races': len(pb),
@@ -141,4 +172,7 @@ def line(a):
             f"（{a['protection_races']}R）／組だけ的中（三連単は外れ）{so.get('SET_ONLY', 0)}R・着順まで的中 {so.get('BOTH', 0)}R"
             f"／的中 {a['hit_races']}R のうち的中赤字 {a['hit_but_loss_races']}R／損益分岐の倍率 平均 {a['mean_break_even_multiple']}倍"
             f"／同じ点数を無作為に選んだ場合の期待PFS {(a.get('random_same_points') or {}).get('pfs')}%（同じ{(a.get('random_same_points') or {}).get('races')}Rの実績 {(a.get('random_same_points') or {}).get('actual_pfs_same_races')}%）"
-            f"／券種別 {bt}")
+            f"／券種別 {bt}"
+            + ('／荒れ度（発走前・1番人気オッズ）' + '／'.join(f"{k} {v['races']}R PFS {v['pfs']}% 的中赤字 {v['hit_but_loss_races']}/{v['hit_races']}"
+                                             for k, v in (a.get('by_roughness') or {}).get('pre_race', {}).items())
+               if a.get('by_roughness') else ''))

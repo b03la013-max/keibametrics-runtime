@@ -66,3 +66,25 @@ def test_random_same_points_null_model():
     a = R.aggregate([r, r2])
     assert a['random_same_points']['races'] == 2
     assert a['random_same_points']['actual_pfs_same_races'] == round(100 * (1190 + 7140) / 300, 1)
+
+
+def test_roughness_layers_pre_race_fav_odds_and_result_trio_payout():
+    assert R.roughness(1.6, PAY) == {'pre_race': 'SOLID', 'fav_odds': 1.6, 'result': 'MID', 'trio_payout': 1190}
+    assert R.roughness(3.0, {'TRIO': {'1-2-3': 800}})['pre_race'] == 'MID'
+    assert R.roughness(4.0, {'TRIO': {'1-2-3': 800}})['result'] == 'LOW'
+    assert R.roughness(5.2, {'TRIO': {'1-2-3': 25000}})[ 'pre_race'] == 'OPEN'
+    assert R.roughness(None, {}) == {'pre_race': None, 'fav_odds': None, 'result': None, 'trio_payout': None}
+
+
+def test_aggregate_splits_pfs_and_hit_but_loss_by_roughness_layer():
+    ts = [T('TRIO', [2, 4, 9])] + [T('TRIO', [1, 2, x]) for x in range(3, 18)]
+    a = R.race(ts, [2, 4, 9], PAY, fav_odds=1.5)              # SOLID, 的中赤字
+    b = R.race([T('TRIO', [1, 4, 9])], [2, 4, 9], PAY, fav_odds=6.0)   # OPEN, 不的中
+    agg = R.aggregate([a, b])
+    pre = agg['by_roughness']['pre_race']
+    assert pre['SOLID'] == {'races': 1, 'invest': 1600, 'payout': 1190, 'hit_races': 1, 'hit_but_loss_races': 1,
+                            'pfs': 74.4, 'hit_but_loss_rate': 1.0}
+    assert pre['OPEN']['pfs'] == 0.0 and pre['OPEN']['hit_but_loss_rate'] is None
+    assert agg['by_roughness']['result']['MID']['races'] == 2
+    assert '荒れ度' in R.line(agg)
+    assert a['evidence_only'] is True
