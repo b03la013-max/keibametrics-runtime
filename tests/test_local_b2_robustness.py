@@ -52,3 +52,17 @@ def test_aggregate_and_line_never_touch_tickets():
     assert a['evidence_only'] is True
     assert '回収の頑健性' in R.line(a)
     assert R.aggregate([None]) is None
+
+
+def test_random_same_points_null_model():
+    # 4頭立て（着順4頭）: 三連複 C(4,3)=4 通り、1点買えば期待払戻 = 1190/4
+    r = R.race([T('TRIO', [2, 4, 9])], [2, 4, 9, 1], {'TRIO': {'2-4-9': 1190}})
+    assert r['random_same_points'] == {'expected_payout': round(1190 / 4), 'field': 4}
+    # 三連単 4*3*2=24 通り × 2点
+    r2 = R.race([T('TRIFECTA', [2, 4, 9]), T('TRIFECTA', [4, 2, 9])], [2, 4, 9, 1], {'TRIFECTA': {'2-4-9': 7140}})
+    assert r2['random_same_points']['expected_payout'] == round(2 / 24 * 7140)
+    # 払戻表が無い券種があれば出さない
+    assert R.race([T('EXACTA', [2, 4])], [2, 4, 9], {})['random_same_points']['expected_payout'] is None
+    a = R.aggregate([r, r2])
+    assert a['random_same_points']['races'] == 2
+    assert a['random_same_points']['actual_pfs_same_races'] == round(100 * (1190 + 7140) / 300, 1)

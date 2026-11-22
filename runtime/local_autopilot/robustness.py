@@ -68,6 +68,18 @@ def race(tickets, order, payouts=None, effective_invest=None, payout=None):
             b['payout'] += int(pay) * st // UNIT
     for b in by_type.values():
         b['pfs'] = round(100 * b['payout'] / b['stake'], 1) if b['stake'] else None
+    # 5) 同じ点数を無作為に選んだときの期待払戻（ヌルモデル、Drive「確率シミュレーション大学」第3・7・8講）：
+    #    券種ごとに 点数 / 全組合せ数 × その券種の払戻合計。出走頭数は着順の頭数（取消は除かれる）
+    nf = len(order)
+    combos = {'WIN': nf, 'PLACE': nf, 'QUINELLA': nf * (nf - 1) // 2, 'WIDE': nf * (nf - 1) // 2,
+              'EXACTA': nf * (nf - 1), 'TRIO': nf * (nf - 1) * (nf - 2) // 6, 'TRIFECTA': nf * (nf - 1) * (nf - 2)}
+    rnd, rnd_ok = 0.0, bool(by_type)
+    for k, b in by_type.items():
+        c = combos.get(k)
+        if not c or k not in payouts:
+            rnd_ok = False
+            continue
+        rnd += b['points'] / c * sum(int(v) for v in payouts[k].values()) * (b['stake'] / b['points']) / UNIT
     # 4) 低配当構造：1点の的中で収支が合うのに必要な倍率と、実際の的中の倍率
     eff = total if effective_invest is None else effective_invest
     pay = sum(b['payout'] for b in by_type.values()) if payout is None else payout
@@ -81,6 +93,7 @@ def race(tickets, order, payouts=None, effective_invest=None, payout=None):
         'low_payout': {'break_even_multiple': round(eff / UNIT, 1) if eff else None,
                        'hit': bool(pay), 'hit_multiple': round(pay / UNIT, 1) if pay else None,
                        'hit_but_loss': bool(pay and eff and pay < eff)},
+        'random_same_points': {'expected_payout': round(rnd) if rnd_ok else None, 'field': nf},
         'evidence_only': True,
     }
 
@@ -103,12 +116,17 @@ def aggregate(rows):
     for v in bt.values():
         v['pfs'] = round(100 * v['payout'] / v['stake'], 1) if v['stake'] else None
     hits = [r for r in rows if r['low_payout']['hit']]
+    rr = [r for r in rows if (r.get('random_same_points') or {}).get('expected_payout') is not None]
+    rs = sum(r['stake'] for r in rr)
+    act = sum(sum(v['payout'] for v in r['by_bet_type'].values()) for r in rr)
     return {'races': len(rows), 'stake': stake,
             'cross_bet_extra_stake': extra, 'cross_bet_extra_share': round(extra / stake, 3) if stake else None,
             'protection_burden_ratio': round(sum(p * s for p, s in pb) / sum(s for _, s in pb), 3) if pb else None,
             'protection_races': len(pb),
             'set_order': dict(so), 'by_bet_type': {k: dict(v) for k, v in sorted(bt.items())},
             'hit_races': len(hits), 'hit_but_loss_races': sum(1 for r in hits if r['low_payout']['hit_but_loss']),
+            'random_same_points': {'races': len(rr), 'pfs': round(100 * sum(r['random_same_points']['expected_payout'] for r in rr) / rs, 1) if rs else None,
+                                   'actual_pfs_same_races': round(100 * act / rs, 1) if rs else None},
             'mean_break_even_multiple': round(sum(r['low_payout']['break_even_multiple'] or 0 for r in rows) / len(rows), 1),
             'evidence_only': True}
 
@@ -122,4 +140,5 @@ def line(a):
             f"（{(a['cross_bet_extra_share'] or 0) * 100:.1f}%）／保護層の資金比率 {a['protection_burden_ratio']}"
             f"（{a['protection_races']}R）／組だけ的中（三連単は外れ）{so.get('SET_ONLY', 0)}R・着順まで的中 {so.get('BOTH', 0)}R"
             f"／的中 {a['hit_races']}R のうち的中赤字 {a['hit_but_loss_races']}R／損益分岐の倍率 平均 {a['mean_break_even_multiple']}倍"
+            f"／同じ点数を無作為に選んだ場合の期待PFS {(a.get('random_same_points') or {}).get('pfs')}%（同じ{(a.get('random_same_points') or {}).get('races')}Rの実績 {(a.get('random_same_points') or {}).get('actual_pfs_same_races')}%）"
             f"／券種別 {bt}")
