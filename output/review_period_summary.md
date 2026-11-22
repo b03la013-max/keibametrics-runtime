@@ -1,14 +1,14 @@
 # 地方版 週次 2026-W47（自動・推薦試算・実購入なし）
 
-- 反省済みRace 220／PAPER PFS 59.1%／正式推薦 PFS 101.3%
-- 第一失敗：{'NONE': 33, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 49, 'PREDICTION_ROLE_W': 71, 'PREDICTION_ROLE_P2': 30, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 221／PAPER PFS 58.8%／正式推薦 PFS 100.8%
+- 第一失敗：{'NONE': 33, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 49, 'PREDICTION_ROLE_W': 71, 'PREDICTION_ROLE_P2': 31, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
 | KNZ | 24 | 104.2 | 44.2 | {'NONE': 4, 'WINNER_DISCOVERED_LOW': 2, 'THIRD_MISS': 1, 'P2_MISS': 2, 'WINNER_NOT_DISCOVERED': 1, 'W_WIDTH_OR_ROLE': 2, 'CAPITAL_EFFICIENCY': 5, 'PREDICTION_ROLE_W': 4, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | KOC | 16 | 34.1 | 39.7 | {'WINNER_DISCOVERED_LOW': 3, 'W_WIDTH_OR_ROLE': 1, 'PREDICTION_ROLE_P2': 1, 'NONE': 2, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5} |
 | KSM | 36 | 50.0 | 317.6 | {'PREDICTION_ROLE_W': 15, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 7} |
-| MIZ | 33 | 60.8 | 34.7 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 4, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 7, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 5, 'EXACT_ORIENTATION': 1} |
+| MIZ | 34 | 59.0 | 33.2 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 4, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 7, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 6, 'EXACT_ORIENTATION': 1} |
 | OHI | 60 | 73.8 | 55.4 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 10, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 8, 'PREDICTION_ROLE_W': 22, 'CAPITAL_EFFICIENCY': 11, 'EXACT_ORIENTATION': 2} |
 | SAG | 15 | 62.2 | 49.9 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 2, 'PREDICTION_ROLE_W': 4, 'CAPITAL_EFFICIENCY': 4, 'NONE': 2} |
 | SON | 36 | 23.6 | 56.9 | {'PREDICTION_ROLE_W': 16, 'CAPITAL_EFFICIENCY': 10, 'PREDICTION_ROLE_P2': 6, 'NONE': 4} |
@@ -17,12 +17,12 @@
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 220 | 35.0% | 69.1% | 35.0% | 17.3% | 13.6% | 11.8% | 24.1% | 1.55 |
-| 正式推薦 | 182 | 33.5% | 61.0% | 61.0% | 73.1% | 100.0% | 61.0% | 29.7% | 1.4 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.4%（無作為9.7%、差+28.7）／P2 平均1.0頭 的中18.8%（無作為9.7%、差+9.0）／P3 平均1.0頭 的中13.4%（無作為9.7%、差+3.7）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中65.7%（無作為29.0%、差+36.7）／P2 平均6.0頭 的中73.3%（無作為58.0%、差+15.4）／P3 平均10.65頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.35/40（選択性補正込み）・能力順位 14.32/20（40R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.11/40（選択性補正込み）・能力順位 13.92/20（33R平均）
+| PAPER | 221 | 34.8% | 68.8% | 34.8% | 17.2% | 13.6% | 11.8% | 24.0% | 1.55 |
+| 正式推薦 | 183 | 33.9% | 61.2% | 61.2% | 72.7% | 100.0% | 61.2% | 29.5% | 1.4 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.1%（無作為9.7%、差+28.3）／P2 平均1.0頭 的中18.6%（無作為9.7%、差+8.9）／P3 平均1.0頭 的中13.3%（無作為9.7%、差+3.6）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中66.0%（無作為29.0%、差+37.1）／P2 平均6.0頭 的中72.6%（無作為57.9%、差+14.7）／P3 平均10.66頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.12/40（選択性補正込み）・能力順位 14.24/20（41R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.11/40（選択性補正込み）・能力順位 13.94/20（34R平均）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -32,24 +32,24 @@
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 95 | 450,730 | RECURRING |
 | P1:HIT_BUT_LOSS | P1 | 61 | 228,820 | RECURRING |
-| P1:ROLE_P2_MISS | P1 | 39 | 192,660 | RECURRING |
+| P1:ROLE_P2_MISS | P1 | 40 | 198,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 220 | 851,120 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 221 | 857,120 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 4 | 22,410 | RECURRING |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
 
 # 地方版 月次 2026-11（自動・推薦試算・実購入なし）
 
-- 反省済みRace 220／PAPER PFS 59.1%／正式推薦 PFS 101.3%
-- 第一失敗：{'NONE': 33, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 49, 'PREDICTION_ROLE_W': 71, 'PREDICTION_ROLE_P2': 30, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 221／PAPER PFS 58.8%／正式推薦 PFS 100.8%
+- 第一失敗：{'NONE': 33, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 49, 'PREDICTION_ROLE_W': 71, 'PREDICTION_ROLE_P2': 31, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
 | KNZ | 24 | 104.2 | 44.2 | {'NONE': 4, 'WINNER_DISCOVERED_LOW': 2, 'THIRD_MISS': 1, 'P2_MISS': 2, 'WINNER_NOT_DISCOVERED': 1, 'W_WIDTH_OR_ROLE': 2, 'CAPITAL_EFFICIENCY': 5, 'PREDICTION_ROLE_W': 4, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | KOC | 16 | 34.1 | 39.7 | {'WINNER_DISCOVERED_LOW': 3, 'W_WIDTH_OR_ROLE': 1, 'PREDICTION_ROLE_P2': 1, 'NONE': 2, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5} |
 | KSM | 36 | 50.0 | 317.6 | {'PREDICTION_ROLE_W': 15, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 7} |
-| MIZ | 33 | 60.8 | 34.7 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 4, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 7, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 5, 'EXACT_ORIENTATION': 1} |
+| MIZ | 34 | 59.0 | 33.2 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 4, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 7, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 6, 'EXACT_ORIENTATION': 1} |
 | OHI | 60 | 73.8 | 55.4 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 10, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 8, 'PREDICTION_ROLE_W': 22, 'CAPITAL_EFFICIENCY': 11, 'EXACT_ORIENTATION': 2} |
 | SAG | 15 | 62.2 | 49.9 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 2, 'PREDICTION_ROLE_W': 4, 'CAPITAL_EFFICIENCY': 4, 'NONE': 2} |
 | SON | 36 | 23.6 | 56.9 | {'PREDICTION_ROLE_W': 16, 'CAPITAL_EFFICIENCY': 10, 'PREDICTION_ROLE_P2': 6, 'NONE': 4} |
@@ -58,12 +58,12 @@
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 220 | 35.0% | 69.1% | 35.0% | 17.3% | 13.6% | 11.8% | 24.1% | 1.55 |
-| 正式推薦 | 182 | 33.5% | 61.0% | 61.0% | 73.1% | 100.0% | 61.0% | 29.7% | 1.4 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.4%（無作為9.7%、差+28.7）／P2 平均1.0頭 的中18.8%（無作為9.7%、差+9.0）／P3 平均1.0頭 的中13.4%（無作為9.7%、差+3.7）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中65.7%（無作為29.0%、差+36.7）／P2 平均6.0頭 的中73.3%（無作為58.0%、差+15.4）／P3 平均10.65頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.35/40（選択性補正込み）・能力順位 14.32/20（40R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.11/40（選択性補正込み）・能力順位 13.92/20（33R平均）
+| PAPER | 221 | 34.8% | 68.8% | 34.8% | 17.2% | 13.6% | 11.8% | 24.0% | 1.55 |
+| 正式推薦 | 183 | 33.9% | 61.2% | 61.2% | 72.7% | 100.0% | 61.2% | 29.5% | 1.4 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中38.1%（無作為9.7%、差+28.3）／P2 平均1.0頭 的中18.6%（無作為9.7%、差+8.9）／P3 平均1.0頭 的中13.3%（無作為9.7%、差+3.6）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中66.0%（無作為29.0%、差+37.1）／P2 平均6.0頭 的中72.6%（無作為57.9%、差+14.7）／P3 平均10.66頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.12/40（選択性補正込み）・能力順位 14.24/20（41R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 16.11/40（選択性補正込み）・能力順位 13.94/20（34R平均）
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -73,9 +73,9 @@
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 95 | 450,730 | RECURRING |
 | P1:HIT_BUT_LOSS | P1 | 61 | 228,820 | RECURRING |
-| P1:ROLE_P2_MISS | P1 | 39 | 192,660 | RECURRING |
+| P1:ROLE_P2_MISS | P1 | 40 | 198,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 220 | 851,120 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 221 | 857,120 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 4 | 22,410 | RECURRING |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
