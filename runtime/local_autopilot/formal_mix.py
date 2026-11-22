@@ -100,6 +100,15 @@ def gen_variant(summary, name, base=None):
                 extra += [('TRIFECTA', [h, b, c]) for c in p2[:2] if c != h]
         extra = extra[:20]
         return [t for t in base if t not in extra][:max(0, CAP - len(extra))] + extra if extra else base
+    if fam == 'PAIRFULL':       # (11/22 MIZ_12・SAG_04) the best W->P2 pairs, each with EVERY third horse
+        pos = {h: i for i, h in enumerate(rank)}
+        pairs = sorted([(a, b) for a in w for b in p2 if b != a], key=lambda ab: (pos.get(ab[0], 99) + pos.get(ab[1], 99),
+                                                                                   pos.get(ab[0], 99)))[:k['pairs']]
+        out = []
+        for a, b in pairs:
+            out += [('TRIFECTA', [a, b, c]) for c in rank if c not in (a, b)]
+        out = out[:CAP]
+        return out + [t for t in base if t not in out][:max(0, CAP - len(out))] if out else base
     if fam == 'CORE':           # CORE_LAYER_60 with the core pair set = top-n P2
         return core_layer(summary, base, w, p2, core_n=k['n'])
     raise ValueError(f'unknown family {fam}')

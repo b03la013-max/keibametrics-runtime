@@ -83,3 +83,19 @@ def test_challenger_vs_active(tmp_path, monkeypatch):
     rec = ap.decide(tmp_path, '2026-12-30', rows_fn=lambda root, since: rows)
     assert rec['action'] == 'PROMOTE' and rec['candidate'] == 'G001-X' and rec['replaced'] == 'C13-FORMAL-MIX-P2BOX20'
     assert rec['evaluated']['G001-X']['against'] == 'MIX_P2BOX20'
+
+
+def test_pairfull_keeps_longshot_third():
+    s = _s()
+    v = fm.variant_of(s, 'GEN:PAIRFULL:pairs=6')
+    assert ('TRIFECTA', [1, 2, 8]) in v and len(v) <= fm.CAP
+
+
+def test_cap_lost_hit_priority(tmp_path):
+    _summary(tmp_path, pr=[{'id': 'P1:HIT_BUT_LOSS', 'tier': 'P1', 'count': 13, 'impact_yen': 44450}])
+    (tmp_path / '2026-11-22' / 'review' / 'formal_eval.json').write_text(json.dumps(
+        {'aggregate': {'LIVE_R54': {'races_with_lost_hits': 13, 'payout_lost': 514150}}}))
+    res = ac.daily(tmp_path, '2026-11-22')
+    st = ac.load(tmp_path)
+    assert st['candidates'][res['new'][0]]['origin']['priority'] == 'P1:CAP_LOST_HIT'
+    assert st['candidates'][res['new'][0]]['family'] == 'PAIRFULL'

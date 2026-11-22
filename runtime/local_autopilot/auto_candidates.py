@@ -34,6 +34,7 @@ FAMILY_GRID = {   # family -> parameter sets in the order they are tried (the fi
     'WPLUS': [{'add': 1}, {'add': 3}],
     'P2PLUS': [{'add': 1}, {'add': 2}],
     'CORE': [{'n': 2}, {'n': 4}],
+    'PAIRFULL': [{'pairs': 6}, {'pairs': 4}],
 }
 PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (same budget)
     'P1:HIT_BUT_LOSS': ['CORE', 'TRIOBOX', 'WAXTRIO'],
@@ -41,7 +42,7 @@ PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (sa
     'P1:ROLE_W_MISS': ['WPLUS'],
     'P1:ROLE_P3_MISS': ['THIRDK'],
     'P1:TICKET_ORDER_MISS': ['WAXTRIO', 'TRIOBOX'],
-    'P1:CAP_LOST_HIT': ['CORE'],
+    'P1:CAP_LOST_HIT': ['PAIRFULL', 'CORE'],   # from review/formal_eval.json (60-point cap dropped a hit)
 }
 
 
@@ -62,6 +63,13 @@ def _priorities(day_dir):
     except (OSError, ValueError):
         return []
     pr = [p for p in s.get('improvement_priority') or [] if p.get('id') in PRIORITY_FAMILIES]
+    try:   # the cap's lost hits are measured by formal_eval, not by the per-race review (ChatGPT 11/22 21:45)
+        live = json.loads((Path(day_dir) / 'review' / 'formal_eval.json').read_text())['aggregate']['LIVE_R54']
+        if live.get('races_with_lost_hits'):
+            pr.append({'id': 'P1:CAP_LOST_HIT', 'tier': 'P1', 'count': live['races_with_lost_hits'],
+                       'impact_yen': int(live.get('payout_lost') or 0), 'title': '60点上限で的中券を失った'})
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
     return sorted(pr, key=lambda p: ({'P0': 0, 'P1': 1, 'P2': 2}.get(p.get('tier'), 3), -(p.get('impact_yen') or 0)))
 
 
