@@ -25,6 +25,25 @@ def _races(root):
             yield day, key, r
 
 
+def streak_tail(n, p, k):
+    """P(longest run of losses >= k in n independent races) when each race profits with probability p.
+    (Drive 2026-11-22 Owner 追加「確率シミュレーション大学」第4講：外れが続く確率は (1-p)^n。B2・証拠のみ)"""
+    if n <= 0 or k <= 0:
+        return 1.0 if k <= 0 else 0.0
+    if k > n:
+        return 0.0
+    q = 1 - p
+    # dp[j] = P(current trailing loss run == j and no run >= k yet)
+    dp = [1.0] + [0.0] * (k - 1)
+    for _ in range(n):
+        new = [0.0] * k
+        new[0] = sum(dp) * p
+        for j in range(k - 1):
+            new[j + 1] = dp[j] * q
+        dp = new
+    return round(1 - sum(dp), 4)
+
+
 def robustness(rows):
     """Guardrails from the Ticket Constructor Frozen OOS Protocol v0.1 (Drive q191, sec.4):
     leave-top1/2/3-payout-out PFS, longest losing streak, median per-race PFS and the
@@ -56,6 +75,18 @@ def robustness(rows):
                                 'max_pfs': max(vals) if vals else None,
                                 'most_dependent_day': min(lodo, key=lambda k: lodo[k] if lodo[k] is not None else 1e9) if vals else None,
                                 'crosses_100': bool(vals and full is not None and any((v >= 100) != (full >= 100) for v in vals))}
+    # B2（Drive 2026-11-22「確率シミュレーション大学」第1・4・9講）：一度でも累計プラスだった期間と期末の差、
+    # 収支プラスの率 p が独立に続くと仮定したときに今の最長連敗以上が起きる確率（小さいほど連敗が偶然の範囲外）
+    run_e = run_p = above = 0
+    for x in bet:
+        run_e += x['eff']
+        run_p += x['pay']
+        above += run_p >= run_e
+    prof = sum(1 for x in bet if x['pay'] >= x['eff'])
+    p = prof / len(bet) if bet else None
+    out['cumulative_pfs_at_or_above_100_share'] = round(above / len(bet), 3) if bet else None
+    out['loss_streak_tail_probability'] = (streak_tail(len(bet), p, best) if bet and best and p is not None else None)
+    out['profit_race_rate'] = round(p, 3) if p is not None else None
     out.update(max_loss_streak=best, median_race_pfs=med, bet_races=len(bet), hit_races=len(hits),
                any_hit_but_loss_rate=(round(sum(1 for x in hits if x['pay'] < x['eff']) / len(hits), 3) if hits else None),
                basis='Drive q191 KM Ticket Constructor Frozen OOS Protocol v0.1 sec.4 (guardrails; not a promotion rule)')
@@ -214,7 +245,7 @@ def write(root):
          f"- 最大ドローダウン {s['max_drawdown']:,}円／黒字Race率 {s['profitable_race_rate']}／Bet Coverage {s['bet_coverage']}",
          f"- W的中 {s['w_hit']}／P2一致 {s['p2_exact']}／P3一致 {s['p3_exact']}",
          f"- 頑健性（影の計測）：上位2/3払戻を除くPFS {s['robustness']['pfs_without_top2']}%／{s['robustness']['pfs_without_top3']}%・"
-         f"最長連敗 {s['robustness']['max_loss_streak']}R・Race別PFS中央値 {s['robustness']['median_race_pfs']}%・的中なのに収支マイナス率 {s['robustness']['any_hit_but_loss_rate']}",
+         f"最長連敗 {s['robustness']['max_loss_streak']}R（偶然でこれ以上が起きる確率 {s['robustness'].get('loss_streak_tail_probability')}）・累計PFS100%以上だった割合 {s['robustness'].get('cumulative_pfs_at_or_above_100_share')}・Race別PFS中央値 {s['robustness']['median_race_pfs']}%・的中なのに収支マイナス率 {s['robustness']['any_hit_but_loss_rate']}",
          f"- 第一失敗の分布：{s['first_failure']}", '', '| 日付 | Race | 締切前 | 精算 | 実効投資 | 払戻 | PFS |', '|---|---|---|---|---|---|---|']
     for k, d in s['days'].items():
         L.append(f"| {k} | {d['races']} | {d['prestart']} | {d['settled']} | {d['eff']:,} | {d['pay']:,} | "
