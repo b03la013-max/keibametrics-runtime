@@ -321,3 +321,30 @@ def test_workout_requires_full_verified_runner_universe_and_runner_id_supported(
         {"runner_id":"2","assessment":"好調"})
     rep2=compile_source_to_features(a,rows,_mapping())
     assert rep2["runners"]["1"]["generated_production_features"]["workout_capability"]["rule_id"]=="JRA-WORKOUT-CAPABILITY-COMMENT-v1"
+
+
+def test_foreign_history_profile_flag_off_by_default_and_on_when_enabled(monkeypatch):
+    import jra_source_to_evidence_features as M
+    def run():
+        a=_artifact()
+        a["jra_race_context"]={"venue_name":"京都","distance_m":1600,"surface":"芝"}
+        a["source_race_context"]={"race_date":"2026-11-22"}
+        a["jra_official_race_card_detail_sha256"]="DETAIL"
+        a["jra_official_race_card_detail"]={"runners":[
+          {"runner_id":"1","horse_no":1,"horse_name":"F","career_record":{"wins":0,"seconds":0,"thirds":0,"others":0,"starts":0},
+           "jockey":"J1","trainer":"T1","sire":"S1","dam":"D1","damsire":"DS1",
+           "recent_runs":[{"date":"2026-09-06","venue":"ロンシャン","finish":1,"field_size":9,"distance_m":1600,"surface":"芝"},
+                          {"date":"2026-06-27","venue":"ロンシャン","finish":1,"field_size":8,"distance_m":1600,"surface":"芝"}]},
+          {"runner_id":"2","horse_no":2,"horse_name":"N","career_record":{"wins":0,"seconds":0,"thirds":0,"others":0,"starts":0},
+           "jockey":"J2","trainer":"T2","sire":"S2","dam":"D2","damsire":"DS2","recent_runs":[]}]}
+        req={"race_id":"T","runners":[{"runner_id":"1","name":"F","evidence_features":{}},{"runner_id":"2","name":"N","evidence_features":{}}]}
+        return M.attach_source_features_to_request(req,a,_mapping())["runners"]
+    monkeypatch.setattr(M,"FOREIGN_HISTORY_PROFILE_ENABLED",False)
+    off=run()
+    assert off[0]["career_starts"]==0 and off[0]["newcomer"] is True
+    monkeypatch.setattr(M,"FOREIGN_HISTORY_PROFILE_ENABLED",True)
+    on=run()
+    assert on[0]["career_starts"]==2 and on[0]["newcomer"] is False
+    assert on[0]["career_starts_basis"]==M.FOREIGN_HISTORY_PROFILE_RULE
+    # A true newcomer (no official runs) is untouched.
+    assert on[1]["career_starts"]==0 and on[1]["newcomer"] is True
