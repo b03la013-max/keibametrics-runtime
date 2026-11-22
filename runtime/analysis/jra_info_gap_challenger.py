@@ -38,6 +38,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "runtime"))
+sys.path.insert(0, str(ROOT / "runtime/analysis"))
 import jra_evidence_to_base_production as P  # noqa: E402
 import jra_index_provenance_builder as B  # noqa: E402
 
@@ -197,6 +198,17 @@ def cmd_replay(a, mapping):
     print(json.dumps(summ, ensure_ascii=False, indent=1))
 
 
+def _before_post(date, rid) -> bool:
+    import jra_feature_challenger as FC
+    from datetime import datetime
+    post = FC.post_times(date).get(rid)
+    if not post:
+        return False
+    now = datetime.now(FC.JST)
+    hh, mm = map(int, post.split(":"))
+    return now < now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+
+
 def cmd_freeze(a, mapping):
     d8 = a.date.replace("-", "")
     n = 0
@@ -205,6 +217,8 @@ def cmd_freeze(a, mapping):
         dst = OUT / "forward" / rid / "pre_result.json"
         if dst.exists():
             continue   # immutable once frozen
+        if not _before_post(a.date, rid):
+            continue   # forward freezes only before the post time
         r = race(rid, mapping, with_result=False)
         if not r:
             continue
