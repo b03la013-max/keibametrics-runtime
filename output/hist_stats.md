@@ -308,7 +308,7 @@
 | venue=KOC / days_since_last=<=14d | 192 | 29.2% | 1.08 | 70% |
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
 | venue=MON / days_since_last=<=14d | 120 | 22.5% | 1.08 | 60% |
-| venue=KAW / days_since_last=<=14d | 32 | 25.0% | 1.08 | 36% |
+| venue=KAW / days_since_last=<=14d | 33 | 24.2% | 1.08 | 35% |
 | venue=KNZ / days_since_last=<=14d | 151 | 26.5% | 0.93 | 65% |
 | venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
 | venue=SAG / days_since_last=<=14d | 195 | 25.1% | 1.06 | 48% |
