@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 14:05 | SETTLED | 27 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 2 | 14:40 | PREDICTION_COMPLETE | 29 | FORMAL | 済 | 変更なし |  |  |
-| 3 | 15:10 | DISCOVERED |  |  |  |  |  |  |
+| 3 | 15:10 | PREDICTION_COMPLETE | 27 | FORMAL | 済 |  |  |  |
 | 4 | 15:45 | DISCOVERED |  |  |  |  |  |  |
 | 5 | 16:15 | DISCOVERED |  |  |  |  |  |  |
 | 6 | 16:50 | DISCOVERED |  |  |  |  |  |  |
