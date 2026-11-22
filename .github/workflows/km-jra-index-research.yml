@@ -12,8 +12,9 @@ on:
     workflows: ["JRA Candidate Automatic Official Postresult Closed Loop"]
     types: [completed]
   schedule:
-    # Sat/Sun 09:10-17:40 JST: freeze Challenger Shadows for newly signed FINALs.
-    - cron: "10,40 0-8 * * 0,6"
+    # Every day 09:10-17:55 JST, every 15 min: freeze Challengers before post time
+    # (race days only: the step exits when there is no race-day schedule; covers Monday holidays).
+    - cron: "10,25,40,55 0-8 * * *"
     # Weekly walk-forward: Monday 03:20 JST.
     - cron: "20 18 * * 0"
   workflow_dispatch:
@@ -42,13 +43,17 @@ jobs:
       - name: Tests
         run: |
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py
+          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py
       - name: Reflect, analyse, freeze Shadow, evaluate forward OOS
         env:
           WEEKLY: ${{ github.event.schedule == '20 18 * * 0' || inputs.weekly == true }}
         run: |
           set -euo pipefail
           D=$(TZ=Asia/Tokyo date +%F)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "20 18 * * 0" ] \
+             && [ ! -f "runtime/jra_race_day_plan/$D.schedule.json" ]; then
+            echo "NO_RACE_DAY_SCHEDULE $D"; exit 0
+          fi
           args="--date $D"
           if [ "$WEEKLY" = "true" ]; then args="$args --weekly"; fi
           python runtime/analysis/jra_index_research.py $args
@@ -64,12 +69,21 @@ jobs:
           python runtime/analysis/jra_keibabook_forward_oos.py freeze "$D"
           mkdir -p runtime/jra_keibabook_forward_oos
           python runtime/analysis/jra_keibabook_forward_oos.py evaluate > runtime/jra_keibabook_forward_oos/summary.json
+          # Owner 2026-11-22 21:29「自動にしてほしい」: the challengers added 11/22 also freeze here (before post only).
+          # A4: the feature challenger prints its error count; a non-zero A4 is surfaced in the step summary.
+          python runtime/analysis/jra_info_gap_challenger.py freeze "$D"
+          python runtime/analysis/jra_conversion_challenger.py freeze "$D"
+          python runtime/analysis/jra_feature_challenger.py freeze "$D" | tee feature_freeze.txt
+          python runtime/analysis/jra_feature_challenger.py coverage "$D" > /dev/null || true
+          if grep -q "A4 ERROR" feature_freeze.txt; then { echo "## A4 ERROR (feature challenger)"; cat feature_freeze.txt; } >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Persist research artefacts only
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/jra_index_research runtime/jra_zai_forward_oos runtime/jra_role_candidate_forward runtime/jra_keibabook_forward_oos
+          for d in runtime/jra_info_gap_challenger/forward runtime/jra_conversion_challenger/forward runtime/jra_feature_challenger/forward; do if [ -d "$d" ]; then git add "$d"; fi; done
+          git add runtime/jra_feature_challenger/coverage_*.json runtime/jra_feature_challenger/coverage_*.md 2>/dev/null || true
           if git diff --cached --quiet; then echo "NO_RESEARCH_CHANGE"; exit 0; fi
           git commit -m "research: JRA 20-index reflection / Challenger Shadow / ZAI OOS [skip ci]"
           for attempt in 1 2 3 4 5; do

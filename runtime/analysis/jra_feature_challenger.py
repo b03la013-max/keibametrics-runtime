@@ -59,6 +59,7 @@ GROUPS = {
     "EQUIP": ["equipment_effect"],
 }
 ARMS = ["PROD"] + [f"CH_{g}" for g in GROUPS] + ["CH_ALL"]
+PUBLIC_GROUPS = {"KB4", "EQUIP"}   # bands available in the public repo (EQUIP is read from the request)
 JRA_VENUE = {"01": "SAP", "02": "HKD", "03": "FKS", "04": "NGT", "05": "TKY", "06": "NKY",
              "07": "CHK", "08": "KYO", "09": "HSN", "10": "KKR"}
 KB_VENUE = {"04": "TKY", "00": "KYO", "06": "FKS"}   # codes seen on Keibabook nittei pages; others fail closed (A4)
@@ -349,6 +350,9 @@ def _mapping():
 def cmd_freeze(a, replay=False):
     a4 = A4()
     mapping, groups, posts = _mapping(), load_groups(a.date, a4), post_times(a.date)
+    paid = getattr(a, "paid", False)
+    if not paid:   # public runner: paid-source bands are not available there; never pretend they are
+        groups = {g: (v if g in PUBLIC_GROUPS else {}) for g, v in groups.items()}
     now = datetime.now(JST)
     n = 0
     for p in sorted(glob.glob(str(ROOT / f"runtime/requests/KM-JRA-*-{d8(a.date)}-R*-LIVE-R1-FORMAL.json"))):
@@ -361,7 +365,7 @@ def cmd_freeze(a, replay=False):
             hh, mm = map(int, post.split(":"))
             if now >= now.replace(hour=hh, minute=mm, second=0, microsecond=0):
                 continue                               # too late for a forward freeze
-        dst = OUT / ("replay" if replay else "forward") / rid / "pre_result.json"
+        dst = OUT / ("replay" if replay else ("forward_paid" if paid else "forward")) / rid / "pre_result.json"
         if dst.exists() and not replay:
             continue                                   # forward freezes are immutable
         before = len(a4.errors)
@@ -394,7 +398,7 @@ def _top3(rid):
 
 
 def cmd_evaluate(a):
-    kind = "replay" if a.replay else "forward"
+    kind = "replay" if a.replay else ("forward_paid" if getattr(a, "paid", False) else "forward")
     rows = []
     for p in sorted(glob.glob(str(OUT / kind / "*/pre_result.json"))):
         d = json.loads(Path(p).read_text())
@@ -475,8 +479,11 @@ def main():
     for c in ("bands", "freeze", "replay", "coverage"):
         s = sub.add_parser(c)
         s.add_argument("date")
+        s.add_argument("--paid", action="store_true",
+                       help="include paid-source groups (TSL / paddock bands in the private repo); writes forward_paid/")
     s = sub.add_parser("evaluate")
     s.add_argument("--replay", action="store_true")
+    s.add_argument("--paid", action="store_true")
     a = ap.parse_args()
     if a.cmd == "bands":
         cmd_bands(a)
