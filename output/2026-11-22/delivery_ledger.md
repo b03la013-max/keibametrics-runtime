@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-22（16:19時点）
+# 地方版 配送台帳 2026-11-22（16:20時点）
 
 - 管理Race 34／発走済み 12
 - PAPER：凍結 34・Push検証 34・送信 16（発走前 16）・読み戻し一致 16・本人確認 0
@@ -12,7 +12,7 @@
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
 | KOC_01 | 15:30 | POSTRESULT_DIAGNOSTIC | 14:47 | ○ | SIGNED_FINAL | 14:48 | ○ |  |
-| KOC_02 | 16:00 | PRESTART_PUSH_VERIFIED | 15:17 | ○ | SIGNED_FINAL | 15:52 | ○ |  |
+| KOC_02 | 16:00 | POSTRESULT_DIAGNOSTIC | 15:17 | ○ | SIGNED_FINAL | 15:52 | ○ |  |
 | KOC_03 | 16:35 | PRESTART_PUSH_VERIFIED | 15:52 | ○ | SIGNED_FINAL | 15:53 | ○ |  |
 | KOC_04 | 17:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_05 | 17:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
