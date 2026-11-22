@@ -1,4 +1,33 @@
 {
  "_note": "毎晩の反省・改善の作業が P1 仮説から候補を追加する場所。config は challengers.config_of と同じ形（patch=engine の値, tpatch=tickets の値, cuts=derive.CUTS の値, nopos=true）。登録済み・同じ設定のものは取り込まれない。",
- "candidates": {}
+ "candidates": {
+  "EXACT_BY_W": {
+   "what": "三連単を正本BAN-TAGどおり：W（1着候補）1頭→1着固定1-3-5、2頭→2頭を頭に2-3-4、3頭以上→三連単なし（30点は三連複へ）",
+   "config": {
+    "tpatch": {
+     "EXACT_RULE": "BY_W"
+    }
+   },
+   "why": "11/22反省（ChatGPT・Claude）: 7R/12R は上位3頭を印に含むのに頭固定で不的中。正本は Head Lock 禁止・全Wの頭を着地（AWHI）"
+  },
+  "EXACT_2HEAD": {
+   "what": "三連単を常に上位W2頭を頭に 2-3-4（同じ30点上限）",
+   "config": {
+    "tpatch": {
+     "EXACT_RULE": "2HEAD"
+    }
+   },
+   "why": "11/22反省: 1着固定の◎が勝たないと三連単は全滅（11/21〜22の三連単的中は21R中2R）"
+  },
+  "AXIS2_EXACT_BY_W": {
+   "what": "AXIS2（三連複◎○2頭軸）＋EXACT_BY_W の組合せ",
+   "config": {
+    "tpatch": {
+     "FORCE_TRIO_AXIS": 2,
+     "EXACT_RULE": "BY_W"
+    }
+   },
+   "why": "11/22反省: ◎1頭への集中（一極集中12/12R、最多出現馬が3着外7R）を三連複・三連単の両方で外す"
+  }
+ }
 }

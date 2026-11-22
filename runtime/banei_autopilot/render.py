@@ -22,5 +22,6 @@ def render(race_label, ev, tk, paper=False):
         tickets.append(('三連単', tk['exact'], None))
     body, total = ticket_tree.block(tickets, unit=100, paper=paper)
     L.append(body)
-    L += ['', f"区分　{tk['formality']}　（ZAI・AKI・ASIは未較正。確率・EVではありません）"]
+    L += ['', f"区分　{tk['formality']}　（v4.0-BAN 自動検査6群の判定。正本84 Gateの全項目の独立検証ではありません。"
+              "ZAI・AKI・ASIは未較正。確率・EVではありません）"]
     return '\n'.join(L), total

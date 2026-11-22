@@ -203,7 +203,7 @@ def test_shadow_challengers_saved_and_base_matches_production(tmp_path, monkeypa
     run.tick(day, out, rd, {})
     sh = json.loads((out / 'R01.shadow.json').read_text())['candidates']
     prod = json.loads((out / 'R01.json').read_text())['tickets']
-    assert set(sh) == set(challengers.PREREG['candidates'])
+    assert set(challengers.PREREG['candidates']) <= set(sh)            # + candidates_queue.json entries
     assert sh['BASE']['trio'] == prod['trio'] and sh['BASE']['exact'] == prod['exact']
     assert all('error' not in v for v in sh.values())
     assert engine.MARKET_W == 0.0 and engine.SBO_SHARE == 0.30      # patches restored after the shadow run
