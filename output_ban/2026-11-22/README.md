@@ -8,7 +8,7 @@
 | 4 | 15:45 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | PAIR-P3-TERMINAL |
 | 5 | 16:15 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | PAIR-P3-TERMINAL |
 | 6 | 16:50 | SETTLED | 28 | FORMAL | 済 | 変更なし | 0.0 | ROLE |
-| 7 | 17:25 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
+| 7 | 17:25 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 修正版 |  |  |
 | 8 | 17:55 | DISCOVERED |  |  |  |  |  |  |
 | 9 | 18:25 | DISCOVERED |  |  |  |  |  |  |
 | 10 | 19:00 | DISCOVERED |  |  |  |  |  |  |
