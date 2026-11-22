@@ -257,6 +257,7 @@
 |---|---|---|---|---|
 | venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=6 | 32 | 18.8% | 1.38 | 0% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=8 | 34 | 20.6% | 0.74 | 36% |
+| venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=7 | 30 | 30.0% | 1.35 | 41% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=7 | 42 | 26.2% | 0.79 | 9% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=5 | 34 | 20.6% | 0.79 | 44% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 46 | 34.8% | 1.26 | 65% |
@@ -267,6 +268,9 @@
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=7 | 34 | 23.5% | 0.92 | 28% |
 | venue=KSM / distance=1580 / going=DRY / field_band=F9-11 / frame=8 | 30 | 30.0% | 0.93 | 172% |
 | venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=5 | 32 | 28.1% | 0.93 | 30% |
+| venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=8 | 30 | 30.0% | 1.06 | 47% |
+| venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=6 | 30 | 30.0% | 1.04 | 290% |
+| venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=5 | 30 | 20.0% | 0.97 | 9% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=7 | 35 | 25.7% | 1.01 | 15% |
 | venue=KNZ / distance=1400 / going=WET / field_band=F9-11 / frame=8 | 30 | 30.0% | 1.00 | 208% |
 
@@ -301,6 +305,7 @@
 | venue=MIZ / days_since_last=15-35d | 41 | 29.3% | 1.13 | 174% |
 | venue=KOC / days_since_last=<=14d | 192 | 29.2% | 1.08 | 70% |
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
+| venue=KAW / days_since_last=<=14d | 32 | 25.0% | 1.08 | 36% |
 | venue=KNZ / days_since_last=<=14d | 151 | 26.5% | 0.93 | 65% |
 | venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
 | venue=SAG / days_since_last=<=14d | 195 | 25.1% | 1.06 | 48% |
