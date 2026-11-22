@@ -25,6 +25,21 @@ def _ret(tk, pay, kind):
     return sum(P.get('-'.join(map(str, x)), 0) for x in src)
 
 
+def cross_pair_third(exact, order):
+    """Cross-Pair Compensation（v3.7-BAN Rev.2 起案根拠、帯広 2026-09-05 6R・7R）: 1-2着の並び（頭×P2）は三連単で
+    買っていたのに、3着馬はその並びの3着に無く、別の並びの3着にだけ買っていた（別の並びの3着を補償とみなす誤り）。
+    証拠のみ（券面・点数には影響しない）。"""
+    if not exact or not order or len(order) < 3:
+        return None
+    w, s, t = (str(x) for x in order[:3])
+    ex = [tuple(str(n) for n in x) for x in exact if len(x) == 3]
+    pair_thirds = {x[2] for x in ex if x[0] == w and x[1] == s}
+    other_thirds = {x[2] for x in ex if not (x[0] == w and x[1] == s)}
+    return {'pair_bought': bool(pair_thirds), 'third_under_pair': t in pair_thirds,
+            'third_elsewhere': t in other_thirds,
+            'cross_pair_third': bool(pair_thirds) and t not in pair_thirds and t in other_thirds}
+
+
 def race_review(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -106,6 +121,11 @@ def race_review(out, key, r):
     hub_share = round(cnt[hub] / len(tk['trio']), 2) if hub else None
     exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
                 'hub_failed': bool(hub and hub not in res['order'][:3])}
+    cpt = cross_pair_third(tk['exact'], res['order'])
+    exposure['cross_pair_third'] = bool(cpt and cpt['cross_pair_third'])
+    if exposure['cross_pair_third']:
+        P.append({'id': 'P2:CROSS_PAIR_THIRD', 'level': 'P2',
+                  'what': '1-2着の並びは三連単で買ったが、3着馬は別の並びの3着にだけ入っていた', 'evidence': cpt})
     # 安すぎる買い目（FNB 第219条 Low-Payout Structure）: 発走前オッズで、当たっても投資額に届かない券の割合
     od = _j(out / f'R{key}.odds.json')
     low = None
@@ -234,7 +254,8 @@ def summarize(revs, missed):
                        ('winner_in_W', 'pair_in_tickets', 'trio_bought', 'exact_bought', 'profit')},
             'hit_but_loss': sum(1 for x in revs if 0 < x['return'] < x['stake']),
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
-            'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed'))}
+            'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
+            'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third'))}
 
 
 def _md(title, s, revs=None):
