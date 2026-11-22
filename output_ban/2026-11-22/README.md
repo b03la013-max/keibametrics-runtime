@@ -7,7 +7,7 @@
 | 3 | 15:10 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | HEAD-P2-TERMINAL |
 | 4 | 15:45 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | PAIR-P3-TERMINAL |
 | 5 | 16:15 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 修正版 |  |  |
-| 6 | 16:50 | DISCOVERED |  |  |  |  |  |  |
+| 6 | 16:50 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
 | 7 | 17:25 | DISCOVERED |  |  |  |  |  |  |
 | 8 | 17:55 | DISCOVERED |  |  |  |  |  |  |
 | 9 | 18:25 | DISCOVERED |  |  |  |  |  |  |
