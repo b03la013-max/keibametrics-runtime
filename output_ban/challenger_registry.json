@@ -1,0 +1,364 @@
+{
+ "production": {
+  "id": "BASE",
+  "version": "KM-BAN-v4.0-static-r1",
+  "config": {},
+  "since": null
+ },
+ "candidates": {
+  "BASE": {
+   "what": "本番（現行式）",
+   "config": {},
+   "status": "PRODUCTION",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "SBO0": {
+   "what": "水分ボンバー比率 0%（自前指数のみ）",
+   "config": {
+    "patch": {
+     "SBO_SHARE": 0.0
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "SBO60": {
+   "what": "水分ボンバー比率 60%",
+   "config": {
+    "patch": {
+     "SBO_SHARE": 0.6
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "BSI_EQ": {
+   "what": "BSI 3指数を等重み（1/3ずつ）",
+   "config": {
+    "patch": {
+     "BSI_W": {
+      "recent": 0.3333333333333333,
+      "track": 0.3333333333333333,
+      "avg": 0.3333333333333333
+     }
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "BSI_REC": {
+   "what": "BSI 近走重視 0.50/0.30/0.20",
+   "config": {
+    "patch": {
+     "BSI_W": {
+      "recent": 0.5,
+      "track": 0.3,
+      "avg": 0.2
+     }
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "NOPOS": {
+   "what": "キンタロー丸数字（仮の読み方）を使わない＝MPA/BRSなし",
+   "config": {
+    "nopos": true
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "CUTS_ALT": {
+   "what": "仮の基準の別案（Hペース=逃げ3頭以上、障害巧者=上位15%）",
+   "config": {
+    "cuts": {
+     "pace_H_front_min": 3,
+     "jockey_top_share": 0.15
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "MKT30": {
+   "what": "人気を順位に30%混ぜる",
+   "config": {
+    "patch": {
+     "MARKET_W": 0.3
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "MKT50": {
+   "what": "人気を順位に50%混ぜる",
+   "config": {
+    "patch": {
+     "MARKET_W": 0.5
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T20:30+09:00"
+  },
+  "PICKS": {
+   "what": "キンタロー推奨ボックス（COM・記者2名）の入った数×1.5をTPIに足す（新聞の見立て）",
+   "config": {
+    "patch": {
+     "PICKS_W": 1.5
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T22:40+09:00"
+  },
+  "TRACKFIT": {
+   "what": "キンタローの軽馬場/重馬場評価を当日の水分帯で TPI に反映（A+3/B+1.5/D-1.5/E-3）",
+   "config": {
+    "patch": {
+     "TRACKFIT_W": {
+      "A": 3.0,
+      "B": 1.5,
+      "C": 0.0,
+      "D": -1.5,
+      "E": -3.0
+     }
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T22:40+09:00"
+  },
+  "AXIS2": {
+   "what": "三連複を◎○2頭軸＋◎抜き○ライン（同じ30点上限）。本命1頭集中の代替構成",
+   "config": {
+    "tpatch": {
+     "FORCE_TRIO_AXIS": 2
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-21T22:20+09:00"
+  },
+  "AUTO_SBO_SHARE_0.15": {
+   "what": "本番の近傍: SBO_SHARE=0.15",
+   "config": {
+    "patch": {
+     "SBO_SHARE": 0.15
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-22T20:27+09:00",
+   "why": "auto-neighbor"
+  },
+  "AUTO_SBO_SHARE_0.45": {
+   "what": "本番の近傍: SBO_SHARE=0.45",
+   "config": {
+    "patch": {
+     "SBO_SHARE": 0.45
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-22T20:27+09:00",
+   "why": "auto-neighbor"
+  },
+  "AUTO_MARKET_W_0.15": {
+   "what": "本番の近傍: MARKET_W=0.15",
+   "config": {
+    "patch": {
+     "MARKET_W": 0.15
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-22T20:27+09:00",
+   "why": "auto-neighbor"
+  },
+  "AUTO_PICKS_W_0.75": {
+   "what": "本番の近傍: PICKS_W=0.75",
+   "config": {
+    "patch": {
+     "PICKS_W": 0.75
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-22T20:27+09:00",
+   "why": "auto-neighbor"
+  },
+  "AUTO_SCORE_win_brs0.0": {
+   "what": "本番の近傍: SCORE={\"win_brs\": 0.0, \"win_bta\": 0.5, \"unconfirmed_pen\": 2.0, \"place_stable\": 2.0, \"hole_longshot\": 3.0, \"longshot_pop\": 7, \"isv\": {\"VERY_STABLE\": 4, \"STABLE\": 2, \"STANDARD\": 0, \"UNSTABLE\": -2, \"UNKNOWN\": 0}}",
+   "config": {
+    "patch": {
+     "SCORE": {
+      "win_brs": 0.0,
+      "win_bta": 0.5,
+      "unconfirmed_pen": 2.0,
+      "place_stable": 2.0,
+      "hole_longshot": 3.0,
+      "longshot_pop": 7,
+      "isv": {
+       "VERY_STABLE": 4,
+       "STABLE": 2,
+       "STANDARD": 0,
+       "UNSTABLE": -2,
+       "UNKNOWN": 0
+      }
+     }
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-22T20:27+09:00",
+   "why": "auto-neighbor"
+  }
+ },
+ "history": [
+  {
+   "at": "2026-11-22T20:27+09:00",
+   "event": "REGISTERED",
+   "candidate": "AUTO_SBO_SHARE_0.15",
+   "evidence": {}
+  },
+  {
+   "at": "2026-11-22T20:27+09:00",
+   "event": "REGISTERED",
+   "candidate": "AUTO_SBO_SHARE_0.45",
+   "evidence": {}
+  },
+  {
+   "at": "2026-11-22T20:27+09:00",
+   "event": "REGISTERED",
+   "candidate": "AUTO_MARKET_W_0.15",
+   "evidence": {}
+  },
+  {
+   "at": "2026-11-22T20:27+09:00",
+   "event": "REGISTERED",
+   "candidate": "AUTO_PICKS_W_0.75",
+   "evidence": {}
+  },
+  {
+   "at": "2026-11-22T20:27+09:00",
+   "event": "REGISTERED",
+   "candidate": "AUTO_SCORE_win_brs0.0",
+   "evidence": {}
+  }
+ ],
+ "promote_rule": {
+  "registered_at": "2026-11-21T22:50+09:00",
+  "min_races": 100,
+  "alpha": 0.05,
+  "rank_metric": "winner_win_rank",
+  "top3_tol": 0.05,
+  "pfs_ex_top1_tol": 5.0,
+  "boot": 2000
+ },
+ "last_step": {
+  "at": "2026-11-22T20:27+09:00",
+  "table": {
+   "SBO0": {
+    "n": 12,
+    "mean_rank_diff": 0.417,
+    "upper": 1.083,
+    "alpha": 0.0045,
+    "top3_diff": -0.167,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 3.8,
+    "promote": false
+   },
+   "SBO60": {
+    "n": 12,
+    "mean_rank_diff": -0.25,
+    "upper": 0,
+    "alpha": 0.0045,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 26.4,
+    "promote": false
+   },
+   "BSI_EQ": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0045,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 26.7,
+    "promote": false
+   },
+   "BSI_REC": {
+    "n": 12,
+    "mean_rank_diff": 0.083,
+    "upper": 0.417,
+    "alpha": 0.0045,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 3.8,
+    "promote": false
+   },
+   "NOPOS": {
+    "n": 12,
+    "mean_rank_diff": -0.083,
+    "upper": 0.5,
+    "alpha": 0.0045,
+    "top3_diff": -0.167,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 3.8,
+    "promote": false
+   },
+   "CUTS_ALT": {
+    "n": 12,
+    "mean_rank_diff": -0.083,
+    "upper": 0,
+    "alpha": 0.0045,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 26.6,
+    "promote": false
+   },
+   "MKT30": {
+    "n": 12,
+    "mean_rank_diff": -0.417,
+    "upper": 0.167,
+    "alpha": 0.0045,
+    "top3_diff": -0.083,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 36.9,
+    "promote": false
+   },
+   "MKT50": {
+    "n": 12,
+    "mean_rank_diff": -0.583,
+    "upper": 0.667,
+    "alpha": 0.0045,
+    "top3_diff": 0.083,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 36.4,
+    "promote": false
+   },
+   "PICKS": {
+    "n": 12,
+    "mean_rank_diff": -0.417,
+    "upper": 0,
+    "alpha": 0.0045,
+    "top3_diff": -0.083,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 45.7,
+    "promote": false
+   },
+   "TRACKFIT": {
+    "n": 12,
+    "mean_rank_diff": -0.083,
+    "upper": 0.833,
+    "alpha": 0.0045,
+    "top3_diff": -0.167,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 14.4,
+    "promote": false
+   },
+   "AXIS2": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0045,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 26.7,
+    "pfs_ex_top1_cand": 0.0,
+    "promote": false
+   }
+  }
+ }
+}

@@ -1,0 +1,338 @@
+{
+ "prereg": {
+  "registered_at": "2026-11-21T20:30+09:00",
+  "baseline": "BASE",
+  "metrics": [
+   "winner_win_rank",
+   "winner_top1",
+   "winner_top3",
+   "top3_in_place5",
+   "honmei_top3",
+   "trio_hit",
+   "exact_hit",
+   "stake",
+   "return",
+   "pfs",
+   "pfs_ex_top1",
+   "by_moisture_band"
+  ],
+  "decision": "R30: 順位の物差し（勝ち馬の評価順位・捕捉率）で方向を見る。R100以上: 回収率も併せて Owner が採否。単日・少数での採用はしない。候補を増やすときは新しい登録日で追加し、既存の候補は書き換えない。",
+  "candidates": {
+   "BASE": {
+    "what": "本番（現行式）",
+    "status": "PRODUCTION"
+   },
+   "SBO0": {
+    "what": "水分ボンバー比率 0%（自前指数のみ）",
+    "patch": {
+     "SBO_SHARE": 0.0
+    },
+    "status": "SHADOW"
+   },
+   "SBO60": {
+    "what": "水分ボンバー比率 60%",
+    "patch": {
+     "SBO_SHARE": 0.6
+    },
+    "status": "SHADOW"
+   },
+   "BSI_EQ": {
+    "what": "BSI 3指数を等重み（1/3ずつ）",
+    "patch": {
+     "BSI_W": {
+      "recent": 0.3333333333333333,
+      "track": 0.3333333333333333,
+      "avg": 0.3333333333333333
+     }
+    },
+    "status": "SHADOW"
+   },
+   "BSI_REC": {
+    "what": "BSI 近走重視 0.50/0.30/0.20",
+    "patch": {
+     "BSI_W": {
+      "recent": 0.5,
+      "track": 0.3,
+      "avg": 0.2
+     }
+    },
+    "status": "SHADOW"
+   },
+   "NOPOS": {
+    "what": "キンタロー丸数字（仮の読み方）を使わない＝MPA/BRSなし",
+    "nopos": true,
+    "status": "SHADOW"
+   },
+   "CUTS_ALT": {
+    "what": "仮の基準の別案（Hペース=逃げ3頭以上、障害巧者=上位15%）",
+    "cuts": {
+     "pace_H_front_min": 3,
+     "jockey_top_share": 0.15
+    },
+    "status": "SHADOW"
+   },
+   "MKT30": {
+    "what": "人気を順位に30%混ぜる",
+    "patch": {
+     "MARKET_W": 0.3
+    },
+    "status": "SHADOW"
+   },
+   "MKT50": {
+    "what": "人気を順位に50%混ぜる",
+    "patch": {
+     "MARKET_W": 0.5
+    },
+    "status": "SHADOW"
+   },
+   "PICKS": {
+    "what": "キンタロー推奨ボックス（COM・記者2名）の入った数×1.5をTPIに足す（新聞の見立て）",
+    "patch": {
+     "PICKS_W": 1.5
+    },
+    "status": "SHADOW",
+    "registered": "2026-11-21T22:40+09:00"
+   },
+   "TRACKFIT": {
+    "what": "キンタローの軽馬場/重馬場評価を当日の水分帯で TPI に反映（A+3/B+1.5/D-1.5/E-3）",
+    "patch": {
+     "TRACKFIT_W": {
+      "A": 3.0,
+      "B": 1.5,
+      "C": 0.0,
+      "D": -1.5,
+      "E": -3.0
+     }
+    },
+    "status": "SHADOW",
+    "registered": "2026-11-21T22:40+09:00"
+   },
+   "AXIS2": {
+    "what": "三連複を◎○2頭軸＋◎抜き○ライン（同じ30点上限）。本命1頭集中の代替構成",
+    "tpatch": {
+     "FORCE_TRIO_AXIS": 2
+    },
+    "status": "SHADOW",
+    "registered": "2026-11-21T22:20+09:00"
+   }
+  }
+ },
+ "table": [
+  {
+   "id": "BASE",
+   "n": 12,
+   "winner_rank_mean": 3.58,
+   "winner_top1": 4,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 1,
+   "stake": 34200,
+   "return": 21660,
+   "pfs": 63.3,
+   "pfs_ex_top1": 24.4,
+   "winner_rank_by_band": {
+    "WET": 3.58
+   }
+  },
+  {
+   "id": "AXIS2",
+   "n": 12,
+   "winner_rank_mean": 3.58,
+   "winner_top1": 4,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 1,
+   "exact_hit": 1,
+   "stake": 36000,
+   "return": 8330,
+   "pfs": 23.1,
+   "pfs_ex_top1": 0.0,
+   "winner_rank_by_band": {
+    "WET": 3.58
+   }
+  },
+  {
+   "id": "BSI_EQ",
+   "n": 12,
+   "winner_rank_mean": 3.58,
+   "winner_top1": 4,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 1,
+   "stake": 34200,
+   "return": 21660,
+   "pfs": 63.3,
+   "pfs_ex_top1": 24.4,
+   "winner_rank_by_band": {
+    "WET": 3.58
+   }
+  },
+  {
+   "id": "BSI_REC",
+   "n": 12,
+   "winner_rank_mean": 3.67,
+   "winner_top1": 3,
+   "winner_top3": 6,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 0,
+   "stake": 34100,
+   "return": 14520,
+   "pfs": 42.6,
+   "pfs_ex_top1": 3.5,
+   "winner_rank_by_band": {
+    "WET": 3.67
+   }
+  },
+  {
+   "id": "CUTS_ALT",
+   "n": 12,
+   "winner_rank_mean": 3.5,
+   "winner_top1": 4,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 1,
+   "stake": 34300,
+   "return": 21660,
+   "pfs": 63.1,
+   "pfs_ex_top1": 24.3,
+   "winner_rank_by_band": {
+    "WET": 3.5
+   }
+  },
+  {
+   "id": "MKT30",
+   "n": 12,
+   "winner_rank_mean": 3.17,
+   "winner_top1": 5,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 1.92,
+   "honmei_top3": 5,
+   "trio_hit": 3,
+   "exact_hit": 1,
+   "stake": 34600,
+   "return": 24990,
+   "pfs": 72.2,
+   "pfs_ex_top1": 33.7,
+   "winner_rank_by_band": {
+    "WET": 3.17
+   }
+  },
+  {
+   "id": "MKT50",
+   "n": 12,
+   "winner_rank_mean": 3,
+   "winner_top1": 5,
+   "winner_top3": 8,
+   "top3_in_place5_mean": 2.08,
+   "honmei_top3": 6,
+   "trio_hit": 3,
+   "exact_hit": 1,
+   "stake": 35000,
+   "return": 24990,
+   "pfs": 71.4,
+   "pfs_ex_top1": 33.3,
+   "winner_rank_by_band": {
+    "WET": 3
+   }
+  },
+  {
+   "id": "NOPOS",
+   "n": 12,
+   "winner_rank_mean": 3.5,
+   "winner_top1": 3,
+   "winner_top3": 6,
+   "top3_in_place5_mean": 1.83,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 0,
+   "stake": 34300,
+   "return": 14520,
+   "pfs": 42.3,
+   "pfs_ex_top1": 3.5,
+   "winner_rank_by_band": {
+    "WET": 3.5
+   }
+  },
+  {
+   "id": "PICKS",
+   "n": 12,
+   "winner_rank_mean": 3.17,
+   "winner_top1": 4,
+   "winner_top3": 8,
+   "top3_in_place5_mean": 1.92,
+   "honmei_top3": 6,
+   "trio_hit": 3,
+   "exact_hit": 1,
+   "stake": 34200,
+   "return": 27590,
+   "pfs": 80.7,
+   "pfs_ex_top1": 41.7,
+   "winner_rank_by_band": {
+    "WET": 3.17
+   }
+  },
+  {
+   "id": "SBO0",
+   "n": 12,
+   "winner_rank_mean": 4,
+   "winner_top1": 3,
+   "winner_top3": 6,
+   "top3_in_place5_mean": 1.83,
+   "honmei_top3": 4,
+   "trio_hit": 2,
+   "exact_hit": 0,
+   "stake": 34400,
+   "return": 14520,
+   "pfs": 42.2,
+   "pfs_ex_top1": 3.5,
+   "winner_rank_by_band": {
+    "WET": 4
+   }
+  },
+  {
+   "id": "SBO60",
+   "n": 12,
+   "winner_rank_mean": 3.33,
+   "winner_top1": 4,
+   "winner_top3": 8,
+   "top3_in_place5_mean": 2,
+   "honmei_top3": 5,
+   "trio_hit": 2,
+   "exact_hit": 1,
+   "stake": 34600,
+   "return": 21660,
+   "pfs": 62.6,
+   "pfs_ex_top1": 24.1,
+   "winner_rank_by_band": {
+    "WET": 3.33
+   }
+  },
+  {
+   "id": "TRACKFIT",
+   "n": 12,
+   "winner_rank_mean": 3.5,
+   "winner_top1": 3,
+   "winner_top3": 7,
+   "top3_in_place5_mean": 1.83,
+   "honmei_top3": 5,
+   "trio_hit": 3,
+   "exact_hit": 0,
+   "stake": 34400,
+   "return": 17850,
+   "pfs": 51.9,
+   "pfs_ex_top1": 13.1,
+   "winner_rank_by_band": {
+    "WET": 3.5
+   }
+  }
+ ]
+}
