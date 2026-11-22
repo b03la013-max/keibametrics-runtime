@@ -162,6 +162,27 @@ def _scratched(rec):
     return nos
 
 
+def change_ledger(r1, r2):
+    """直前見直しの変更台帳（11/22 ばんえい反省 ChatGPT P0-4、証拠のみ）：初版と見直しの各馬の騎手・馬体重・人気・
+    オッズと出走の有無を before/after で残す。Rev2 にするかどうかの判定（reasons）には使わない。"""
+    rows1 = {x['no']: x for x in r1['evaluation']['rows']}
+    rows2 = {x['no']: x for x in r2['evaluation']['rows']}
+    diffs = []
+    for no in sorted(set(rows1) | set(rows2)):
+        a, b = rows1.get(no), rows2.get(no)
+        if a is None or b is None:
+            diffs.append({'no': no, 'field': 'runner', 'before': a is not None, 'after': b is not None})
+            continue
+        for f in ('jockey', 'body_weight', 'pop', 'odds'):
+            if f in a and f in b and a.get(f) != b.get(f):
+                diffs.append({'no': no, 'field': f, 'before': a.get(f), 'after': b.get(f)})
+    kinds = sorted({d['field'] for d in diffs})
+    return {'rev1_frozen_at': r1.get('frozen_at'), 'rev2_received_at': r2.get('frozen_at'),
+            'fields_compared': ['runner', 'jockey', 'body_weight', 'pop', 'odds'],
+            'changed': kinds, 'jockey_changes': [d for d in diffs if d['field'] == 'jockey'],
+            'diffs': diffs, 'evidence_only': True}
+
+
 def check10(reader, q, key, out, hist):
     """直前見直し (発走10分前, 地方版 checkpoint10 と同じ型): 出馬表(取消・馬体重・オッズ)と水分ボンバーの馬場水分を取り直して
     再計算し、券面・出走馬・水分帯・区分のどれかが変わったときだけ修正版(Rev2)を保存・配信する。Rev1は残す。
@@ -188,6 +209,10 @@ def check10(reader, q, key, out, hist):
             reasons.append('券面の変化')
         if r1['tickets']['formality'] != r2['tickets']['formality']:
             reasons.append(f"区分の変化 {r1['tickets']['formality']}→{r2['tickets']['formality']}")
+        try:
+            rec['changes'] = change_ledger(r1, r2)
+        except Exception as e:                                    # evidence only: never blocks the T-10 check
+            rec['changes'] = {'error': f'{type(e).__name__}:{str(e)[:80]}'}
         rec.update(reasons=reasons, moisture=[m1, m2], ban_mg=mg,
                    points=[r1['tickets']['points'], r2['tickets']['points']])
         if not reasons:
