@@ -25,6 +25,11 @@ Candidates
   missing from P2 as PROTECTED seconds under every W head; the control adds the same number by Static rank.
 - SKIP_HEAVY_GOING (11/21 review P2: 福島 0/6 on 稍重〜重): no bet when the signed pre-cutoff official
   going for the race is 重 or 不良. Selection only; tickets otherwise unchanged.
+- DROP_TRIFECTA (11/22 review P1, ticket shape): keep the frozen Production EXACTA and TRIO tickets
+  and drop every TRIFECTA ticket (no MEC rebuild). Forward 11/21-22: TRIFECTA 32,400 yen -> 0 while
+  EXACTA returned 97%. Races whose tickets are all TRIFECTA become no-bet.
+- EXACTA_ONLY (11/22 review P1, ticket shape): keep only the frozen Production EXACTA tickets (drop TRIFECTA
+  and TRIO, no MEC rebuild). Separates "TRIFECTA is the drag" from "the whole trio/trifecta layer is".
 """
 import argparse, copy, glob, json, sys
 from pathlib import Path
@@ -257,13 +262,37 @@ def skip_heavy_going(f):
     return True
 
 
+def drop_trifecta(f):
+    tk = (f.get('final_ticket') or {}).get('tickets') or []
+    if not any(t.get('bet_type') == 'TRIFECTA' for t in tk):
+        return False
+    f['_drop_bet_types'] = ['TRIFECTA']
+    return True
+
+
+def exacta_only(f):
+    tk = (f.get('final_ticket') or {}).get('tickets') or []
+    if not any(t.get('bet_type') in ('TRIFECTA', 'TRIO') for t in tk):
+        return False
+    f['_drop_bet_types'] = ['TRIFECTA', 'TRIO']
+    return True
+
+
+def _filtered_tickets(f):
+    """Production tickets minus the arm's dropped bet types (no MEC rebuild)."""
+    drop = set(f.get('_drop_bet_types') or [])
+    tk = [t for t in (f.get('final_ticket') or {}).get('tickets') or [] if t.get('bet_type') not in drop]
+    return tk, sum(int(t.get('stake', 100)) for t in tk)
+
+
 CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head_local,
               'P2_STATIC_NEXT_CONTROL': p2_static_next_control, 'W_PLUS_MARKET1': w_plus_market1,
               'W_PLUS_MARKET_TOP3': w_plus_market_top3,
               'W_PLUS_STATIC_SAME_COUNT_CONTROL': w_plus_static_same_count_control,
               'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
               'SKIP_HEAVY_GOING': skip_heavy_going,
-              'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control}
+              'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control,
+              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only}
 
 
 def _settle(f, official):
@@ -297,6 +326,13 @@ def run(dates, root=ROOT):
                 if f.get('_skip_bet'):
                     row[name] = {'investment': 0, 'payout': 0, 'W_hit': row['baseline']['W_hit'],
                                  'P2_hit': row['baseline']['P2_hit'], 'tickets': 0, 'skipped': True}
+                    continue
+                if f.get('_drop_bet_types'):
+                    tk, inv0 = _filtered_tickets(f)
+                    f['final_ticket'] = {**f['final_ticket'], 'tickets': tk, 'total_investment': inv0}
+                    inv, pay = _settle(f, official) if tk else (0, 0)
+                    row[name] = {'investment': inv, 'payout': pay, 'W_hit': row['baseline']['W_hit'],
+                                 'P2_hit': row['baseline']['P2_hit'], 'tickets': len(tk), 'skipped': not tk}
                     continue
                 try:
                     mec = build_mec_plan(f)
@@ -377,6 +413,12 @@ def freeze_forward(date8, root=ROOT, now=None):
             if f.get('_skip_bet'):
                 body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
                                       'tickets': [], 'investment': 0, 'skipped': True}
+                continue
+            if f.get('_drop_bet_types'):
+                tk, inv0 = _filtered_tickets(f)
+                body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
+                                      'tickets': tk, 'investment': inv0, 'skipped': not tk,
+                                      'dropped_bet_types': f['_drop_bet_types']}
                 continue
             try:
                 mec = build_mec_plan(f)
