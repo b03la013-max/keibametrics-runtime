@@ -279,7 +279,7 @@ def _md(title, s, revs=None):
             pp = ' '.join(p['id'] for p in x['proposals'] if p['level'] in ('P0', 'P1'))
             L.append(f"| {int(x['key'])} | {'-'.join(map(str, x['order']))} | {x['honmei']} | {hit} | {x['pfs']} | "
                      f"{x['ffl']} | {x['cause'] or ''} | {pp} |")
-    L += ['', '数値の変更は単日では行わない（R30/R100の未来レース比較＋Owner承認）。P0のコード欠陥は夜間の自動作業で修正する。']
+    L += ['', '本番の数値は手で変えない。影の候補式と未知のレースで比べ、事前に固定した条件（registry.PROMOTE：同じ本番で100R以上ほか）を満たせば自動昇格、悪化すれば自動で戻す。P0のコード欠陥は夜間の自動作業で修正する。']
     return '\n'.join(L) + '\n'
 
 

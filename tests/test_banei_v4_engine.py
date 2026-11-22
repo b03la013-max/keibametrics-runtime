@@ -84,3 +84,23 @@ def test_exposure_trace_counts_roles():
     assert ex['1'] == {'head': 1, 'p2': 1, 'p3': 0, 'trio': 2}
     assert ex['3'] == {'head': 0, 'p2': 0, 'p3': 2, 'trio': 1}
     assert ex['4']['trio'] == 1
+
+
+def test_exact_rule_by_w_follows_ban_tag():
+    import tickets as T
+    ev = engine.evaluate(_race())
+    W = [r['no'] for r in ev['rows'] if r['role_w'] in ('STRONG', 'CONDITIONAL')]
+    old = T.EXACT_RULE
+    try:
+        T.EXACT_RULE = 'BY_W'
+        tk = T.compile_race(ev)
+        heads = {e[0] for e in tk['exact']}
+        if len(W) >= 3:
+            assert tk['exact'] == []
+        elif len(W) == 2:
+            assert len(heads) <= 2
+        T.EXACT_RULE = '2HEAD'
+        tk2 = T.compile_race(ev)
+        assert len({e[0] for e in tk2['exact']}) in (0, 2) and tk2['points'] <= 30
+    finally:
+        T.EXACT_RULE = old

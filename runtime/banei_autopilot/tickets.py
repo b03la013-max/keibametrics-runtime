@@ -9,6 +9,7 @@ Owner policy: 三連複 + 三連単, every race, cap 30 unique points (3,000円)
 from itertools import combinations, permutations
 
 CAP_TOTAL = 30
+EXACT_RULE = None               # production None（1着固定）; shadow: 'BY_W'（正本 BAN-TAG: W1頭→1-3-5、2頭→2-3-4、3頭以上→三連単なし）/'2HEAD'（常に上位W2頭を頭に 2-3-4）
 FORCE_TRIO_AXIS = None          # production None; challengers AXIS2 sets 2 (◎○2頭軸＋◎抜き○ライン)                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
 UNIT = 100
 
@@ -36,6 +37,12 @@ def compile_race(ev):
     hole = [r['no'] for r in sorted(ev['rows'], key=lambda r: r['hole_rank'])]
     honmei = ev['honmei']
     label, tshape, eshape = shape(ev['asi'], ev['aki'])
+    if EXACT_RULE and eshape:                                     # shadow only (production None)
+        nw = sum(1 for n in win if rows[n]['role_w'] in ('STRONG', 'CONDITIONAL'))
+        if EXACT_RULE == 'BY_W':
+            eshape = (1, 3, 5) if nw <= 1 else (2, 3, 4) if nw == 2 else None
+        elif EXACT_RULE == '2HEAD':
+            eshape = (2, 3, 4)
     if FORCE_TRIO_AXIS and tshape and tshape[0] < FORCE_TRIO_AXIS:     # shadow only (production None)
         tshape = (FORCE_TRIO_AXIS,) + tuple(tshape[1:])
 
