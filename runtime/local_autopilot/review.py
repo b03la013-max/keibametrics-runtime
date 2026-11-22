@@ -279,6 +279,22 @@ def build(day_dir, key, r):
     full29 = _load(fdir / f'{key}.full29.json') if sm else None
     idx_ev = _index_evidence(full29, order)
 
+    # B2 回収の頑健性の追加列（Drive 精読 2026-11-23、証拠のみ・券面は変えない）
+    from runtime.local_autopilot import robustness
+    off_pay = (_load(day_dir / f'{key}.result.json') or {}).get('payouts') or {}
+    if paper:
+        paper['robustness'] = robustness.race([{'bet_type': bt, 'selection': sel, 'stake': 100}
+                                               for bt, sel in _paper_tickets(pf['prediction'])], order, off_pay)
+    if formal:
+        tier = {(t.get('bet_type'), tuple(int(x) for x in t.get('selection') or [])): t.get('mec_tier')
+                for t in sm.get('signed_final_tickets') or []}
+        formal['robustness'] = robustness.race(
+            [{'bet_type': t['bet_type'], 'selection': [int(x) for x in t['selection']], 'stake': int(t.get('stake') or 100),
+              'tier': tier.get((t['bet_type'], tuple(int(x) for x in t['selection'])))
+              or ('AUTO_ADDED' if str(t.get('source') or '').startswith('AUTO_PROMOTED') else None)}
+             for t in sm.get('tickets') or []],
+            order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'])
+
     # layer analysis
     layers = {}
     layers['SOURCE'] = ({'status': 'OK', 'evidence': 'Signed SOURCE frozen before cutoff; runner universe matched'}
@@ -531,7 +547,10 @@ def _aggregate(reviews):
                      for k, a in props.items()),
                     key=lambda x: (tier_rank.get(x['tier'], 9), -x['count'], -x['impact_yen']))
     tot = lambda f: sum(v[f] for v in venues.values())
-    return {'races': len(reviews), 'by_venue': venues, 'accuracy': _accuracy(reviews),
+    from runtime.local_autopilot import robustness
+    rob = {tk: robustness.aggregate([(b.get(tk) or {}).get('robustness') for b in reviews])
+           for tk in ('paper', 'formal_recommendation')}
+    return {'races': len(reviews), 'by_venue': venues, 'accuracy': _accuracy(reviews), 'robustness': rob,
             'all_local': {'paper_pfs': round(100 * tot('paper_payout') / tot('paper_effective_invest'), 1) if tot('paper_effective_invest') else None,
                           'formal_pfs': round(100 * tot('formal_payout') / tot('formal_effective_invest'), 1) if tot('formal_effective_invest') else None,
                           'first_failure': dict(sum((Counter(v['first_failure']) for v in venues.values()), Counter()))},
@@ -632,6 +651,11 @@ def _summary_md(title, s):
         if kp:
             L.append(f"- {label} KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 {kp['role_40']}/40（選択性補正込み）"
                      f"・能力順位 {kp['rank_20']}/20（{kp['races']}R平均）")
+    from runtime.local_autopilot import robustness
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        ra = (s.get('robustness') or {}).get(track)
+        if ra:
+            L.append(f"- {label} " + robustness.line(ra)[2:])
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")
