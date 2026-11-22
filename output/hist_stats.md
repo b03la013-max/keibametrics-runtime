@@ -261,10 +261,12 @@
 | venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=7 | 32 | 31.2% | 1.37 | 38% |
 | venue=SON / distance=1400 / going=DRY / field_band=F9-11 / frame=7 | 32 | 40.6% | 1.34 | 163% |
 | venue=MON / distance=1200 / going=DAMP / field_band=F12+ / frame=8 | 34 | 35.3% | 1.30 | 204% |
+| venue=NGY / distance=1500 / going=DRY / field_band=F12+ / frame=5 | 32 | 18.8% | 0.78 | 35% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=7 | 42 | 26.2% | 0.79 | 9% |
 | venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 46 | 34.8% | 1.26 | 65% |
 | venue=SON / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 36 | 41.7% | 1.25 | 57% |
 | venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=7 | 32 | 18.8% | 0.81 | 26% |
+| venue=NGY / distance=1500 / going=DRY / field_band=F12+ / frame=8 | 32 | 34.4% | 1.20 | 132% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=8 | 44 | 22.7% | 0.84 | 33% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=7 | 44 | 20.4% | 0.85 | 31% |
 | venue=KAW / distance=1400 / going=WET / field_band=F12+ / frame=5 | 32 | 18.8% | 0.86 | 8% |
@@ -273,8 +275,6 @@
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=6 | 44 | 29.5% | 1.10 | 14% |
 | venue=OHI / distance=1200 / going=WET / field_band=F12+ / frame=8 | 32 | 28.1% | 1.09 | 49% |
 | venue=MON / distance=1200 / going=DAMP / field_band=F12+ / frame=6 | 34 | 26.5% | 1.09 | 13% |
-| venue=MON / distance=1200 / going=DAMP / field_band=F12+ / frame=7 | 34 | 26.5% | 1.09 | 70% |
-| venue=KSM / distance=1580 / going=DRY / field_band=F9-11 / frame=8 | 30 | 30.0% | 0.93 | 172% |
 
 ## 距離変更：A/E の偏りが大きい区分（30出走以上、上位20）
 
