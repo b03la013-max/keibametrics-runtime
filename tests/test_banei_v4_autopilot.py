@@ -318,3 +318,19 @@ def test_production_config_from_registry_is_applied(tmp_path, monkeypatch):
     assert rec['tickets']['trio'] == sh['BASE']['trio'] == sh['AXIS2']['trio']
     import tickets
     assert tickets.FORCE_TRIO_AXIS is None                      # restored after the production block
+
+
+def test_candidates_queue_configs_name_existing_knobs():
+    """candidates_queue.json の候補は既存の名前付き定数だけを動かす（本番の値は変えない）。"""
+    import json
+    from pathlib import Path
+    import engine, tickets, derive
+    q = json.loads((Path(engine.__file__).with_name('candidates_queue.json')).read_text())
+    for cid, c in q['candidates'].items():
+        cfg = c['config']
+        assert set(cfg) <= {'patch', 'tpatch', 'cuts', 'nopos'}, cid
+        assert all(hasattr(engine, k) for k in cfg.get('patch', {})), cid
+        assert all(hasattr(tickets, k) for k in cfg.get('tpatch', {})), cid
+        assert all(k in derive.CUTS for k in cfg.get('cuts', {})), cid
+    assert q['candidates']['MKT30_PICKS']['config'] == {'patch': {'MARKET_W': 0.3, 'PICKS_W': 1.5}}
+    assert engine.MARKET_W == 0.0 and engine.PICKS_W == 0.0          # 本番の値は不変
