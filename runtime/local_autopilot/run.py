@@ -686,6 +686,26 @@ def settle_formal(r, key, out, html):
         log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
 
 
+CHECK10_RETRY_WAIT_S = 20
+
+
+def _transient(exc):
+    """Network-level failure without an HTTP status (DNS, reset, timeout). HTTP errors (403/429/5xx) are final."""
+    import socket
+    import urllib.error
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, urllib.error.HTTPError) or getattr(exc, 'status', None) or getattr(exc, 'code', None):
+            return False
+        if isinstance(exc, (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError)):
+            return True
+        if 'URLError' in str(exc) and 'HTTP' not in str(exc):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
 def check10(reader, r, key, out):
     """T-10 checkpoint: compare with Revision 1; on a material change re-run the existing formal pipeline
     (Revision 2 in formal/rev2/, Revision 1 kept) only if it can finish before the cutoff."""
@@ -693,7 +713,17 @@ def check10(reader, r, key, out):
     rec = {'started_at': now_jst().isoformat(), 'decision': None}
     r['check10'] = rec
     try:
-        html = reader.card_page(r['rid'])
+        try:
+            html = reader.card_page(r['rid'])
+        except Exception as exc:
+            # P0 (11/22 KOC_04, ChatGPT 18:38 review): one retry on a transient network error only (no HTTP
+            # status such as 403/429 -> those are final), and only when the retry still leaves the Revision 2 budget
+            if not _transient(exc) or (cutoff(r) - now_jst()).total_seconds() < c10.REV2_BUDGET_S + CHECK10_RETRY_WAIT_S + 60:
+                raise
+            rec['retry'] = {'first_error': f'{type(exc).__name__}:{str(exc)[:100]}', 'at': now_jst().isoformat()}
+            log('CHECK10_RETRY', key, rec['retry']['first_error'])
+            time.sleep(CHECK10_RETRY_WAIT_S)
+            html = reader.card_page(r['rid'])
         fetched = now_jst().isoformat()
         sm1 = json.loads((out / 'formal' / f'{key}.summary.json').read_text())
         cmp = c10.compare(r, out / 'formal', key, html, fetched, [str(x) for x in sm1.get('ranking') or []])
