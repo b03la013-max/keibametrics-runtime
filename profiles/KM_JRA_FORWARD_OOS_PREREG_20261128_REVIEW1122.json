@@ -1,0 +1,41 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261128-REVIEW1122",
+ "registered_at": "2026-11-22T18:25:00+09:00",
+ "registered_by": "Claude (scheduled race-day review 2026-11-22; Owner standing instruction 2026-11-21 19:19). Record only; merge needs Owner approval.",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261122_REVIEW1121_P2.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-28",
+ "first_eligible_rule": "the first JRA card whose candidate freeze runs after this file and the code are on main; if the merge lands after 2026-11-28 the first eligible card moves to that later card and the earlier card never counts",
+ "evidence_rule": "same as the extended profile (frozen before result only; venue x surface; min cell 12R; stages 30/100/300; no significance claim below 100R). The known-result look at 2026-11-21..22 (32R, frozen-before-result tickets but the hypothesis was formed after seeing them) and the 293R ticket-type history are context only and never count.",
+ "review_basis": {
+  "date": "2026-11-22",
+  "settled_paid_races": 18,
+  "pfs": "40.3% (44,200 -> 17,800, net -26,400)",
+  "P1_ticket_shape": "forward 11/21-22 (32 paid R): EXACTA 21,400 -> 20,810 (97%), TRIO 29,900 -> 7,350 (25%), TRIFECTA 32,400 -> 0 (0%, 0 hits). History 293R (context only): EXACTA 47.7%, TRIO 33.4%, TRIFECTA 26.2% with TRIFECTA = 65% of all stakes.",
+  "context_replay_32R": "baseline 35.8% (excl. max 23.7%); DROP_TRIFECTA 58.8% (38.9%); EXACTA_ONLY 101.5% (63.8%) - context only",
+  "rejected_idea": "SINGLE_HEAD_REVERSE (single W head: add P2>head exacta flips) lost even on the motivating 32R (35.5% vs 35.8%), not registered"
+ },
+ "budget_note": "both arms keep a subset of the frozen Production tickets (no MEC rebuild), so investment is always <= Production; report PFS, PFS excl. max payout, net profit change and investment change together.",
+ "arms": [
+  {
+   "id": "DROP_TRIFECTA",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_TICKET_SHAPE",
+   "rule": "frozen Production tickets minus every TRIFECTA ticket; a race whose tickets are all TRIFECTA becomes no-bet",
+   "metric": "net profit change vs frozen Production tickets; PFS and PFS excl. max payout",
+   "promote_if": "at 300R net profit change > 0, PFS excl. max payout not lower than Production, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R net profit change < 0 (the dropped TRIFECTA paid more than it cost)"
+  },
+  {
+   "id": "EXACTA_ONLY",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_TICKET_SHAPE",
+   "rule": "frozen Production EXACTA tickets only (TRIFECTA and TRIO dropped)",
+   "metric": "net profit change vs Production AND vs DROP_TRIFECTA (credits dropping TRIO separately)",
+   "promote_if": "at 300R beats Production and DROP_TRIFECTA on net profit and PFS excl. max payout, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R not better than DROP_TRIFECTA on net profit"
+  }
+ ],
+ "decision_dates": {"interim": "2026-11-30", "first": "2026-12-07", "second": "2026-12-28"},
+ "owner_decision_only": "Production weights, numbers, tickets, capital policy, the three proclamations and the 60-point cap are unchanged by this file; adoption is decided by the Owner on the decision dates."
+}

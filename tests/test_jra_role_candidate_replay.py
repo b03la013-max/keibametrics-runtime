@@ -107,3 +107,48 @@ def test_p2_market_top3_adds_missing_seconds_under_every_head():
     if miss:
         assert rc.p2_static_same_count_control(c)
         assert len(set(rc._live(c, "P2")) - before) == len(miss)
+
+
+def test_drop_trifecta_keeps_production_exacta_and_trio_without_mec_rebuild(tmp_path):
+    import copy
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    base = final["final_ticket"]["tickets"]
+    f = copy.deepcopy(final)
+    assert rc.drop_trifecta(f) == any(t["bet_type"] == "TRIFECTA" for t in base)
+    tk, inv = rc._filtered_tickets(f)
+    assert tk == [t for t in base if t["bet_type"] != "TRIFECTA"]
+    assert inv == sum(t["stake"] for t in tk)
+    assert f["final_ticket"]["tickets"] == base  # the frozen FINAL copy is not rewritten by the arm itself
+
+
+def test_exacta_only_keeps_only_production_exacta():
+    import copy
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    f = copy.deepcopy(final)
+    rc.exacta_only(f)
+    tk, _ = rc._filtered_tickets(f)
+    assert tk and all(t["bet_type"] == "EXACTA" for t in tk)
+    assert len(tk) == sum(1 for t in final["final_ticket"]["tickets"] if t["bet_type"] == "EXACTA")
+
+
+def test_ticket_shape_arms_replay_settles_subset_of_production():
+    rows = rc.run(["20261115"])
+    for r in rows:
+        for arm in ("DROP_TRIFECTA", "EXACTA_ONLY"):
+            a = r.get(arm)
+            if a:
+                assert a["investment"] <= r["baseline"]["investment"]
+                assert a["payout"] <= r["baseline"]["payout"]
+
+
+def test_ticket_shape_arms_frozen_with_tickets(tmp_path):
+    root = _root(tmp_path)
+    post = dt.datetime.fromisoformat(json.loads((root / f"runtime/final_artifacts/{RID}.json").read_text())["scheduled_post_at"])
+    rc.freeze_forward("20261115", root=root, now=post - dt.timedelta(minutes=30))
+    body = json.loads((root / rc.FWD / RID / "pre_result.json").read_text())
+    for arm, dropped in (("DROP_TRIFECTA", {"TRIFECTA"}), ("EXACTA_ONLY", {"TRIFECTA", "TRIO"})):
+        a = body["arms"][arm]
+        if a:
+            assert set(a["dropped_bet_types"]) == dropped
+            assert all(t["bet_type"] not in dropped for t in a["tickets"])
+            assert a["investment"] == sum(t["stake"] for t in a["tickets"])
