@@ -1,0 +1,18 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-NOBET-CAP-v1",
+  "registered_at": "2026-11-22T22:00:00+09:00",
+  "owner_approval": "2026-11-22 21:43 (ChatGPT 11/22 review: PAPER/NO-BET classification and shadow scoring; same-budget capital comparison)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-23",
+  "arms": {
+    "NOBET_SHADOW": {"tracker": "runtime/analysis/jra_nobet_shadow.py", "what": "PAPER_POLICY races: Production MEC on the frozen roles; SELECTIVE_RULE (AKI_*) races: fixed reference shape from the frozen AKI columns. Frozen before post, settled at official payouts; races without payouts stay PENDING_PAYOUT", "question": "was the skip right? loss avoided = shadow investment - shadow payout (> 0 means the skip saved money)"},
+    "CAP30": {"tracker": "runtime/analysis/jra_role_candidate_replay.py", "what": "races with > 30 Production tickets keep 30 (CORE first, then Production order); same role sets, no new tickets", "compare": "PFS and net vs Production on the same races; also PFS excluding the largest payout"}
+  },
+  "daily_metrics": ["prediction_completion_pct", "technical_no_bet_pct", "policy_hold_pct", "selective_no_bet_pct", "bet_coverage_pct", "recommendation PFS"],
+  "stages": [30, 100, 300],
+  "decision": "Owner only (11/30 interim, 12/7, 12/28)",
+  "known_result_replay_context_only": {
+    "NOBET_SHADOW_2026-11-21_22": {"PAPER_POLICY": {"races": 5, "shadow_investment": 8700, "shadow_payout": 1830, "loss_avoided_yen": 6870}, "SELECTIVE_RULE": {"races": 3, "status": "PENDING_PAYOUT (no official payouts stored for AKI no-bet races)"}},
+    "CAP30_2026-11-21_22_32R": {"production": {"investment": 78700, "payout": 28160, "pfs": 35.8}, "cap30": {"investment": 61200, "payout": 23010, "pfs": 37.6}, "affected_races": 8}
+  }
+}

@@ -28,6 +28,8 @@ Candidates
 - DROP_TRIFECTA (11/22 review P1, ticket shape): keep the frozen Production EXACTA and TRIO tickets
   and drop every TRIFECTA ticket (no MEC rebuild). Forward 11/21-22: TRIFECTA 32,400 yen -> 0 while
   EXACTA returned 97%. Races whose tickets are all TRIFECTA become no-bet.
+- CAP30 (11/22 review P0-04, ticket count): races with more than 30 Production tickets keep 30
+  (CORE tier first, then Production order); fewer points at the same role sets, no MEC rebuild.
 - EXACTA_ONLY (11/22 review P1, ticket shape): keep only the frozen Production EXACTA tickets (drop TRIFECTA
   and TRIO, no MEC rebuild). Separates "TRIFECTA is the drag" from "the whole trio/trifecta layer is".
 """
@@ -278,10 +280,27 @@ def exacta_only(f):
     return True
 
 
+CAP_POINTS = 30
+
+
+def cap30(f):
+    """11/22 review P0-04 (ticket count): keep at most 30 Production tickets, CORE tier first, then the
+    Production order; no MEC rebuild, no new tickets. Tests 'fewer points' at the same role sets."""
+    tk = (f.get('final_ticket') or {}).get('tickets') or []
+    if len(tk) <= CAP_POINTS:
+        return False
+    f['_cap_tickets'] = CAP_POINTS
+    return True
+
+
 def _filtered_tickets(f):
-    """Production tickets minus the arm's dropped bet types (no MEC rebuild)."""
+    """Production tickets minus the arm's dropped bet types / beyond the arm's cap (no MEC rebuild)."""
     drop = set(f.get('_drop_bet_types') or [])
     tk = [t for t in (f.get('final_ticket') or {}).get('tickets') or [] if t.get('bet_type') not in drop]
+    cap = f.get('_cap_tickets')
+    if cap:
+        order = sorted(range(len(tk)), key=lambda i: (tk[i].get('mec_tier') != 'CORE', i))
+        tk = [tk[i] for i in sorted(order[:cap])]
     return tk, sum(int(t.get('stake', 100)) for t in tk)
 
 
@@ -292,7 +311,7 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
               'SKIP_HEAVY_GOING': skip_heavy_going,
               'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control,
-              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only}
+              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30}
 
 
 def _settle(f, official):
@@ -327,7 +346,7 @@ def run(dates, root=ROOT):
                     row[name] = {'investment': 0, 'payout': 0, 'W_hit': row['baseline']['W_hit'],
                                  'P2_hit': row['baseline']['P2_hit'], 'tickets': 0, 'skipped': True}
                     continue
-                if f.get('_drop_bet_types'):
+                if f.get('_drop_bet_types') or f.get('_cap_tickets'):
                     tk, inv0 = _filtered_tickets(f)
                     f['final_ticket'] = {**f['final_ticket'], 'tickets': tk, 'total_investment': inv0}
                     inv, pay = _settle(f, official) if tk else (0, 0)
@@ -414,11 +433,11 @@ def freeze_forward(date8, root=ROOT, now=None):
                 body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
                                       'tickets': [], 'investment': 0, 'skipped': True}
                 continue
-            if f.get('_drop_bet_types'):
+            if f.get('_drop_bet_types') or f.get('_cap_tickets'):
                 tk, inv0 = _filtered_tickets(f)
                 body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
                                       'tickets': tk, 'investment': inv0, 'skipped': not tk,
-                                      'dropped_bet_types': f['_drop_bet_types']}
+                                      'dropped_bet_types': f.get('_drop_bet_types'), 'cap_tickets': f.get('_cap_tickets')}
                 continue
             try:
                 mec = build_mec_plan(f)
