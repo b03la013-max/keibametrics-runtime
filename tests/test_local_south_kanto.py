@@ -80,7 +80,7 @@ def setup_day(monkeypatch):
             r['execution_id']=r['execution_id'].replace('-KAW-',f'-{venue}-')
         p['plan_sha256']=d.sha({k:v for k,v in p.items() if k!='plan_sha256'})
         return p
-    monkeypatch.setattr(d,'discover_meetings',lambda *a,**k:{'venues':['OHI','KAW']})
+    monkeypatch.setattr(d,'discover_meetings',lambda *a,**k:{'venues':['OHI','FNB']})
     monkeypatch.setattr(d,'discover',discover)
     return discover
 
@@ -90,8 +90,8 @@ def test_all_discovered_targets_retained_without_approval_or_execution(tmp_path,
     monkeypatch.setattr(d,'prepare_worker',lambda *a:pytest.fail('NO EXECUTION FROM DISCOVERY'))
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
     assert r['target_races']==4 and r['target_races_complete']
-    assert len(r['venues']['KAW']['races'])==2
-    saved=json.loads((tmp_path/'runtime/local_race_day_plan/2026-10-15-KAW.json').read_text())
+    assert len(r['venues']['FNB']['races'])==2
+    saved=json.loads((tmp_path/'runtime/local_race_day_plan/2026-10-15-FNB.json').read_text())
     assert saved['races'][0]['required_numerical_manifest']=='LOCAL-FULL-NUMERICAL-MAPPING-v1.0-PRODUCTION-20261008'
     monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
@@ -106,11 +106,11 @@ def test_repeat_official_get_preserves_plan_but_holds_actual_declared_drift(tmp_
     monkeypatch.setattr(d,'prepare_worker',lambda *a:pytest.fail('READ-ONLY MUST NOT DISPATCH'))
     first=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
     assert first['target_races_complete']
-    path=tmp_path/'runtime/local_race_day_plan/2026-10-15-KAW.json'
+    path=tmp_path/'runtime/local_race_day_plan/2026-10-15-FNB.json'
     original=path.read_bytes()
     def fresh(venue,day,*a,**kw):
         p=discover(venue,day,*a,**kw)
-        if venue=='KAW':
+        if venue=='FNB':
             u=p['races'][0]['declared_runner_universe']
             u['source_snapshot_sha256']='new-verified-snapshot'
             u['runner_universe_sha256']='new-derived-hash'
@@ -128,17 +128,17 @@ def test_repeat_official_get_preserves_plan_but_holds_actual_declared_drift(tmp_
     assert len(second['venues']['OHI']['races'])==2
     if change=='snapshot_only':
         assert second['target_races_complete'] and second['target_races']==4
-        assert len(second['venues']['KAW']['races'])==2
+        assert len(second['venues']['FNB']['races'])==2
         assert not second['new_live_send']
     else:
         assert not second['target_races_complete']
-        assert second['venues']['KAW']['original_error'].endswith('OFFICIAL_DAY_PLAN_DRIFT_REVIEW_REQUIRED')
+        assert second['venues']['FNB']['original_error'].endswith('OFFICIAL_DAY_PLAN_DRIFT_REVIEW_REQUIRED')
 
 
 @pytest.mark.parametrize('failure',['scope','worker','drift'])
 def test_sibling_scope_worker_and_plan_failures_never_stop_other_venue(tmp_path,monkeypatch,failure):
     discover=setup_day(monkeypatch);monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
-    for v in ['OHI','KAW']:
+    for v in ['OHI','FNB']:
         d.write(tmp_path/'profiles/local_autonomous_approvals'/f'2026-10-15-{v}.json',{'worker_seconds':0})
     if failure=='drift':
         old=discover('OHI','2026-10-15');old['races'][0]['fields']['scheduled_post_at']='2026-10-15T19:00:00+09:00'
@@ -158,8 +158,28 @@ def test_sibling_scope_worker_and_plan_failures_never_stop_other_venue(tmp_path,
         return {'worker_seconds':0},step
     monkeypatch.setattr(d,'prepare_worker',prepare)
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
-    assert executed==['KAW'] and r['venues']['OHI']['status'].startswith('HOLD')
-    assert len(r['venues']['KAW']['races'])==2
+    assert executed==['FNB'] and r['venues']['OHI']['status'].startswith('HOLD')
+    assert len(r['venues']['FNB']['races'])==2
+
+
+def test_kaw_dispatch_holds_before_nar_card_and_leaves_other_venue_eligible(tmp_path, monkeypatch, capsys):
+    import sys
+    discover = setup_day(monkeypatch)
+    monkeypatch.setattr(d, "discover_meetings", lambda *a, **k: {"venues": ["OHI", "KAW"]})
+
+    def guarded_discover(venue, *args, **kwargs):
+        assert venue != "KAW"
+        return discover(venue, *args, **kwargs)
+
+    monkeypatch.setattr(d, "discover", guarded_discover)
+    report = d.south_kanto_day(tmp_path, "2026-10-15", 120, now=NOW)
+    assert report["venues"]["KAW"]["status"] == "HOLD_PRIVATE_NANKAN_DISCOVERY_REQUIRED"
+    assert len(report["venues"]["OHI"]["races"]) == 2
+    assert not (tmp_path / "runtime/local_race_day_plan/2026-10-15-KAW.json").exists()
+    monkeypatch.setattr(sys, "argv", ["dispatcher", "--venue", "KAW", "--date", "2026-10-15",
+                                      "--cutoff-seconds", "120", "--repo-root", str(tmp_path)])
+    assert d.main() == 2
+    assert json.loads(capsys.readouterr().out)["dispatch_count"] == 0
 
 
 def test_cli_reports_hold_as_nonzero_after_evidence_write(monkeypatch,tmp_path):

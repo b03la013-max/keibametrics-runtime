@@ -318,7 +318,10 @@ def _runtime_final_boundary(where):
     # No private key or app import is needed; signature validation is separate.
     import ast, copy, types
     code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
-    node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+    module = ast.parse(code)
+    node = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == "final")
+    nankan_profile = next(n for n in module.body if isinstance(n, ast.Assign) and
+                          any(isinstance(t, ast.Name) and t.id == "NANKAN_KAW_MANIFEST_PROFILE" for t in n.targets))
     node.decorator_list = []
     node.args.args[0].annotation = None
     artifact = {"normalized_evidence": {"race_card_tables": {
@@ -333,7 +336,7 @@ def _runtime_final_boundary(where):
             super().__init__(detail)
     scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
              "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
-    exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+    exec(compile(ast.Module(body=[nankan_profile, node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
     payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
                "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
                "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}

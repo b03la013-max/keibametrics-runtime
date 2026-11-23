@@ -392,6 +392,28 @@ def test_existing_snapshot_schema_adapter_stays_unsigned_and_not_admitted():
             race_id='TEST-SYNTHETIC-UNSIGNED')
 
 
+def test_kaw_card_normalizes_without_admitting_active_or_production():
+    from runtime.local_nar_evidence_candidate import compile_parsed_candidate_evidence
+
+    race,_=parsed_detailed_card()
+    day_id=DAY_ID[:8]+'21'+DAY_ID[10:]
+    race=dict(race,venue_id='KAW',provider_day_id=day_id,provider_race_id=day_id+'01')
+    raw=detailed_card().replace('浦和競馬'.encode(),'川崎競馬'.encode())
+    meta={'http_status':200,'url':n.ORIGIN+'/uma_shosai/'+day_id+'01.do',
+          'fetched_at':NOW.isoformat(),'raw_sha256':hashlib.sha256(raw).hexdigest(),
+          'source_policy':{'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'}}
+    source=n.build_unsigned_source_snapshot(raw,race,meta,race_id='TEST-KAW-UNSIGNED')
+    facts={row['runner_id']:row for row in source['parsed_nankan_facts']}
+    compiled=compile_parsed_candidate_evidence(
+        source, {'race':{**race,'venue':'KAW','class':'Ｃ３'},'runners':list(facts.values())}, facts)
+    assert len(compiled['runners'])==2
+    assert source['provider']==n.PROVIDER and source['provider_race_id']==day_id+'01'
+    assert source['sources'][0]['requested_url']==meta['url']
+    assert source['source_usage_scope']==meta['source_policy']['usage_scope']
+    assert all(not source[key] for key in ('formal_ready','active_verified','signed_source_claim','production_authority'))
+    assert all(row['race_card_fetched_at']==NOW.isoformat() for row in facts.values())
+
+
 def test_current_weight_apprentice_load_pedigree_and_history_are_observed_facts():
     _,rows=parsed_detailed_card()
     r=rows[0];past=r['starts'][0]
