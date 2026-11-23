@@ -1,5 +1,5 @@
 from __future__ import annotations
-import copy, hashlib, json
+import copy, hashlib, json, math
 
 class LocalProvenanceError(ValueError): pass
 
@@ -7,6 +7,12 @@ TERMINAL_STATUSES={"CALCULATED","RULED-NEUTRAL","RULED-HOLD","NOT-APPLICABLE"}
 
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+
+def _numeric_flag(req, name):
+    value=req.get(name,False)
+    if type(value) is not bool:
+        raise LocalProvenanceError(f"NUMERICAL_LEDGER_FLAG_INVALID:{name}")
+    return value
 
 def build(req):
     out=copy.deepcopy(req)
@@ -23,11 +29,16 @@ def build(req):
                 raise LocalProvenanceError(f"TERMINAL_STATUS_INVALID:{rid}:{name}:{status}")
             if status in {"CALCULATED","RULED-NEUTRAL"} and "value" not in spec:
                 raise LocalProvenanceError(f"NUMERIC_TERMINAL_VALUE_MISSING:{rid}:{name}")
+            if status in {"CALCULATED","RULED-NEUTRAL"}:
+                value=spec["value"]
+                if (type(value) not in (int,float) or not math.isfinite(value)
+                        or not 0 <= value <= 100):
+                    raise LocalProvenanceError(f"NUMERIC_TERMINAL_VALUE_INVALID:{rid}:{name}")
             rows.append({"runner_id":rid,"index":name,**copy.deepcopy(spec)})
     ledger={
       "race_id":out.get("race_id"),"family":"LOCAL","rows":rows,
-      "full_terminalization":bool(out.get("full_terminalization")),
-      "full_numerical_calculation":bool(out.get("full_numerical_calculation")),
+      "full_terminalization":_numeric_flag(out,"full_terminalization"),
+      "full_numerical_calculation":_numeric_flag(out,"full_numerical_calculation"),
       "numeric_coverage":copy.deepcopy(out.get("numeric_coverage") or {})
     }
     ledger["sha256"]=_sha(ledger)
