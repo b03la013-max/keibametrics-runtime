@@ -329,9 +329,11 @@ def shadow_table(revs):
     return sorted(rows, key=lambda r: (r['id'] != 'BASE', r['id']))
 
 
-def _shadow_md(rows):
+def _shadow_md(rows, registered=None):
+    """registered: challenger_registry.json の candidates（registry.py が後から登録した候補の内容・状態を表に出す）。"""
     import challengers
-    C = challengers.PREREG['candidates']
+    C = dict(challengers.PREREG['candidates'])
+    C.update({k: v for k, v in (registered or {}).items() if isinstance(v, dict)})
     L = ['| 候補 | 内容 | 状態 | R | 勝ち馬の評価順位(平均) | 1位 | 3位内 | 3着内馬の複順位5位内(平均) | ◎3着内 | 三連複 | 三連単 | PFS | 最高1本除く |',
          '|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for r in rows:
@@ -469,5 +471,6 @@ def period(root):
                                                                    ensure_ascii=False, indent=1))
         (Path(root) / 'forward_oos_ban.md').write_text(
             f"# ばんえい 影の候補式の比較（未知のレース・発走前に固定）\n\n{days[0]}〜{days[-1]}・{n}R。"
-            f"登録 {challengers.PREREG['registered_at']}。{challengers.PREREG['decision']}\n\n" + _shadow_md(sh)
+            f"登録 {challengers.PREREG['registered_at']}。{challengers.PREREG['decision']}\n\n"
+            + _shadow_md(sh, (_j(Path(root) / 'challenger_registry.json') or {}).get('candidates'))
             + "\n勝ち馬の評価順位は小さいほど良い。PFSは高配当1本で大きく動くため、R100未満では順位の物差しを主に見る。\n")
