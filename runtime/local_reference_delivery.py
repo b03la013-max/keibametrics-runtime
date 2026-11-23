@@ -164,6 +164,7 @@ def read_publication(root, intent):
         'reference_generated_in_this_request':False,'formal_final_proven':False,
         'source_freshness_claim':False,'source_raw_reverified':False,'signature_verified':False,
         'verification_scope':SCOPE,'answer_origin':'PUBLISHED_REFERENCE_PRESENTATION',
+        'test_synthetic_only':manifest.get('TEST_SYNTHETIC_ONLY') is True,
         'answer_sha256':manifest['body_sha256'],'answer_required_parts':manifest['required_parts'],
         'publication_manifest_sha256':manifest['sha256'],
         'reference_prediction_sha256':manifest['forecast_sha256'],'evidence_sha256':manifest['evidence_sha256'],
@@ -317,17 +318,26 @@ def read_delivery_day(root, day):
                     or report['scheduled_post_at']!=saved.get('scheduled_post_at')):
                 raise ValueError('PUBLIC_REFERENCE_DAY_RACE_MANIFEST_MISMATCH')
             row.update(reference_status='AVAILABLE_VERIFIED_PUBLISHED_PRESENTATION',
-                       reference_readback_only=True,runner_count=saved['runner_count'],
+                       reference_readback_only=True,
+                       test_synthetic_only=report['test_synthetic_only'],
+                       runner_count=saved['runner_count'],
                        manifest_sha256=saved['manifest_sha256'],body_sha256=saved['body_sha256'])
         except (OSError,UnicodeError,KeyError,TypeError,ValueError) as exc:
             row.update(reference_status='HOLD',first_failed_stage='PUBLIC_PRESENTATION_READBACK',code=str(exc))
         rows.append(row)
     count=sum(r['reference_status']=='AVAILABLE_VERIFIED_PUBLISHED_PRESENTATION' for r in rows)
+    # A synthetically-authored parser fixture can pass presentation integrity,
+    # but it is not an eligible real-world REFERENCE or user delivery.
+    synthetic=sum(r['reference_status']=='AVAILABLE_VERIFIED_PUBLISHED_PRESENTATION'
+                  and r.get('test_synthetic_only') is True for r in rows)
+    eligible=count-synthetic
     return {'profile':DAY_PROFILE,'family_id':'LOCAL','venue_id':'URW','race_date':day,
         'status':'PUBLISHED_PRESENTATION_READBACK_ONLY' if count==12 else 'PUBLISHED_PRESENTATION_PARTIAL_HOLD',
         'verification_scope':SCOPE,'original_plan_sha256':index['original_plan_sha256'],
         'projection_sha256':index['sha256'],'cohort_count':12,'current_discovery_count':0,
         'reference_complete_count':count,'reference_all_races_complete':count==12,'races':rows,
+        'synthetic_test_count':synthetic,'eligible_reference_count':eligible,
+        'eligible_reference_all_races_complete':eligible==12,
         'source_freshness_claim':False,'source_raw_reverified':False,'new_forecast_count':0,
         'formal_registered_count':0,'signed_final_count':0,'runtime_post_count':0,
         'new_paid_openai_api_requests':0,'chat_render_verified':False,

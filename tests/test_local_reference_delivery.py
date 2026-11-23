@@ -42,6 +42,9 @@ def test_export_and_read_are_identical_body_with_limited_scope_no_source_or_pred
     assert not report['source_freshness_claim'] and not report['source_raw_reverified']
     assert not report['signature_verified'] and not report['formal_final_proven']
     assert not report['delivery']['chat_render_verified']
+    # Fixture-origin status must survive public readback; otherwise synthetic
+    # presentation can masquerade as a real independent REFERENCE.
+    assert report['test_synthetic_only'] is True
     assert len(manifest['runners'])==12 and '最終結論' in body
 
 
@@ -110,6 +113,9 @@ def test_saved_day_reads_fixed_cohort_without_discovery_and_one_hold_does_not_st
     monkeypatch.setattr(entry,'run_reference',forbidden)
     status=delivery.read_delivery_day(tmp_path,DAY)
     assert status['reference_complete_count']==status['cohort_count']==12
+    assert status['synthetic_test_count']==12
+    assert status['eligible_reference_count']==0
+    assert status['eligible_reference_all_races_complete'] is False
     assert status['current_discovery_count']==status['new_forecast_count']==0
     assert status['verification_scope']==delivery.SCOPE
     assert all(r['reference_readback_only'] for r in status['races'])
