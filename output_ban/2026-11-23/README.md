@@ -12,7 +12,7 @@
 | 8 | 17:55 | SETTLED | 30 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 9 | 18:30 | SETTLED | 29 | FORMAL | 済 | 変更なし | 46.2 | EXACT |
 | 10 | 19:05 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 変更なし |  |  |
-| 11 | 19:35 | DISCOVERED |  |  |  |  |  |  |
+| 11 | 19:35 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
 | 12 | 20:05 | DISCOVERED |  |  |  |  |  |  |
 
 投資 25,800円／払戻 18,500円／回収率 71.7%（100円均等・未較正）
