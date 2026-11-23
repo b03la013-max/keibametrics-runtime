@@ -9,10 +9,10 @@
 | 5 | 16:15 | SETTLED | 28 | FORMAL | 済 | 修正版 | 53.6 | ROLE |
 | 6 | 16:50 | SETTLED | 30 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 7 | 17:25 | SETTLED | 29 | FORMAL | 済 | 修正版 | 0.0 | PAIR-P3-TERMINAL |
-| 8 | 17:55 | PREDICTION_COMPLETE | 30 | FORMAL | 済 | 修正版 |  |  |
+| 8 | 17:55 | SETTLED | 30 | FORMAL | 済 | 修正版 | 0.0 | ROLE |
 | 9 | 18:30 | PREDICTION_COMPLETE | 29 | FORMAL | 済 |  |  |  |
 | 10 | 19:05 | DISCOVERED |  |  |  |  |  |  |
 | 11 | 19:35 | DISCOVERED |  |  |  |  |  |  |
 | 12 | 20:05 | DISCOVERED |  |  |  |  |  |  |
 
-投資 19,900円／払戻 17,160円／回収率 86.2%（100円均等・未較正）
+投資 22,900円／払戻 17,160円／回収率 74.9%（100円均等・未較正）
