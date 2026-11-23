@@ -358,6 +358,29 @@ def _pct(a, b):
     return round(100 * a / b, 1) if b else None
 
 
+def payout_robustness(revs, k=3):
+    """上位払戻 1..k レースを除いた PFS・最長連敗・収支プラスの R 数（証拠のみ、本番の点数・券面に影響しない）。
+    出典：Drive 園田 v2.6-SON 改定要約（単一レース依存）・地方版 forward.robustness の読み替え（帯広1場）。"""
+    bought = [x for x in revs if (x.get('stake') or 0) > 0]
+    if not bought:
+        return None
+    order = sorted(range(len(bought)), key=lambda i: bought[i]['return'], reverse=True)
+    S = sum(x['stake'] for x in bought)
+    B = sum(x['return'] for x in bought)
+    out = {'races': len(bought), 'profit_races': sum(1 for x in bought if x['return'] > x['stake'])}
+    for n in range(1, k + 1):
+        drop = order[:n]
+        s_ = S - sum(bought[i]['stake'] for i in drop)
+        b_ = B - sum(bought[i]['return'] for i in drop)
+        out[f'pfs_without_top{n}'] = _pct(b_, s_) if len(bought) > n else None
+    run = best = 0
+    for x in bought:
+        run = run + 1 if x['return'] == 0 else 0
+        best = max(best, run)
+    out['longest_losing_streak'] = best
+    return out
+
+
 def summarize(revs, missed):
     S = sum(x['stake'] for x in revs)
     B = sum(x['return'] for x in revs)
@@ -393,7 +416,8 @@ def summarize(revs, missed):
             'coverage': coverage_summary(revs), 'longshot_lane': longshot_lane_trend(revs),
             'chain_failed': {k: sum(1 for x in revs if k in ((x.get('chain') or {}).get('failed') or [])) for k in CHAIN},
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
-            'dead_heat': sum(1 for x in revs if x.get('dead_heat'))}
+            'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
+            'robustness': payout_robustness(revs)}
 
 
 def _md(title, s, revs=None):
@@ -422,6 +446,11 @@ def _md(title, s, revs=None):
         g = s['longshot_lane']
         L.append(f"- 人気薄（{g['min_pop']}番人気以下）の3着内 {g['longshot_inner'] + g['longshot_outer']}頭の走路: "
                  f"内側1〜{g['split']} {g['longshot_inner_share']:.0%}（3着内の全馬 {g['all_inner_share']:.0%}）")
+    if s.get('robustness'):
+        r = s['robustness']
+        L.append(f"- 回収の頑健性（購入 {r['races']}R）: 上位払戻を除いた PFS 1R除き {r['pfs_without_top1']}%"
+                 f"・2R除き {r['pfs_without_top2']}%・3R除き {r['pfs_without_top3']}%"
+                 f"／収支プラス {r['profit_races']}R／最長連敗 {r['longest_losing_streak']}R")
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
