@@ -525,3 +525,31 @@ def test_official_detail_keeps_unlinked_non_jra_trainer_identity():
     row = _parse_identity(cell)
     assert (row["trainer"], row["trainer_base"]) == ("山崎 裕也", "本会外")
     assert row["horse_name"] == "ムーンリットデイズ"
+
+def _justified_blocks(xs, *, name='ニコ', number='3', size=11.4):
+    spans=[{'text':ch,'bbox':[x,214,x+size,226],'origin':[x,224],'size':size} for ch,x in zip(name,xs)]
+    return [{'type':0,'lines':[{'spans':spans}]},
+            {'type':0,'lines':[{'spans':[{'text':number,'bbox':[630,214,640,228],'size':11}]}]}]
+
+def test_justified_short_pdf_name_is_bound_case_20261123_fks_r03():
+    """FKS 2026-11-23 R3: JRA spreads 2-3 glyph names across the field (ニ    コ, ゼ ル ダ)."""
+    from jra_official_pdf import _split_name_geometry_proof
+    proof=_split_name_geometry_proof(_justified_blocks([648,724]),3,'ニコ')
+    assert proof and proof['printed_number']=='3' and proof['name']=='ニコ'
+    assert _split_name_geometry_proof(_justified_blocks([648,686,723],name='ゼルダ'),3,'ゼルダ')
+    # still strict: wrong printed number, uneven pitch, too wide, or a glyph in between
+    assert _split_name_geometry_proof(_justified_blocks([648,724],number='4'),3,'ニコ') is None
+    assert _split_name_geometry_proof(_justified_blocks([648,686,760],name='ゼルダ'),3,'ゼルダ') is None
+    assert _split_name_geometry_proof(_justified_blocks([648,740]),3,'ニコ') is None
+    blocks=_justified_blocks([648,724])
+    blocks[0]['lines'][0]['spans'].append({'text':'ア','bbox':[690,214,701,226],'origin':[690,224],'size':11.4})
+    assert _split_name_geometry_proof(blocks,3,'ニコ') is None
+    # long names never use the justified path
+    assert _split_name_geometry_proof(_justified_blocks([600,650,700,750,800],name='カリメラス'),3,'カリメラス') is None
+
+def test_pdf_runner_count_ignores_pedigree_origin_markers_case_20261123_tky_r04():
+    """TKY 2026-11-23 R4: sire origins (仏（FR）, 伯刺（BRZ）) are not runner nationality markers."""
+    from jra_official_pdf import _runner_marker_count
+    text='Ballade（JPN）\n仏（FR）\nKing（JPN）\n英（GB）\n伯刺（BRZ）\nArmas（JPN）\n(JPN)\nEldenari（FR）'
+    assert _runner_marker_count(text,True)==5
+    assert _runner_marker_count(text,False)==4
