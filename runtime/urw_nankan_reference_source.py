@@ -34,6 +34,7 @@ TERMS=ORIGIN+'/info/usage/'
 JST=timezone(timedelta(hours=9))
 PROFILE='KM-URW-NANKAN-PRIVATE-REFERENCE-v1'
 PROVIDER='NANKAN_OFFICIAL'
+CARD_VENUES={'URW':('18','浦和'), 'KAW':('21','川崎')}
 MAX_BYTES=1500000
 
 
@@ -120,12 +121,17 @@ def build_unsigned_source_snapshot(raw,race,card_receipt,*,race_id):
     from runtime.local_physical.source_acquisition import (
         snapshot_from_bytes,_merge_evidence,sha_obj,SOURCE_PROFILE,SOURCE_SCHEMA)
     meta=reference_metadata(card_receipt)
-    if race.get('provider')!=PROVIDER or race.get('venue_id')!='URW':
+    venue=CARD_VENUES.get(race.get('venue_id'))
+    if race.get('provider')!=PROVIDER or venue is None:
         raise NankanError('NANKAN_UNSIGNED_RACE_PROVIDER_OR_VENUE')
     number=race.get('race_no')
     day=str(race.get('race_date','')).replace('-','')
+    provider_race_id=str(race.get('provider_race_id',''))
+    if provider_race_id[8:10]!=venue[0]:
+        raise NankanError('NANKAN_UNSIGNED_RACE_PROVIDER_OR_VENUE')
     if (type(number) is not int or not 1<=number<=12 or len(day)!=8
-            or not re.fullmatch(re.escape(day)+r'18\d{4}'+f'{number:02d}',str(race.get('provider_race_id','')))):
+            or not re.fullmatch(re.escape(day+venue[0])+r'\d{4}'+f'{number:02d}',provider_race_id)
+            or race.get('provider_day_id',provider_race_id[:-2])!=provider_race_id[:-2]):
         raise NankanError('NANKAN_UNSIGNED_PROVIDER_RACE_IDENTITY')
     if (not str(race_id).strip() or meta.get('http_status')!=200
             or hashlib.sha256(raw).hexdigest()!=meta.get('raw_sha256')):
@@ -166,6 +172,12 @@ def build_unsigned_source_snapshot(raw,race,card_receipt,*,race_id):
         'parsed_nankan_facts':runners,'formal_ready':False,'errors':[],
         'active_verified':False,'formal_source_claim':False,'signed_source_claim':False,
         'production_authority':False,'public_redistribution_authorized':False}
+    if race['venue_id']=='KAW':
+        out['provider_race_id']=provider_race_id
+        out['source_usage_scope']=policy['usage_scope']
+        out['parsed_nankan_facts']=[
+            {**row,'race_card_source_id':snap['source_id'],'race_card_fetched_at':snap['fetched_at'],
+             'race_card_snapshot_sha256':snap['snapshot_sha256']} for row in runners]
     out['source_snapshot_sha256']=sha_obj(out)
     return out
 
@@ -339,7 +351,9 @@ def one(nodes,code):
 def _verify_race_header(dom,race):
     header=one(dom.all('p','nk23_c-tab1__subtitle'),'NANKAN_CARD_HEADER_UNKNOWN').text()
     y,m,d=map(int,race['race_date'].split('-'))
-    if not re.search(rf'{y}年{m}月{d}日',header) or '浦和競馬' not in header or not re.match(rf'{race["race_no"]}R\b',header):
+    venue=CARD_VENUES.get(race.get('venue_id'))
+    if (venue is None or not re.search(rf'{y}年{m}月{d}日',header)
+            or venue[1]+'競馬' not in header or not re.match(rf'{race["race_no"]}R\b',header)):
         raise NankanError('NANKAN_CARD_BODY_IDENTITY')
     if (not re.search(rf'(?<![\d,])(?:{race["distance"]:,}|{race["distance"]})m(?![A-Za-z0-9])',header)
             or race['scheduled_post_at'][11:16] not in header or f'{race["program_runner_count"]}頭' not in header):
