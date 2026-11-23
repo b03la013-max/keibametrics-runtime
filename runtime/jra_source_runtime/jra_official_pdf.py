@@ -308,6 +308,30 @@ def _split_name_geometry_proof(blocks, horse_no, name):
                     runs.append(run);run=[]
                 run.append(span)
             if run:runs.append(run)
+        # JRA justifies very short names across the name field ("ニ    コ",
+        # "ゼ  ル  ダ"), so their glyph gaps exceed the normal run limit. Admit
+        # such a run only when every glyph is a single kana of the same size on
+        # the same baseline and the pitch between glyphs is uniform.
+        for baseline_spans in (groups if len(expected)<=4 else []):
+            glyphs=sorted([s for s in baseline_spans if len(normalize(s['text']))==1
+                           and _kana_name(normalize(s['text']))],key=lambda s:s['bbox'][0])
+            size0=float(glyphs[0]['size']) if glyphs else 0
+            for i in range(len(glyphs)):
+                for j in range(i+2,min(len(glyphs),i+len(expected))+1):
+                    group=glyphs[i:j]
+                    if len(group)!=len(expected):continue
+                    if any(abs(float(g['size'])-size0)>.05*size0 for g in group):continue
+                    pitches=[b['bbox'][0]-a['bbox'][0] for a,b in zip(group,group[1:])]
+                    size=float(group[0]['size'])
+                    gaps=[b['bbox'][0]-a['bbox'][2] for a,b in zip(group,group[1:])]
+                    # Tight runs are already handled above; this path is only for
+                    # glyphs spread wider than the ordinary run limit.
+                    if not all(g>1.5*size for g in gaps) or not all(p<=7*size for p in pitches):continue
+                    if max(pitches)-min(pitches)>.1*size:continue
+                    lo,hi=group[0]['bbox'][0],group[-1]['bbox'][2]
+                    if any(lo<s['bbox'][0]<hi and s not in group and normalize(s.get('text',''))
+                           for s in baseline_spans):continue
+                    runs.append(group)
         for group in runs:
             if normalize(''.join(s['text'] for s in group))!=expected:continue
             box=[min(s['bbox'][0] for s in group),min(s['bbox'][1] for s in group),
@@ -338,6 +362,19 @@ def reconcile_pdf_column_with_detail(
             return _reconcile_pdf_column(artifact,race_no,detail_active,printed_table=True)
         except ValueError:
             raise original from None
+
+
+def _runner_marker_count(text:str, printed_table:bool)->int:
+    """Count runner nationality markers ("Ballade（JPN）") in one race column.
+
+    Sire/dam origin notes in the pedigree block are printed right after a kanji
+    country name ("仏（FR）", "伯刺（BRZ）", "英（GB）"); they are not runners and
+    must not inflate the runner count proof.
+    """
+    # FR and GB are two-letter nationalities printed on the official card, not
+    # the adjacent English race metadata. Keep the legacy proof unchanged.
+    country=r'(?:[A-Z]{3}|FR|GB)' if printed_table else r'[A-Z]{3}'
+    return len(re.findall(r'(?<![一-龯々])[（(]'+country+r'[）)]',str(text or '')))
 
 
 def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
@@ -384,10 +421,7 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
     detail_runners=list(detail_active.get("runners") or [])
     if not detail_runners:
         raise ValueError("JRA_DETAIL_ACTIVE_RUNNERS_REQUIRED_FOR_PDF_RECONCILIATION")
-    # FR and GB are two-letter nationalities printed on the official card, not
-    # the adjacent English race metadata. Keep the legacy proof unchanged.
-    country=r'(?:[A-Z]{3}|FR|GB)' if printed_table else r'[A-Z]{3}'
-    marker_count=len(re.findall(r'[（(]'+country+r'[）)]',target_text))
+    marker_count=_runner_marker_count(target_text,printed_table)
     if marker_count!=len(detail_runners):
         raise ValueError(
             f"JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL:{marker_count}!={len(detail_runners)}"
