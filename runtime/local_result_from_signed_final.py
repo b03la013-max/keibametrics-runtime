@@ -116,7 +116,16 @@ if not endpoint.startswith("https://"):
     raise SystemExit("CANONICAL_LOCAL_EXTERNAL_ENDPOINT_INVALID")
 
 tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
-top3=[int(x) for x in req["finish_order"][:3]]
+# A partial/ambiguous official finish order cannot be a COMPLETE RESULT.
+finish_order=req.get("finish_order")
+if not isinstance(finish_order,list) or len(finish_order)<3:
+    raise SystemExit("RESULT_OFFICIAL_TOP3_INCOMPLETE")
+try:
+    top3=[int(x) for x in finish_order[:3]]
+except (ValueError,TypeError) as exc:
+    raise SystemExit("RESULT_OFFICIAL_TOP3_INCOMPLETE") from exc
+if any(x<=0 for x in top3) or len(set(top3))!=3:
+    raise SystemExit("RESULT_OFFICIAL_TOP3_INCOMPLETE")
 payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
 total_investment=sum(int(t.get("stake") or 0) for t in tickets)
 total_return=0
