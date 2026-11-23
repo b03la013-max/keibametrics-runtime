@@ -35,10 +35,11 @@ FAMILY_GRID = {   # family -> parameter sets in the order they are tried (the fi
     'P2PLUS': [{'add': 1}, {'add': 2}],
     'CORE': [{'n': 2}, {'n': 4}],
     'PAIRFULL': [{'pairs': 6}, {'pairs': 4}],
+    'MKTP2': [{'blend': 50}, {'blend': 75}],
 }
 PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (same budget)
     'P1:HIT_BUT_LOSS': ['CORE', 'TRIOBOX', 'WAXTRIO'],
-    'P1:ROLE_P2_MISS': ['P2PLUS', 'TRIOBOX'],
+    'P1:ROLE_P2_MISS': ['MKTP2', 'P2PLUS', 'TRIOBOX'],
     'P1:ROLE_W_MISS': ['WPLUS'],
     'P1:ROLE_P3_MISS': ['THIRDK'],
     'P1:TICKET_ORDER_MISS': ['WAXTRIO', 'TRIOBOX'],

@@ -99,3 +99,12 @@ def test_cap_lost_hit_priority(tmp_path):
     st = ac.load(tmp_path)
     assert st['candidates'][res['new'][0]]['origin']['priority'] == 'P1:CAP_LOST_HIT'
     assert st['candidates'][res['new'][0]]['family'] == 'PAIRFULL'
+
+
+def test_mktp2_reforms_second_set_with_market():
+    s = _s()
+    s['_market_order'] = [8, 1, 7, 2]
+    v = fm.variant_of(s, 'GEN:MKTP2:blend=75')
+    assert len(v) <= fm.CAP and any(t[0] == 'EXACTA' and t[1] == [1, 8] for t in v)
+    s['_market_order'] = []
+    assert fm.variant_of(s, 'GEN:MKTP2:blend=50') == fm.signed(s)

@@ -109,6 +109,28 @@ def gen_variant(summary, name, base=None):
             out += [('TRIFECTA', [a, b, c]) for c in rank if c not in (a, b)]
         out = out[:CAP]
         return out + [t for t in base if t not in out][:max(0, CAP - len(out))] if out else base
+    if fam == 'MKTP2':          # (Owner 2026-11-23 22:22, head-local P2) the second-place set re-formed with the market:
+        # on 227 settled formal races the market order separated the actual 2nd from the other non-winners with
+        # AUC 0.741 against 0.651 for p2_score, so P2' = the same number of horses by a blend of market position
+        # and model P2 position (blend = market share in %); W heads unchanged, 60 points rebuilt W->P2'->P2'/P3
+        mo = summary.get('_market_order') or []
+        if not mo:
+            return base
+        roles = summary.get('roles') or {}
+        p3 = [int(h) for h in rank if 'P3' in (roles.get(str(h)) or [])]
+        cand = [h for h in rank if h not in w or h in p2]
+        bw = k['blend'] / 100.0
+        bpos = {h: bw * (mo.index(h) if h in mo else len(mo)) + (1 - bw) * (p2.index(h) if h in p2 else len(p2) + rank.index(h))
+                for h in rank}
+        p2n = sorted(cand, key=lambda h: (bpos[h], rank.index(h)))[:len(p2)]
+        thirds = sorted(set(p2n) | set(p3), key=lambda h: (bpos[h], rank.index(h)))
+        pos = {h: i for i, h in enumerate(rank)}
+        ex = sorted([(a, b) for a in w for b in p2n if a != b], key=lambda ab: (pos[ab[0]] + bpos[ab[1]]))[:6]
+        tri = sorted([(a, b, c) for a in w for b in p2n for c in thirds if len({a, b, c}) == 3],
+                     key=lambda t: (pos[t[0]] + bpos[t[1]] + bpos[t[2]]))
+        out = [('EXACTA', [a, b]) for a, b in ex] + [('TRIFECTA', list(t)) for t in tri]
+        out = out[:CAP]
+        return out + [t for t in base if t not in out][:max(0, CAP - len(out))]
     if fam == 'CORE':           # CORE_LAYER_60 with the core pair set = top-n P2
         return core_layer(summary, base, w, p2, core_n=k['n'])
     raise ValueError(f'unknown family {fam}')
@@ -233,6 +255,19 @@ def races(root, since=None):
         for name, t in variants(summ, gen).items():
             i, p, h = sm.settle(t, res['payouts'], ns)
             row[name] = (i, p, h, len(t))
+        # REV1_MIX (evidence only, Owner 2026-11-23 22:22): what the delivered policy would have paid had the
+        # Revision 1 tickets been kept (only races with a signed Revision 2; otherwise identical by definition)
+        try:
+            if d == eff:
+                s1 = json.loads((sp.parent / f'{key}.summary.json').read_text())
+                s1['_market_order'] = summ['_market_order']
+                t = variant_of(s1, 'MIX_P2BOX20')
+            else:
+                t = variant_of(summ, 'MIX_P2BOX20')
+            i, p, h = sm.settle(t, res['payouts'], ns)
+            row['REV1_MIX'] = (i, p, h, len(t))
+        except Exception:
+            pass
         out.append(row)
     return out
 
