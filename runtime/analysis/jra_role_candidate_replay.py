@@ -30,6 +30,11 @@ Candidates
   EXACTA returned 97%. Races whose tickets are all TRIFECTA become no-bet.
 - CAP30 (11/22 review P0-04, ticket count): races with more than 30 Production tickets keep 30
   (CORE tier first, then Production order); fewer points at the same role sets, no MEC rebuild.
+- W_PLUS_STATIC2_SAME_BUDGET (11/23 review P0-01, Owner approval 2026-11-23): W_PLUS_STATIC2, then the
+  rebuilt MEC tickets are cut back to the Production ticket count (CORE tier first, then MEC order),
+  so a wider W is compared at the same number of points. 11/23 diagnosis: the formal W set always equals
+  the Static (ZAI_WIN) top-N and BASE mode keeps one head (normalized gap <= 0.35); the Static top-3
+  winners left out of W were width losses, not a different ordering.
 - EXACTA_ONLY (11/22 review P1, ticket shape): keep only the frozen Production EXACTA tickets (drop TRIFECTA
   and TRIO, no MEC rebuild). Separates "TRIFECTA is the drag" from "the whole trio/trifecta layer is".
 """
@@ -98,6 +103,22 @@ def w_plus_static2(f):
         return False
     _mirror_pairs(f, new_head=nxt, tag='W_PLUS_STATIC2')
     return True
+
+
+def w_plus_static2_same_budget(f):
+    n = len((f.get('final_ticket') or {}).get('tickets') or [])
+    if not n or not w_plus_static2(f):
+        return False
+    f['_post_mec_cap'] = n
+    return True
+
+
+def _post_mec_cap(f, tickets):
+    cap = f.get('_post_mec_cap')
+    if not cap or len(tickets) <= cap:
+        return tickets
+    order = sorted(range(len(tickets)), key=lambda i: (tickets[i].get('mec_tier') != 'CORE', i))
+    return [tickets[i] for i in sorted(order[:cap])]
 
 
 def p2_krs_head_local(f):
@@ -311,7 +332,8 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
               'SKIP_HEAVY_GOING': skip_heavy_going,
               'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control,
-              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30}
+              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30,
+              'W_PLUS_STATIC2_SAME_BUDGET': w_plus_static2_same_budget}
 
 
 def _settle(f, official):
@@ -360,11 +382,13 @@ def run(dates, root=ROOT):
                                  'payout': row['baseline']['payout'], 'W_hit': row['baseline']['W_hit'],
                                  'P2_hit': row['baseline']['P2_hit']}
                     continue
-                f['final_ticket'] = {**f['final_ticket'], 'tickets': mec['tickets'],
-                                     'total_investment': mec['minimum_required_capital']}
+                tk = _post_mec_cap(f, mec['tickets'])
+                f['final_ticket'] = {**f['final_ticket'], 'tickets': tk,
+                                     'total_investment': sum(int(t.get('stake', 100)) for t in tk)
+                                     if f.get('_post_mec_cap') else mec['minimum_required_capital']}
                 inv, pay = _settle(f, official)
                 row[name] = {'investment': inv, 'payout': pay, 'W_hit': top3[0] in _live(f, 'W'),
-                             'P2_hit': top3[1] in _live(f, 'P2'), 'tickets': mec['ticket_count']}
+                             'P2_hit': top3[1] in _live(f, 'P2'), 'tickets': len(tk)}
             rows.append(row)
     return rows
 
@@ -444,8 +468,12 @@ def freeze_forward(date8, root=ROOT, now=None):
             except Exception as exc:
                 body['arms'][name] = {'mec_refused': str(exc)[:160]}
                 continue
+            tk = _post_mec_cap(f, mec['tickets'])
             body['arms'][name] = {'W': _live(f, 'W'), 'P2': _live(f, 'P2'), 'P3': _live(f, 'P3'),
-                                  'tickets': mec['tickets'], 'investment': mec['minimum_required_capital']}
+                                  'tickets': tk,
+                                  'investment': sum(int(t.get('stake', 100)) for t in tk)
+                                  if f.get('_post_mec_cap') else mec['minimum_required_capital'],
+                                  'post_mec_cap': f.get('_post_mec_cap')}
         body['sha256'] = _sha(body)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(body, ensure_ascii=False, indent=1) + '\n')
