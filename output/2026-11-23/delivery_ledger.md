@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-23（14:53時点）
+# 地方版 配送台帳 2026-11-23（14:56時点）
 
 - 管理Race 33／発走済み 9
 - PAPER：凍結 33・Push検証 33・送信 12（発走前 12）・読み戻し一致 12・本人確認 0
@@ -6,7 +6,7 @@
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 9／重要変更 7／Revision 2署名 7
+- 10分前チェック：確認 10／重要変更 8／Revision 2署名 8
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -14,7 +14,7 @@
 | KNZ_01 | 13:15 | POSTRESULT_DIAGNOSTIC | 12:31 | ○ | SIGNED_FINAL | 13:06 | ○ |  |
 | KNZ_02 | 13:55 | POSTRESULT_DIAGNOSTIC | 13:11 | ○ | SIGNED_FINAL | 13:47 | ○ |  |
 | KNZ_03 | 14:30 | POSTRESULT_DIAGNOSTIC | 13:47 | ○ | SIGNED_FINAL | 14:22 | ○ |  |
-| KNZ_04 | 15:05 | PRESTART_PUSH_VERIFIED | 14:22 | ○ | SIGNED_FINAL | 14:23 | ○ |  |
+| KNZ_04 | 15:05 | PRESTART_PUSH_VERIFIED | 14:22 | ○ | SIGNED_FINAL | 14:56 | ○ |  |
 | KNZ_05 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_06 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_07 | 17:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
@@ -26,7 +26,7 @@
 | MIZ_03 | 12:45 | POSTRESULT_DIAGNOSTIC | 12:04 | ○ | SIGNED_FINAL | 12:04 | ○ |  |
 | MIZ_04 | 13:25 | POSTRESULT_DIAGNOSTIC | 12:42 | ○ | SIGNED_FINAL | 13:16 | ○ |  |
 | MIZ_05 | 14:00 | POSTRESULT_DIAGNOSTIC | 13:18 | ○ | SIGNED_FINAL | 13:51 | ○ |  |
-| MIZ_06 | 14:35 | PRESTART_PUSH_VERIFIED | 13:54 | ○ | SIGNED_FINAL | 14:26 | ○ |  |
+| MIZ_06 | 14:35 | POSTRESULT_DIAGNOSTIC | 13:54 | ○ | SIGNED_FINAL | 14:26 | ○ |  |
 | MIZ_07 | 15:10 | PRESTART_PUSH_VERIFIED | 14:29 | ○ | SIGNED_FINAL | 14:30 | ○ |  |
 | MIZ_08 | 15:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_09 | 16:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
