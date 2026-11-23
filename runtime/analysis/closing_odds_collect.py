@@ -37,12 +37,28 @@ def select_action(html, *, prefix, path=None):
     return selected[0]
 
 
+def result_day_action(html, meeting_key, date8):
+    """Select an actual current/archive link; never manufacture its checksum.
+
+    The official results menu uses srl10 for recent archived results and srl00
+    in older saved fixtures. Both must match the exact saved meeting and date.
+    """
+    pattern = re.compile(r"pw01srl(?:00|10)" + re.escape(meeting_key + date8) + r"/[0-9A-Fa-f]{2}")
+    selected = [(path, token) for path, token in actions(html)
+                if path == "/JRADB/accessS.html" and pattern.fullmatch(token)]
+    if len(selected) != 1:
+        raise ValueError("OFFICIAL_RESULT_DAY_NAVIGATION_NOT_UNIQUE")
+    return selected[0]
+
+
 def closing_action(html, meeting_key, date8, race_no):
-    prefix = "pw151ouS3" + meeting_key + f"{race_no:02d}" + date8 + "Z/"
-    action = select_action(html, prefix=prefix, path="/JRADB/accessO.html")
-    if not re.fullmatch(re.escape(prefix) + r"[0-9A-Fa-f]{2}", action[1]):
-        raise ValueError("CLOSING_NAVIGATION_TOKEN_INVALID")
-    return action
+    suffix = meeting_key + f"{race_no:02d}" + date8 + "Z/"
+    pattern = re.compile(r"pw151ou(?:S3|10)" + re.escape(suffix) + r"[0-9A-Fa-f]{2}")
+    selected = [(path, token) for path, token in actions(html)
+                if path == "/JRADB/accessO.html" and pattern.fullmatch(token)]
+    if len(selected) != 1:
+        raise ValueError("OFFICIAL_CLOSING_NAVIGATION_NOT_UNIQUE")
+    return selected[0]
 
 
 def require_approval(approval_ref, robots_reviewed, terms_reviewed):
@@ -130,9 +146,10 @@ def collection_plan(root, start, end, asof):
             rejected.append({"race_id": race.race_id, "reason": "SAVED_MEETING_KEY_MISSING"})
             continue
         result = inputs.read(Path(root) / "runtime/results" / (race.race_id + ".json"))["official_result"]
-        _, nonstarters, _ = b.result_outcome(result)
+        _, nonstarters, finishes = b.result_outcome(result)
         plan.append({"race_id": race.race_id, "race_date": race.race_date, "post_at": race.post_at,
-                     "meeting_key": key, "active_runner_ids": list(race.ids), "nonstarters": nonstarters})
+                     "meeting_key": key, "active_runner_ids": list(race.ids), "nonstarters": nonstarters,
+                     "finisher_ids": sorted(finishes, key=int)})
     return plan, rejected, inputs.manifest
 
 
@@ -168,28 +185,22 @@ def collect(root, plan, client):
                 r0, ct, _ = client.get(calendar)
                 entry = select_action(reader.decode_html(r0, ct)[0], prefix="pw01sli00")
                 r1, ct, _ = client.post(entry, calendar)
-                action = select_action(reader.decode_html(r1, ct)[0], prefix="pw01srl00" + key + day8 + "/")
+                action = result_day_action(reader.decode_html(r1, ct)[0], key, day8)
                 r2, ct, _ = client.post(action, BASE + entry[0])
                 days[key, day] = (reader.decode_html(r2, ct)[0], BASE + action[0])
             day_html, referer = days[key, day]
             race_no = int(reader.identity(rid)[5])
-            action = select_action(day_html, prefix="pw01sde01" + key + f"{race_no:02d}" + day8 + "/")
+            # The real archived day page exposes each race's exact closing-odds
+            # link. Follow that observed link directly, without fetching a
+            # result page or deriving a token/checksum from a sibling race.
+            action = closing_action(day_html, key, day8, race_no)
             raw, content_type, captured = client.post(action, referer)
             url = BASE + action[0]
-            kwargs = dict(race_id=rid, expected_active=context["active_runner_ids"], expected_nonstarters=context["nonstarters"])
-            try:
-                capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
-                                               request_cname=action[1], **kwargs)
-            except ValueError as exc:
-                # A result page containing only popularity is not an odds source.
-                # Identity failure stays fatal, even when another odds link exists.
-                if "HEADER" in str(exc):
-                    raise
-                closing = closing_action(reader.decode_html(raw, content_type)[0], key, day8, race_no)
-                raw, content_type, captured = client.post(closing, url)
-                url = BASE + closing[0]
-                capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
-                                               request_cname=closing[1], **kwargs)
+            kwargs = dict(race_id=rid)
+            capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
+                                           request_cname=action[1], **kwargs)
+            reader.reconcile_universe(capture["parsed"], expected_active=context["active_runner_ids"],
+                                      expected_nonstarters=context["nonstarters"], finisher_ids=context.get("finisher_ids", ()))
             reader.save_capture(directory, capture)
             saved += 1
         except Exception as exc:
