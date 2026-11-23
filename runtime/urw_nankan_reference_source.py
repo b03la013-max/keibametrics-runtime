@@ -34,6 +34,7 @@ TERMS=ORIGIN+'/info/usage/'
 JST=timezone(timedelta(hours=9))
 PROFILE='KM-URW-NANKAN-PRIVATE-REFERENCE-v1'
 PROVIDER='NANKAN_OFFICIAL'
+CARD_VENUES={'URW':('18','浦和'), 'KAW':('21','川崎')}
 MAX_BYTES=1500000
 
 
@@ -64,7 +65,7 @@ def url_scope(url):
     p=urlsplit(url)
     if (p.scheme!='https' or p.netloc!='www.nankankeiba.com' or p.query or p.fragment
             or not re.fullmatch(r'/(?:calendar/\d{6}|program/\d{14}|(?:syousai|uma_shosai)/\d{16}'
-                r'|odds/\d{8}18\d{4}(?:0[1-9]|1[0-2])01|henko_info/00000000000000)\.do|/robots\.txt',p.path)):
+                r'|odds/\d{8}(?:18|21)\d{4}(?:0[1-9]|1[0-2])01|henko_info/00000000000000)\.do|/robots\.txt',p.path)):
         raise NankanError('NANKAN_URL_SCOPE_HOLD')
     return p
 
@@ -120,12 +121,17 @@ def build_unsigned_source_snapshot(raw,race,card_receipt,*,race_id):
     from runtime.local_physical.source_acquisition import (
         snapshot_from_bytes,_merge_evidence,sha_obj,SOURCE_PROFILE,SOURCE_SCHEMA)
     meta=reference_metadata(card_receipt)
-    if race.get('provider')!=PROVIDER or race.get('venue_id')!='URW':
+    venue=CARD_VENUES.get(race.get('venue_id'))
+    if race.get('provider')!=PROVIDER or venue is None:
         raise NankanError('NANKAN_UNSIGNED_RACE_PROVIDER_OR_VENUE')
     number=race.get('race_no')
     day=str(race.get('race_date','')).replace('-','')
+    provider_race_id=str(race.get('provider_race_id',''))
+    if provider_race_id[8:10]!=venue[0]:
+        raise NankanError('NANKAN_UNSIGNED_RACE_PROVIDER_OR_VENUE')
     if (type(number) is not int or not 1<=number<=12 or len(day)!=8
-            or not re.fullmatch(re.escape(day)+r'18\d{4}'+f'{number:02d}',str(race.get('provider_race_id','')))):
+            or not re.fullmatch(re.escape(day+venue[0])+r'\d{4}'+f'{number:02d}',provider_race_id)
+            or race.get('provider_day_id',provider_race_id[:-2])!=provider_race_id[:-2]):
         raise NankanError('NANKAN_UNSIGNED_PROVIDER_RACE_IDENTITY')
     if (not str(race_id).strip() or meta.get('http_status')!=200
             or hashlib.sha256(raw).hexdigest()!=meta.get('raw_sha256')):
@@ -166,6 +172,12 @@ def build_unsigned_source_snapshot(raw,race,card_receipt,*,race_id):
         'parsed_nankan_facts':runners,'formal_ready':False,'errors':[],
         'active_verified':False,'formal_source_claim':False,'signed_source_claim':False,
         'production_authority':False,'public_redistribution_authorized':False}
+    if race['venue_id']=='KAW':
+        out['provider_race_id']=provider_race_id
+        out['source_usage_scope']=policy['usage_scope']
+        out['parsed_nankan_facts']=[
+            {**row,'race_card_source_id':snap['source_id'],'race_card_fetched_at':snap['fetched_at'],
+             'race_card_snapshot_sha256':snap['snapshot_sha256']} for row in runners]
     out['source_snapshot_sha256']=sha_obj(out)
     return out
 
@@ -296,19 +308,21 @@ def decode(raw):
     except UnicodeError as exc:raise NankanError('NANKAN_HTML_DECODE_UNKNOWN') from exc
 
 
-def program_link(raw,day):
+def program_link(raw,day,*,venue_id="URW"):
+    code,_=CARD_VENUES[venue_id]
     links={urljoin(CALENDAR,node.attrs.get('href','')) for node in DOM(decode(raw)).root.all('a')}
-    chosen=[url for url in links if re.fullmatch(re.escape(ORIGIN)+'/program/'+day.replace('-','')+r'18\d{4}\.do',url)]
-    if len(chosen)!=1:raise NankanError('NANKAN_CALENDAR_URW_DAY_NOT_UNIQUE')
+    chosen=[url for url in links if re.fullmatch(re.escape(ORIGIN)+'/program/'+day.replace('-','')+code+r'\d{4}\.do',url)]
+    if len(chosen)!=1:raise NankanError(f'NANKAN_CALENDAR_{venue_id}_DAY_NOT_UNIQUE')
     return chosen[0]
 
 
-def parse_program(raw,url,day):
+def parse_program(raw,url,day,*,venue_id="URW"):
+    code,venue_name=CARD_VENUES[venue_id]
     url_scope(url);provider_day_id=urlsplit(url).path.rsplit('/',1)[1][:-3]
-    if not provider_day_id.startswith(day.replace('-','')+'18'):raise NankanError('NANKAN_PROGRAM_DAY_IDENTITY')
+    if not provider_day_id.startswith(day.replace('-','')+code):raise NankanError('NANKAN_PROGRAM_DAY_IDENTITY')
     dom=DOM(decode(raw)).root
     headings=dom.all('h3','nk23_c-block01__info__title')
-    if not any('浦和競馬' in node.text() for node in headings):raise NankanError('NANKAN_PROGRAM_VENUE_BODY_REQUIRED')
+    if not any(venue_name+'競馬' in node.text() for node in headings):raise NankanError('NANKAN_PROGRAM_VENUE_BODY_REQUIRED')
     y,m,d=map(int,day.split('-'))
     if f'{y}年{m}月{d}日' not in dom.text():raise NankanError('NANKAN_PROGRAM_DATE_BODY_REQUIRED')
     races=[]
@@ -323,7 +337,7 @@ def parse_program(raw,url,day):
         if not post or not distance or not count:raise NankanError('NANKAN_PROGRAM_RACE_FACTS_UNKNOWN')
         scheduled=datetime.fromisoformat(day+'T'+post[1]+':00+09:00')
         races.append({'provider':PROVIDER,'provider_day_id':provider_day_id,'provider_race_id':provider_day_id+f'{n:02d}',
-            'venue_id':'URW','race_date':day,'race_no':n,'race_name':anchors[0].text(),
+            'venue_id':venue_id,'race_date':day,'race_no':n,'race_name':anchors[0].text(),
             'scheduled_post_at':scheduled.isoformat(),'prediction_cutoff':(scheduled-timedelta(seconds=120)).isoformat(),
             'cutoff_basis':'LOCAL_REFERENCE_POLICY_POST_MINUS_120_SECONDS_NOT_PROVIDER_OFFICIAL_CUTOFF',
             'distance':int(distance[1]),'surface':'DIRT','program_runner_count':int(count[1]),'observed_card_url':card})
@@ -339,7 +353,9 @@ def one(nodes,code):
 def _verify_race_header(dom,race):
     header=one(dom.all('p','nk23_c-tab1__subtitle'),'NANKAN_CARD_HEADER_UNKNOWN').text()
     y,m,d=map(int,race['race_date'].split('-'))
-    if not re.search(rf'{y}年{m}月{d}日',header) or '浦和競馬' not in header or not re.match(rf'{race["race_no"]}R\b',header):
+    venue=CARD_VENUES.get(race.get('venue_id'))
+    if (venue is None or not re.search(rf'{y}年{m}月{d}日',header)
+            or venue[1]+'競馬' not in header or not re.match(rf'{race["race_no"]}R\b',header)):
         raise NankanError('NANKAN_CARD_BODY_IDENTITY')
     if (not re.search(rf'(?<![\d,])(?:{race["distance"]:,}|{race["distance"]})m(?![A-Za-z0-9])',header)
             or race['scheduled_post_at'][11:16] not in header or f'{race["program_runner_count"]}頭' not in header):
@@ -506,9 +522,10 @@ def parse_card(raw,race,url,*,excluded_rows=None):
 
 def _unsigned_current_observation(raw,race,receipt,expected_url,kind):
     number=race.get('race_no');day=str(race.get('race_date','')).replace('-','')
-    if (race.get('provider')!=PROVIDER or race.get('venue_id')!='URW' or type(number) is not int
+    venue=CARD_VENUES.get(race.get('venue_id'))
+    if (race.get('provider')!=PROVIDER or venue is None or type(number) is not int
             or not 1<=number<=12 or len(day)!=8
-            or not re.fullmatch(re.escape(day)+r'18\d{4}'+f'{number:02d}',str(race.get('provider_race_id','')))):
+            or not re.fullmatch(re.escape(day+venue[0])+r'\d{4}'+f'{number:02d}',str(race.get('provider_race_id','')))):
         raise NankanError('NANKAN_CURRENT_RACE_CONTEXT_MISMATCH')
     meta=reference_metadata(receipt)
     if (meta.get('url')!=expected_url or meta.get('http_status')!=200
@@ -583,9 +600,13 @@ def parse_current_changes(raw,race,receipt,declared_facts):
     url=ORIGIN+'/henko_info/00000000000000.do'
     result=_unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_OFFICIAL_CHANGE_ITEMS')
     dom=DOM(decode(raw)).root
-    heading=one(dom.all('h3','nk23_c-block01__info__title'),'NANKAN_CHANGES_VENUE_HEADER_REQUIRED')
+    venue_name=CARD_VENUES[race['venue_id']][1]
+    headings=dom.all('h3','nk23_c-block01__info__title')
+    if race['venue_id']=='KAW':
+        headings=[node for node in headings if venue_name+'競馬' in node.text()]
+    heading=one(headings,'NANKAN_CHANGES_VENUE_HEADER_REQUIRED')
     y,m,d=map(int,race['race_date'].split('-'))
-    if '浦和競馬' not in heading.text() or f'{y}年{m}月{d}日' not in heading.parent.text():
+    if venue_name+'競馬' not in heading.text() or f'{y}年{m}月{d}日' not in heading.parent.text():
         raise NankanError('NANKAN_CHANGES_DAY_OR_VENUE_MISMATCH')
     # A missing race row is UNKNOWN. Preserve the provider's explicit day-wide
     # notice separately, within the same dated venue block, without granting
@@ -593,6 +614,9 @@ def parse_current_changes(raw,race,receipt,declared_facts):
     block=heading.parent
     while block and 'nk23_c-block01' not in block.attrs.get('class','').split():
         block=block.parent
+
+    if race['venue_id']=='KAW' and block is None:
+        raise NankanError('NANKAN_CHANGES_VENUE_BLOCK_REQUIRED')
 
     def block_nodes(tag,cls=None):
         nodes=(block or dom).all(tag,cls)

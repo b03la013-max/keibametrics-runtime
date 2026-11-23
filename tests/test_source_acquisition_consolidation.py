@@ -127,7 +127,8 @@ def test_post_cutoff_failure_hint_requires_new_id_when_cutoff_changes():
 def _source_consumer_endpoints():
     """Exercise existing endpoints with crypto/signers stubbed, never a POST."""
     import types
-    from runtime.local_physical.source_acquisition import SOURCE_PROFILE
+    from runtime.local_physical.source_acquisition import SOURCE_PROFILE, sha_obj
+    from runtime.local_physical.nankan_kaw_source import PROFILE as NANKAN_KAW_PROFILE
     source = Path('runtime/local_physical/app_v15.py').read_text()
     nodes = {n.name:n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)}
     calls = []
@@ -141,6 +142,7 @@ def _source_consumer_endpoints():
         SIGNER='SYNTHETIC_ONLY', FAMILY='LOCAL')
     scope = {'Dict':dict, 'Any':object, 'legacy':legacy, 'HTTPException':EndpointHold,
         'verify_source_artifact':lambda artifact:(True, []), 'SOURCE_PROFILE':SOURCE_PROFILE,
+        'NANKAN_KAW_MANIFEST_PROFILE':NANKAN_KAW_PROFILE, 'sha_obj':sha_obj,
         'NAR_MANIFEST_PROFILE':'KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923',
         'validate_krs_horses':lambda source,data:(data.get('valid', False), ['TEST_RUNNER_MISMATCH'])}
     for name in ('_require_source_receipt','source_verify','pre_krs','final'):
@@ -202,3 +204,27 @@ def test_signature_failure_remains_first_source_failure():
     with pytest.raises(Hold, match='SOURCE_RECEIPT_SIGNATURE_INVALID'):
         scope['pre_krs'](_source_consumer_payload('UNREGISTERED'))
     assert calls == []
+
+
+@pytest.mark.parametrize("endpoint", ["pre_krs", "final"])
+def test_kaw_nankan_receipt_still_requires_the_private_producer_binding(endpoint, monkeypatch):
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    checkpoint = ModuleType("runtime.local_private_checkpoint")
+    binding_reads = []
+
+    def read_missing_binding():
+        binding_reads.append(True)
+        return None
+
+    checkpoint.PrivateCheckpoint = SimpleNamespace(from_env=read_missing_binding)
+    monkeypatch.setitem(sys.modules, checkpoint.__name__, checkpoint)
+    scope, calls, hold = _source_consumer_endpoints()
+    payload = _source_consumer_payload(scope["NANKAN_KAW_MANIFEST_PROFILE"])
+    envelope = payload["source_receipt"]
+    envelope["receipt"]["artifact_sha256"] = scope["sha_obj"](envelope["artifact"])
+    with pytest.raises(hold, match="SOURCE_CONSUMER_NANKAN_KAW_NOT_ADMITTED"):
+        scope[endpoint](payload)
+    assert not calls
+    assert binding_reads == [True]

@@ -12,7 +12,7 @@ from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
 from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
 from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
-from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
+from runtime.local_production_static_owner import build_formal_static, bind_official_numerical_context, StaticOwnerError
 
 
 def resolve_chat_intent(query, *, now=None):
@@ -680,8 +680,19 @@ def run_reference(intent, *, output, run_id):
     return report
 
 
-def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
+def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None,
+        private_source=None, source_only=False):
     mode = intent.get('prediction_mode', 'FORMAL-PRODUCTION')
+    private = o.PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        if (mode != 'FORMAL-PRODUCTION' or checkpoint_publisher is not None
+                or intent.get('venue_id') != 'KAW'
+                or intent.get('temporal_mode', 'FORMAL-PRE-RACE') != 'FORMAL-PRE-RACE'
+                or intent.get('execution_phase') not in (None, 'SOURCE', 'FORMAL', 'OFFICIAL_RESULT')
+                or intent.get('phase') not in (None, 'SOURCE', 'FORMAL')):
+            raise ValueError('PRIVATE_CHECKPOINT_REQUIRES_KAW_FORMAL_ENTRY')
+    elif private_source is not None or source_only:
+        raise ValueError('PRIVATE_CHECKPOINT_BINDING_REQUIRED')
     if mode == 'AUTO':
         if checkpoint_publisher is not None:
             raise ValueError('CHAT_USES_EXISTING_AUTHORIZED_DISPATCH_PUBLISHER')
@@ -709,16 +720,40 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     if request.get('race_id') not in (None, request['execution_id']):
         raise ValueError('RACE_ENTRY_IDENTITY_MISMATCH')
     request['race_id'] = request['execution_id']
+    if private is not None:
+        if not output.is_relative_to(private.work_root / request['execution_id']) or output == private.work_root / request['execution_id']:
+            raise ValueError('PRIVATE_CHECKPOINT_RACE_WORK_DIRECTORY_REQUIRED')
+        private.output_directory(output, create=True)
     authority_context = o.validate_request_context(request)
     if isinstance(authority_context, dict):
         if not request.get("current_authority_manifest"):
             request["current_authority_manifest"] = authority_context["current_authority_manifest"]
+    if private is not None and request.get("execution_phase") == "OFFICIAL_RESULT":
+        if private_source is not None or source_only:
+            raise ValueError("PRIVATE_RESULT_CONFLICTING_SOURCE_OPTIONS")
+        report = o.resume_official_result(request, run_id=run_id, github_sha=github_sha,
+                                          runtime_out=output/"result", tmp_root=output/"tmp")
+        report["phase"] = "RESULT"
+        o._write(output/"entry_report.json", report)
+        return report
+    if private is not None and (private_source is not None or source_only):
+        if private_source is not None:
+            if not source_only:
+                private.require_formal_execution(request['execution_id'])
+            o.check_deadline(request, phase="SOURCE")
+            private.import_source(private_source, o.source_checkpoint_basis(request), github_sha=github_sha)
+        if source_only:
+            request["execution_phase"] = "SOURCE"
+            report = o.orchestrate(request, run_id=run_id, github_sha=github_sha,
+                                   runtime_out=output/"source", tmp_root=output/"tmp")
+            o._write(output/"entry_report.json", report)
+            return report
     # Readback is not a new prediction and must remain possible after cutoff.
     # Never enter SOURCE/Owner generation when a FINAL checkpoint exists. The
     # existing orchestrator checks immutable manifests and semantic/source basis.
     final_checkpoint = o.resolve_phase(request['execution_id'], 'FORMAL')
     if final_checkpoint and 'final_receipt_envelope.json' in ((final_checkpoint.get('manifest') or {}).get('files') or {}):
-        canonical_path = o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json"
+        canonical_path = o.formal_intent_path(request['execution_id'])
         canonical = o._load(canonical_path) if canonical_path.is_file() else {}
         readback = {**canonical, **request, 'execution_phase': 'FORMAL'}
         readback.pop('analysis_only', None)
@@ -733,6 +768,8 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
         report['delivery']=readback_final(request['execution_id'],'readback')
         o._write(output/'entry_report.json', report)
         return report
+    if private is not None and private_source is None:
+        private.require_formal_execution(request['execution_id'])
     # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
     # cutoff is forbidden. A late entry never creates a historical prediction.
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
@@ -763,7 +800,7 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     source = o._load_checkpoint_json(saved, 'source_receipt_envelope.json')
     numeric_request = copy.deepcopy(request)
     numeric_request['runners'] = source['artifact']['official_runner_universe']['runners']
-    numeric_request = bind_urw_numerical_context(numeric_request, source['artifact'])
+    numeric_request = bind_official_numerical_context(numeric_request, source['artifact'])
     authority = assess()
     if authority['status'] != 'READY':
         raise ValueError('PRODUCTION_NUMERICAL_AUTHORITY_NOT_READY')
@@ -807,7 +844,7 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
             # persistence is not evidence that a Signed FINAL already exists.
             o._write(output/'generated_formal_intent.json', generated)
             o._write(output/'production_static_owner.json', owner_ledger)
-            o._write(o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json", generated)
+            o._write(o.formal_intent_path(request['execution_id']), generated)
             formal = generated
             resolution = {
                 'status': 'OWNER_GENERATED_FROZEN_INPUT',
@@ -849,7 +886,7 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     if formal is not None and intent.get('analysis_only') is True:
         report.update(code='ANALYSIS_ONLY_SOURCE_COMPLETE', first_failed_phase=None)
     if formal is not None and generation_allowed and intent.get('analysis_only') is not True:
-        canonical = o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json"
+        canonical = o.formal_intent_path(request['execution_id'])
         if checkpoint_publisher is not None and canonical.is_file():
             checkpoint_publisher([str(canonical.relative_to(o.ROOT))])
         formal.pop('execution_phase', None)
@@ -870,22 +907,55 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--github-sha')
+    parser.add_argument('--private-source', type=Path,
+                        help='Import a signed KAW SOURCE already inside the operator-bound private root')
+    parser.add_argument('--private-source-only', action='store_true',
+                        help='Verify and recover the private SOURCE without executing FORMAL')
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
     args = parser.parse_args()
-    output = Path(args.output).resolve()
+    private_options = args.private_source is not None or args.private_source_only
+    private_requested = bool(os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING")
+                             or os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256") or private_options)
+    output = Path(args.output) if private_requested else Path(args.output).resolve()
     preserve_existing_reference = False
+    private = None
+    private_context = None
     try:
+        intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
+        if not private_options and intent.get('prediction_mode') == 'REFERENCE':
+            private_requested = False
+            output = output.resolve()
+        if private_requested:
+            if args.persist_checkpoints or args.query or args.display:
+                raise ValueError('PRIVATE_CHECKPOINT_PUBLIC_ENTRY_FORBIDDEN')
+            from runtime.local_private_checkpoint import PrivateCheckpoint
+            private = PrivateCheckpoint.from_env()
+            if private is None:
+                raise ValueError('PRIVATE_CHECKPOINT_BINDING_REQUIRED')
+            private_context = o.PRIVATE_CHECKPOINT.set(private)
         publisher = None
         if args.persist_checkpoints:
             if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REF') != 'refs/heads/main':
                 raise ValueError('CHECKPOINT_PUBLISH_REQUIRES_EXISTING_MAIN_ACTIONS_ENTRY')
             from runtime.local_race_day_dispatcher import publish_state
             publisher = lambda paths: publish_state(o.ROOT, paths)
-        intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
-        report = run(intent, output=output,
-                     run_id=args.run_id, github_sha=args.github_sha, checkpoint_publisher=publisher)
+        if private is not None:
+            with private.race_lock(o.derive_execution_id(intent)):
+                report = run(intent, output=output, run_id=args.run_id, github_sha=args.github_sha,
+                             private_source=args.private_source, source_only=args.private_source_only)
+        else:
+            report = run(intent, output=output,
+                         run_id=args.run_id, github_sha=args.github_sha, checkpoint_publisher=publisher)
     except (o.FormalOrchestrationError, ValueError, KeyError, OSError, RuntimeError) as exc:
+        if private_requested:
+            code = str(exc)
+            if not re.fullmatch(r'PRIVATE_[A-Z0-9_]+|DEADLINE_HOLD:SOURCE_INCOMPLETE', code):
+                code = 'PRIVATE_CHECKPOINT_EXECUTION_FAILED'
+            print(json.dumps({'status': 'HOLD', 'code': code}))
+            if private_context is not None:
+                o.PRIVATE_CHECKPOINT.reset(private_context)
+            return 2
         from runtime.formal_failure_diagnostics import failure_stage_for, resume_hint_for
         preserve_existing_reference = str(exc) == 'REFERENCE_OUTPUT_ALREADY_EXISTS_NO_REEXECUTION'
         report = {'status': 'HOLD', 'completion': False, 'code': str(exc), 'formal_final_proven': False,
@@ -899,7 +969,7 @@ def main():
         if not preserve_existing_reference:
             o._write(output/'entry_report.json', report)
     completion = report.get('completion')
-    if isinstance(completion, dict) and completion.get('complete') is True:
+    if isinstance(completion, dict) and completion.get('complete') is True and report.get("phase") != "RESULT":
         from runtime.local_race_key_gate import terminal_state
         try:
             report['delivery'] = terminal_state(report['execution_id'], 'success')
@@ -908,7 +978,14 @@ def main():
             report['delivery'] = {'status': 'DELIVERY_HOLD', 'reason': str(exc),
                                   'prestart_delivery_pass': False}
         o._write(output/'entry_report.json', report)
-    print(report['message'] if args.display and 'message' in report else json.dumps(report, ensure_ascii=False, default=str))
+    if private_requested:
+        print(json.dumps({'status': report.get('status'), 'execution_id': report.get('execution_id'),
+                          'private_report_saved': True}, ensure_ascii=False))
+        o.PRIVATE_CHECKPOINT.reset(private_context)
+        if args.private_source_only:
+            return 0 if report.get('status') == 'SOURCE_PASS' else 2
+    else:
+        print(report['message'] if args.display and 'message' in report else json.dumps(report, ensure_ascii=False, default=str))
     return 0 if report.get('status') in {'REFERENCE_AVAILABLE', 'FORMAL_VERIFIED',
         'FORMAL_BLOCKED_REFERENCE_AVAILABLE', 'FORMAL_PENDING_REFERENCE_AVAILABLE'} else o.completion_exit_code(report)
 

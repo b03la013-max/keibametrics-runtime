@@ -89,6 +89,27 @@ def test_interrupted_publication_resumes_completed_prediction_without_refitting(
     assert not (folder/'attempts/002').exists()
 
 
+def test_cli_frozen_reference_readback_is_independent_of_formal_binding(tmp_path, monkeypatch, capsys):
+    from runtime import local_race_entry as entry
+    from scripts import urw_candidate_krs_replay as capture
+
+    output = tmp_path / 'reference'
+    shutil.copytree(SAVED/'R01'/'attempts'/'001', output)
+    request = tmp_path / 'request.json'
+    request.write_text(json.dumps({'family_id': 'LOCAL', 'venue_id': 'URW',
+                                  'race_date': DAY, 'race_no': 1, 'prediction_mode': 'REFERENCE'}))
+    original = (output/'reference_prediction.json').read_bytes()
+    monkeypatch.setenv('KM_LOCAL_PRIVATE_CHECKPOINT_BINDING', str(tmp_path/'missing-binding.json'))
+    monkeypatch.setenv('KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256', '0' * 64)
+    monkeypatch.setattr(capture, 'capture_public_urw_sources',
+                        lambda *args, **kwargs: pytest.fail('frozen reference may not recapture SOURCE'))
+    monkeypatch.setattr(sys, 'argv', ['local_race_entry', '--request', str(request),
+                                     '--output', str(output), '--run-id', 'frozen-cli'])
+    assert entry.main() == 0
+    assert json.loads(capsys.readouterr().out)['reference_readback_only'] is True
+    assert (output/'reference_prediction.json').read_bytes() == original
+
+
 def test_one_failure_does_not_stop_later_races_or_shrink_denominator(tmp_path):
     shutil.copytree(SAVED,tmp_path/'runtime/local_reference'/DAY)
     (tmp_path/'runtime/local_reference'/DAY/'R01/answer.txt').write_text('truncated')
