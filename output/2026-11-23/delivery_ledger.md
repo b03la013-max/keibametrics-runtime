@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-23（19:19時点）
+# 地方版 配送台帳 2026-11-23（19:37時点）
 
 - 管理Race 33／発走済み 30
-- PAPER：凍結 33・Push検証 33・送信 31（発走前 31）・読み戻し一致 31・本人確認 0
+- PAPER：凍結 33・Push検証 32・送信 31（発走前 31）・読み戻し一致 31・本人確認 0
 - 正式：試行 31・Signed FINAL 31（NO-BET 0）・発走前送信 31・読み戻し一致 31・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 30／重要変更 21／Revision 2署名 21
+- 10分前チェック：確認 31／重要変更 22／Revision 2署名 22
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -40,9 +40,9 @@
 | SAG_05 | 17:35 | POSTRESULT_DIAGNOSTIC | 16:52 | ○ | SIGNED_FINAL | 16:53 | ○ |  |
 | SAG_06 | 18:10 | POSTRESULT_DIAGNOSTIC | 17:29 | ○ | SIGNED_FINAL | 18:02 | ○ |  |
 | SAG_07 | 18:45 | POSTRESULT_DIAGNOSTIC | 18:02 | ○ | SIGNED_FINAL | 18:03 | ○ |  |
-| SAG_08 | 19:15 | PRESTART_PUSH_VERIFIED | 18:32 | ○ | SIGNED_FINAL | 18:34 | ○ |  |
-| SAG_09 | 19:45 | PRESTART_PUSH_VERIFIED | 19:01 | ○ | SIGNED_FINAL | 19:02 | ○ |  |
-| SAG_10 | 20:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_08 | 19:15 | POSTRESULT_DIAGNOSTIC | 18:32 | ○ | SIGNED_FINAL | 18:34 | ○ |  |
+| SAG_09 | 19:45 | PRESTART_PUSH_VERIFIED | 19:01 | ○ | SIGNED_FINAL | 19:37 | ○ |  |
+| SAG_10 | 20:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SAG_11 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
