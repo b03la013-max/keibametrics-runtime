@@ -96,6 +96,29 @@ def parse_start_ban(td):
     return out
 
 
+def special_notes(html):
+    """楽天 出馬表の特記事項 → [(馬番, 内容)]."""
+    out = []
+    for ul in re.findall(r"<ul class=['\"]specialNote['\"]>(.*?)</ul>", html, re.S):
+        for li in re.findall(r'<li>(.*?)</li>', ul, re.S):
+            t = re.sub(r'<[^>]+>', '', li).replace('&nbsp;', ' ').strip()
+            m = re.match(r'(\d+)番\s*(.+)', t)
+            if m:
+                out.append((int(m[1]), m[2].strip()))
+    return out
+
+
+def result_non_starters(html):
+    """楽天 成績の着差欄が「取消」「除外」の馬番（着順欄は「-」で、地方版の判定では競走中止に入ってしまう）。"""
+    out = []
+    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.S):
+        num = re.search(r'<td class="number">\s*(\d+)\s*</td>', tr)
+        lead = re.search(r'<td class="lead">(.*?)</td>', tr, re.S)
+        if num and lead and re.search(r'取消|除外', lead[1]):
+            out.append(int(num[1]))
+    return out
+
+
 def parse_card_ban(html):
     i = html.find('<tbody class="raceCard">')
     body = html[i:html.find('</tbody>', i)]
@@ -132,6 +155,16 @@ def parse_card_ban(html):
                         'good_bw_range': (min(wr), max(wr)) if wr else None,
                         'body_weight': cur, 'body_delta': chg, 'scratched': cancelled,
                         'starts': [s for s in (parse_start_ban(t) for t in starts) if s]})
+    # 特記事項（<ul class='specialNote'>: 「10番 騎手変更 鈴木恵介→阿部武臣」「4番 出走取消」等）を出走馬へ反映
+    for no, what in special_notes(html):
+        x = next((y for y in runners if y['no'] == no), None)
+        if not x:
+            continue
+        m = re.match(r'騎手変更\s*(\S+?)→(\S+)', what)
+        if m:
+            x.update(jockey=m[2], jockey_changed_from=m[1])
+        elif re.search(r'取消|除外', what):
+            x['scratched'] = True
     # 人気 is cut off for 'hot' horses (nested <span class="hot"> ends the rate span early): rank by odds
     ranked = sorted((x['odds'], x['no']) for x in runners if x['odds'] and not x['scratched'])
     for i, (_, no) in enumerate(ranked):

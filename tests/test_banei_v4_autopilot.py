@@ -334,3 +334,12 @@ def test_candidates_queue_configs_name_existing_knobs():
         assert all(k in derive.CUTS for k in cfg.get('cuts', {})), cid
     assert q['candidates']['MKT30_PICKS']['config'] == {'patch': {'MARKET_W': 0.3, 'PICKS_W': 1.5}}
     assert engine.MARKET_W == 0.0 and engine.PICKS_W == 0.0          # 本番の値は不変
+
+
+def test_special_notes_jockey_change_and_result_scratch():
+    card = ("<ul class='specialNote'> <li>10番&nbsp;騎手変更&nbsp;鈴木恵介→阿部武臣</li> <li>4番&nbsp;出走取消</li> </ul>")
+    assert source.special_notes(card) == [(10, '騎手変更 鈴木恵介→阿部武臣'), (4, '出走取消')]
+    res = ('<tr> <td class="order">-</td> <th class="position" scope="row">4</th> <td class="number">4</td> '
+           '<td class="time">-</td> <td class="lead"> <span style="color: #ff0000; ">取消</span> </td> </tr>'
+           '<tr> <td class="order">9</td> <td class="number">3</td> <td class="lead"> </td> </tr>')
+    assert source.result_non_starters(res) == [4]

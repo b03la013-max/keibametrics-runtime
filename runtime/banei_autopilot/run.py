@@ -293,7 +293,12 @@ def first_failure(tk, order):
 
 def settle_race(reader, q, key, out):
     r = q['races'][key]
-    res = ST.parse_result(reader.result_page(r['rid']))
+    html = reader.result_page(r['rid'])
+    res = ST.parse_result(html)
+    ns = source.result_non_starters(html)                         # 取消・除外は返還（競走中止ではない）
+    if ns:
+        res['non_starters'] = sorted(set(res.get('non_starters') or []) | set(ns))
+        res['did_not_finish'] = [n for n in (res.get('did_not_finish') or []) if n not in ns]
     if res is None:
         return
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
