@@ -2,7 +2,7 @@
 
 | R | 発走 | 状態 | 点数 | 区分 | 配信 | 直前見直し | PFS | 最初の断線 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 13:45 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 修正版 |  |  |
+| 1 | 13:45 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | HEAD-P2-TERMINAL |
 | 2 | 14:25 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
 | 3 | 15:00 | DISCOVERED |  |  |  |  |  |  |
 | 4 | 15:40 | DISCOVERED |  |  |  |  |  |  |
@@ -14,3 +14,5 @@
 | 10 | 19:05 | DISCOVERED |  |  |  |  |  |  |
 | 11 | 19:35 | DISCOVERED |  |  |  |  |  |  |
 | 12 | 20:05 | DISCOVERED |  |  |  |  |  |  |
+
+投資 2,800円／払戻 0円／回収率 0.0%（100円均等・未較正）
