@@ -21,6 +21,7 @@ from jra_market_observation import enrich_with_market_observation, attach_aki_ex
 from jra_registered_common import enrich_with_registered_common
 from jra_same_day_results import enrich_with_same_day_results
 from jra_race_day_resolver import explicit_current_jump_context, JUMP_SCOPE_REASON
+from jra_runner_universe_guard import pdf_is_other_race
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -242,13 +243,28 @@ def source_acquire(p:Dict[str,Any]):
                         "strict_reconciliation":recon_diag,
                     }
                 except Exception as recon_exc:
-                    errors.append(
-                        "JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"
-                        +json.dumps(diffs,ensure_ascii=False,separators=(",",":"))
-                    )
-                    artifact["official_runner_universe_reconciliation"]["strict_recovery_error"]=(
-                        type(recon_exc).__name__+":"+str(recon_exc)
-                    )
+                    recon_error=type(recon_exc).__name__+":"+str(recon_exc)
+                    if pdf_is_other_race(p,h):
+                        # 11/23 P0: the PDF parse is another race's column (no name in common);
+                        # use the same-authority JRADB detail card, exactly as before PDF publication.
+                        artifact["jra_declared_runner_universe"]=detail_declared
+                        artifact["jra_official_runner_universe"]=detail_active
+                        artifact["jra_official_runner_universe_sha256"]=sha_obj(detail_active)
+                        artifact["official_runner_universe"]=detail_active
+                        artifact["official_runner_universe_sha256"]=detail_active["runner_universe_sha256"]
+                        artifact["official_runner_source"]="JRA_OFFICIAL_JRADB_DETAIL_FALLBACK_PDF_OTHER_RACE"
+                        artifact["official_runner_universe_reconciliation"]={
+                            "status":"PASS / PDF PARSE BOUND TO ANOTHER RACE (NO COMMON NAME) - JRADB DETAIL FALLBACK",
+                            "legacy_pdf_count":len(p),"detail_count":len(h),"legacy_diffs":diffs,
+                            "strict_recovery_error":recon_error,
+                        }
+                        artifact.setdefault("warnings",[]).append("JRA_OFFICIAL_PDF_OTHER_RACE_COLUMN_DETAIL_FALLBACK")
+                    else:
+                        errors.append(
+                            "JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"
+                            +json.dumps(diffs,ensure_ascii=False,separators=(",",":"))
+                        )
+                        artifact["official_runner_universe_reconciliation"]["strict_recovery_error"]=recon_error
             else:
                 artifact["jra_official_runner_universe"]=pdf_u
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
