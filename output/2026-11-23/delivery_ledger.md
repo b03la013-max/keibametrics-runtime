@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-23（15:12時点）
+# 地方版 配送台帳 2026-11-23（15:15時点）
 
 - 管理Race 33／発走済み 11
-- PAPER：凍結 33・Push検証 33・送信 14（発走前 14）・読み戻し一致 14・本人確認 0
+- PAPER：凍結 33・Push検証 32・送信 14（発走前 14）・読み戻し一致 14・本人確認 0
 - 正式：試行 14・Signed FINAL 14（NO-BET 0）・発走前送信 14・読み戻し一致 14・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -34,7 +34,7 @@
 | MIZ_11 | 17:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_12 | 18:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_01 | 15:30 | PRESTART_PUSH_VERIFIED | 14:45 | ○ | SIGNED_FINAL | 14:46 | ○ |  |
-| SAG_02 | 16:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_02 | 16:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SAG_03 | 16:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_04 | 17:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SAG_05 | 17:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
