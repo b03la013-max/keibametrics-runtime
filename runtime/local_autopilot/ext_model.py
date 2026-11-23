@@ -154,6 +154,34 @@ def _kame(cur, hist):
     return out
 
 
+def _yymmdd(d):
+    s = str(d or '')
+    return f'{s[2:4]}.{s[5:7]}.{s[8:10]}' if len(s) >= 10 and s[4] == '-' else None
+
+
+def cand_labels(cur, hist):
+    """Candidate labels measured as their OWN components (not in PAT, weight 0 until the hold-out refit adopts one).
+    KAME3: 亀谷 sire rules v3 (kametani_v3, B4 2026-11-24)."""
+    from runtime.local_autopilot import kametani_v3 as k3
+    if not (cur.get('sire') or cur.get('damsire')):
+        return []
+    starts = [{'content_positions': [p['pos']] if p.get('pos') else [], 'field_size': p.get('field'),
+               'finish': p.get('finish'), 'distance': p.get('distance'), 'surface': 'DIRT',
+               'ride_body_weight': p.get('bw'), 'date': _yymmdd(p.get('date'))} for p in reversed(hist[-5:])]
+    runner = {'sire': cur.get('sire'), 'damsire': cur.get('damsire'), 'sex_age': cur.get('sex') or '',
+              'age': cur.get('age'), 'starts': starts, 'popularity': cur.get('pop'), 'frame_no': cur.get('frame_no')}
+    race = {'surface': 'DIRT', 'distance': cur.get('distance'), 'going': cur.get('going'), 'venue_id': cur.get('venue'),
+            'race_date': cur.get('date')}
+    try:
+        v = k3.label(runner, race)
+    except Exception:
+        return []
+    return [('KAME3', v)] if v else []
+
+
+CAND_COMPONENTS = {'KAME3': 'KM3'}
+
+
 def labels(cur, hist):
     """cur: date, venue, distance, going, age, sex, pop, frame_no, jockey, cls, weather, special, daybias, sire,
     damsire. hist: the horse's earlier starts, oldest first (date, venue, distance, finish, early, late, cls,
@@ -296,7 +324,7 @@ def _rows(races, std=None):
                            'trainer': key(x.get('trainer')), 'frame': frame_band(x.get('frame')), 'horse': hk,
                            'sex': x.get('sex'), 'age': x.get('age'), 'bwchg': chg_band(x.get('bw_chg')),
                            'season': season(race['date']), 'spd': spd_of(prev), 'labels': labels(cur, prev),
-                           'style': style(prev), 'early_now': early})
+                           'cand_labels': cand_labels(cur, prev), 'style': style(prev), 'early_now': early})
             done.append((hk, {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
                               'finish': x.get('finish'), 'early': early, 'late': late, 'cls': cur0['cls'],
                               'jockey': x.get('jockey'), 'fig': None if fig is None else round(fig, 1),
@@ -352,7 +380,7 @@ def cell_keys(r):
     if r['age']:
         ks += [('AG', min(r['age'], 9), r['sex'], circ(v)), ('AG', min(r['age'], 9), r['sex'])]
     ks += [('SE', r['season'], r['sex'], circ(v)), ('SPD', r['spd_band'], circ(v)), ('SPD', r['spd_band'])]
-    for name, val in r['labels']:
+    for name, val in list(r['labels']) + list(r.get('cand_labels') or []):
         ks += [('P', name, val, circ(v)), ('P', name, val)]
     return ks
 
@@ -467,6 +495,9 @@ def components(cells, r):
         a = ae_of(cells, [('P', name, val, circ(v)), ('P', name, val)])
         if a[0] is not None:
             ps.append({'label': f'{name}={val}', 'score': round(a[0], 1), 'n': a[2], 'ae': a[3]})
+    for name, val in r.get('cand_labels') or []:
+        if name in CAND_COMPONENTS:
+            put(CAND_COMPONENTS[name], [('P', name, val, circ(v)), ('P', name, val)])
     if ps:
         # deviations add up (each label measured on its own), mean keeps one label from dominating
         out['PAT'] = (NEUTRAL + sum(p['score'] - NEUTRAL for p in ps) / math.sqrt(len(ps)), ps)
