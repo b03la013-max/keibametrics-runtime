@@ -1,0 +1,71 @@
+{
+ "classification": "LOCAL_FORMAL_PRODUCTION_RAKUTEN_SIGNED_SOURCE",
+ "race_id": "KM-LOCAL-KNZ-20261123-R09-RKT",
+ "stages": {
+  "SOURCE_FREEZE": "2026-11-23T08:33:55.315809+00:00",
+  "RUNNER_UNIVERSE": "2026-11-23T08:33:55.338287+00:00",
+  "NUMERICAL_MATERIALIZATION": "2026-11-23T08:33:59.312991+00:00",
+  "INDEX_PROVENANCE": "2026-11-23T08:33:59.313001+00:00",
+  "EXT_CONNECTION": "2026-11-23T08:33:59.313337+00:00",
+  "STATIC_FREEZE": "2026-11-23T08:33:59.320753+00:00",
+  "PRE_KRS": "2026-11-23T08:34:00.176371+00:00"
+ },
+ "first_failed_stage": "INTERNAL",
+ "actual_purchase": false,
+ "authority": {
+  "manifest_id": "KM-FAMILY-CURRENT-AUTHORITY-20261116-R54",
+  "path": "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261116_R54.json",
+  "file_sha256": "cd9bf03a1a8d27f464924c16e976e33568e1967e1fa92eaa975c72d81c22d148",
+  "effective_at": "2026-11-16T15:00:02+00:00",
+  "resolved_at": "2026-11-23T08:33:53.282655+00:00",
+  "consumption": {
+   "prediction_authority": true,
+   "krs_input_authority": true,
+   "ticket_authority": true,
+   "capital_authority": true
+  },
+  "numerical_prediction_consumer": {
+   "status": "ACTIVE",
+   "profile": "KM-LOCAL-NUMERICAL-PREDICTION-CONSUMER-v1.0-20261116",
+   "owner_authorization": {
+    "at": "2026-11-16 22:33-22:50 JST",
+    "statements": [
+     "数値予測の Consumer を定義する",
+     "29指数の候補予測",
+     "候補の順位＋Staticの幅"
+    ]
+   },
+   "ranking": "local_krs_bridge_candidate.build_candidate_prediction (existing v0.1 candidate arithmetic) on the Production Full29 values; overall = mean(W,P2,P3 role scores); ties by horse number",
+   "marks": "◎○▲ for ranks 1-3, △ otherwise (unchanged presentation)",
+   "role_widths": {
+    "W": "top 3",
+    "P2": "top 6",
+    "P3": "top 9",
+    "source": "Owner Static v1.1 widths (the candidate 40/67/85% widths are NOT used)"
+   },
+   "static_owner_v1_1": "kept as a frozen shadow ledger (ordinal ranking recorded, not consumed)",
+   "unknown_course_swap": "not applied (Static-only ordinal rule)",
+   "pre_decision_evidence": "2026-11-16 retrospective replay on 5 signed races (NOT OOS): Static 528pt PFS 43.5% / candidate ranking + Static widths 528pt PFS 23.3% / candidate widths 1,908pt PFS 9.4%"
+  },
+  "local_ticket_cap": {
+   "status": "ACTIVE",
+   "profile": "KM-LOCAL-FORMAL-TICKET-CAP-v1.0-20261116",
+   "max_tickets": 60,
+   "unit_stake": 100,
+   "owner_authorization": {
+    "at": "2026-11-16 22:50 JST",
+    "statements": [
+     "地方版だけ点数上限",
+     "60点（6,000円）"
+    ]
+   },
+   "scope": "LOCAL formal recommendation only; MEC R3 (family common) unchanged",
+   "rule": "From the Runtime-signed FINAL MEC ticket set, keep at most 60 tickets ordered by MEC tier (CORE, PROTECTION, TAIL), then by the sum of numerical ranks of the selection, then MEC order; dropped coverage units recorded",
+   "signed_final_relation": "Signed FINAL keeps the full MEC R3 set (Runtime contract: total == MEC minimum capital, coverage 1.0). The capped recommendation is a deterministic, pre-cutoff, sha-bound derivative of that signed set, delivered and settled as the formal recommendation; the Runtime signed RESULT settles the full signed set.",
+   "mec_r3_conflict": "acknowledged by Owner (coverage-breaking reduction and fixed caps are outside MEC R3)"
+  }
+ },
+ "status": "HOLD",
+ "error": "TimeoutError:The read operation timed out",
+ "elapsed_s": 315.7
+}
