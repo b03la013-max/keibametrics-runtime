@@ -31,8 +31,15 @@ def build(req):
     if str(bridge.get("family") or "").upper()!="LOCAL":
         raise LocalKRSBridgeError("LOCAL_KRS_BRIDGE_FAMILY_MISMATCH")
 
-    full_numeric=bool(q.get("full_numerical_calculation"))
-    proxy_mode=bool(bridge.get("technical_proxy_mode"))
+    numeric_flag=q.get("full_numerical_calculation",False)
+    proxy_flag=bridge.get("technical_proxy_mode",False)
+    # Python bool("false") is True: never promote textual values to KRS authority.
+    if type(numeric_flag) is not bool:
+        raise LocalKRSBridgeError("KRS_FULL_NUMERICAL_BOOLEAN_REQUIRED")
+    if type(proxy_flag) is not bool:
+        raise LocalKRSBridgeError("KRS_TECHNICAL_PROXY_BOOLEAN_REQUIRED")
+    full_numeric=numeric_flag
+    proxy_mode=proxy_flag
     if not full_numeric and not proxy_mode:
         raise LocalKRSBridgeError("KRS_TECHNICAL_PROXY_MODE_REQUIRED_WHEN_FORMAL_INDICES_HELD")
     if proxy_mode and not str(bridge.get("proxy_reason") or "").strip():
