@@ -1,10 +1,10 @@
 # 修正版（Rev2）監査と勝ち馬漏れの診断 2026-11-23（証拠のみ）
 
-対象 11R、うちRev2 9R。勝ち馬の順位：改善 0R／悪化 0R。Rev2でWから外れた勝ち馬 0R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 8,910円 → Rev2 6,850円。
+対象 12R、うちRev2 9R。勝ち馬の順位：改善 0R／悪化 0R。Rev2でWから外れた勝ち馬 0R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 8,910円 → Rev2 6,850円。
 
 直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）23頭：勝率 0.0%・3着内 26.1%／その他 63頭：勝率 14.3%・3着内 33.3%（1日分は参考）
 
-勝ち馬がW外：3R（うち市場の上位3頭 3R）
+勝ち馬がW外：4R（うち市場の上位3頭 3R）
 
 | R | 勝ち馬 | 順位R1→R2 | W R1/R2 | 単勝R1→R2 | 動いた指数（勝ち馬） | 60点払戻R1→R2 |
 |---|---|---|---|---|---|---|
@@ -25,3 +25,4 @@
 | KNZ_04 | 7 | 4 | 1 | BVIg-L, BWI-L, CFIg-L, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, PRI, RFIg-L, SRI-L, T3I-L, TPI-L, URP, WCI, ZAI-PLACE, ZAI-WIN |
 | MIZ_01 | 10 | 5 | 1 | EVI/CEV, HPI-L, JTI-L, P2-AKI, P3-AKI, RSI, URP, W-AKI |
 | MIZ_05 | 7 | 9 | 2 | CSI-L, HPI-L, JTI-L, P2-AKI, P3-AKI, RSI, W-AKI |
+| SAG_01 | 8 | 5 | 9 | CSI-L, DCR, OPI-V |
