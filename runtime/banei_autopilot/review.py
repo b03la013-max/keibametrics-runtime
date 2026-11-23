@@ -82,6 +82,28 @@ def coverage_summary(revs):
     return res or None
 
 
+def longshot_lane_trend(revs, min_pop=6, split=5):
+    """人気薄の好走馬だけで走路の偏りを読む（Owner 追加 YouTube「トラックバイアスって何？」2026-11-23 精読：
+    1〜3番人気の決着は能力で決まっただけかもしれないので偏りの根拠にせず、6番人気以下で3着内に来た馬の通り道を見る）。
+    ばんえいでは馬番＝走路番号なので、内側（1〜split）と外側（split+1〜）の占有を、3着内の全馬と比べて数える。
+    閾値・補正は置かない。証拠のみ（券面・点数には影響しない）。"""
+    allf, ls = [0, 0], [0, 0]
+    for x in revs:
+        for f in (x.get('finishers') or {}).values():
+            no, pop = f.get('no'), f.get('pop')
+            if no is None:
+                continue
+            side = 0 if int(no) <= split else 1
+            allf[side] += 1
+            if pop is not None and int(pop) >= min_pop:
+                ls[side] += 1
+    if not sum(ls):
+        return None
+    return {'min_pop': min_pop, 'split': split, 'longshot_inner': ls[0], 'longshot_outer': ls[1],
+            'longshot_inner_share': round(ls[0] / sum(ls), 3),
+            'all_inner_share': round(allf[0] / sum(allf), 3) if sum(allf) else None, 'all_top3': sum(allf)}
+
+
 def race_review(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -299,7 +321,7 @@ def summarize(revs, missed):
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
             'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
             'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third')),
-            'coverage': coverage_summary(revs)}
+            'coverage': coverage_summary(revs), 'longshot_lane': longshot_lane_trend(revs)}
 
 
 def _md(title, s, revs=None):
@@ -322,6 +344,10 @@ def _md(title, s, revs=None):
         g = cv['top2_gap']
         L.append(f"- 上位2頭の得点差（中央値 {g['median']}）: 差が小さい {g['low_races']}R の◎1着 {g['low_honmei_win']}"
                  f"／差が大きい {g['high_races']}R の◎1着 {g['high_honmei_win']}")
+    if s.get('longshot_lane'):
+        g = s['longshot_lane']
+        L.append(f"- 人気薄（{g['min_pop']}番人気以下）の3着内 {g['longshot_inner'] + g['longshot_outer']}頭の走路: "
+                 f"内側1〜{g['split']} {g['longshot_inner_share']:.0%}（3着内の全馬 {g['all_inner_share']:.0%}）")
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
