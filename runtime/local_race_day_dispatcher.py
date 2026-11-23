@@ -60,22 +60,28 @@ def read_official(spec, *, fetch, reads, read_observer=None, sleeper=time.sleep)
     # submissions, receipt validation, or an ambiguous Actions handoff.
     from urllib.error import URLError, HTTPError
     from runtime.execution_gateway import RETRYABLE_HTTP_STATUS
+    # The provider's rate limit ends this discovery attempt. Keep its
+    # response for inspection instead of repeating the card or menu request.
+    retryable_status = RETRYABLE_HTTP_STATUS - {429}
     for attempt in range(1,4):
         event = {'source_id':spec['source_id'], 'url':spec['url'],
                  'attempt':attempt, 'observed_at':datetime.now(timezone.utc).isoformat()}
         try:
             snapshot, errors = fetch(spec, '')
-            retryable = snapshot.get('http_status') in RETRYABLE_HTTP_STATUS
-            event.update(http_status=snapshot.get('http_status'), errors=errors,
+            http_status = snapshot.get('http_status')
+            retryable = http_status in retryable_status
+            event.update(http_status=http_status, errors=errors,
                          snapshot_sha256=snapshot.get('snapshot_sha256'))
-            if retryable:
+            if retryable or http_status == 429:
                 event['failed_snapshot'] = snapshot
             if not retryable or attempt == 3:
                 return snapshot, errors
         except (OSError, ValueError) as exc:
             event.update(error=str(exc),error_type=type(exc).__name__)
+            if isinstance(exc, HTTPError):
+                event['http_status'] = exc.code
             retryable = (isinstance(exc,(TimeoutError,ConnectionError,URLError))
-                and (not isinstance(exc,HTTPError) or exc.code in RETRYABLE_HTTP_STATUS))
+                and (not isinstance(exc,HTTPError) or exc.code in retryable_status))
             retryable |= str(exc).startswith('SOURCE_DNS_RESOLUTION_FAILED:')
             if not retryable or attempt == 3:
                 raise

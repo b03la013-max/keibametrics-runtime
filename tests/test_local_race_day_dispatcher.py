@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from unittest.mock import Mock
+from urllib.error import HTTPError
 
 import pytest
 
@@ -440,3 +441,26 @@ def test_official_discovery_signature_guard_is_never_retried():
     with pytest.raises(ValueError,match='HASH_MISMATCH'):
         d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
     assert len(calls)==1
+
+
+@pytest.mark.parametrize('raises_http_error', [False, True])
+def test_official_discovery_rate_limit_is_retained_without_retry(raises_http_error):
+    reads = []
+    sleeper = Mock()
+
+    def refuse(spec, cutoff):
+        if raises_http_error:
+            raise HTTPError(spec['url'], 429, 'Too Many Requests', {}, None)
+        return snapshot_from_bytes(spec, b'Too Many Requests', final_url=spec['url'],
+                                   status_code=429, headers={'retry-after': '120'})
+
+    fetch = Mock(side_effect=refuse)
+    with pytest.raises((ValueError, HTTPError), match='429'):
+        d.discover('KAW', '2026-10-15', 120, now=NOW, fetch=fetch,
+                   read_observer=reads.append, sleeper=sleeper)
+
+    assert fetch.call_count == 1
+    sleeper.assert_not_called()
+    assert len(reads) == 1 and reads[0]['http_status'] == 429
+    if not raises_http_error:
+        assert reads[0]['failed_snapshot']['http_status'] == 429
