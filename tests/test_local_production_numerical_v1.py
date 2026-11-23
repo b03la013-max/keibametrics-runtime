@@ -58,6 +58,21 @@ def test_r1_mechanical_replay_closes_all_29_indices_without_hold():
     assert out["local_mapping_registry"] == PROD_MAPPING_ID
     assert out["numerical_evidence_registry"] == PROD_REGISTRY_ID
     assert out["static_prediction"] == original_static
+    evidence = out["base9_component_evidence_audit"]
+    assert evidence["expected_component_cells"] == 12 * 63 == 756
+    assert evidence["accounted_component_cells"] == 756
+    assert evidence["unaccounted_component_cells"] == 0
+    assert evidence["explicit_missing_component_cells"] > 0
+    assert evidence["nonmissing_component_cells"] > 0
+    assert evidence["explicit_missing_component_cells"] + evidence["nonmissing_component_cells"] == 756
+    assert (evidence["partial_coverage_nonmissing_cells"] + evidence["full_coverage_nonmissing_cells"]
+            <= evidence["nonmissing_component_cells"])
+    # Source feature completeness is NOT proof of direct official measurement;
+    # proxies, numeric neutrals and the four downstream consumers stay separate.
+    assert evidence["direct_measured_component_cells"] is None
+    assert evidence["proxy_component_cells"] is None
+    assert evidence["direct_vs_proxy_verified"] is False
+    assert evidence["scope"] == "NUMERICAL_EVIDENCE_AVAILABILITY_ONLY_NOT_CONSUMER_USE"
 
     for runner in out["runners"]:
         cc = runner["canonical_components"]
