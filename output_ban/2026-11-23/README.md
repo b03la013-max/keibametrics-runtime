@@ -5,7 +5,7 @@
 | 1 | 13:45 | SETTLED | 28 | FORMAL | 済 | 修正版 | 0.0 | HEAD-P2-TERMINAL |
 | 2 | 14:25 | SETTLED | 28 | FORMAL | 済 | 修正版 | 353.2 | NONE |
 | 3 | 15:00 | SETTLED | 28 | FORMAL | 済 | 修正版 | 140.4 | EXACT |
-| 4 | 15:40 | PREDICTION_COMPLETE | 28 | FORMAL | 済 | 修正版 |  |  |
+| 4 | 15:40 | SETTLED | 28 | FORMAL | 済 | 修正版 | 65.7 | EXACT |
 | 5 | 16:15 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
 | 6 | 16:50 | DISCOVERED |  |  |  |  |  |  |
 | 7 | 17:25 | DISCOVERED |  |  |  |  |  |  |
@@ -15,4 +15,4 @@
 | 11 | 19:35 | DISCOVERED |  |  |  |  |  |  |
 | 12 | 20:05 | DISCOVERED |  |  |  |  |  |  |
 
-投資 8,400円／払戻 13,820円／回収率 164.5%（100円均等・未較正）
+投資 11,200円／払戻 15,660円／回収率 139.8%（100円均等・未較正）
