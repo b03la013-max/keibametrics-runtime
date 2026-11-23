@@ -104,6 +104,52 @@ def longshot_lane_trend(revs, min_pop=6, split=5):
             'all_inner_share': round(allf[0] / sum(allf), 3) if sum(allf) else None, 'all_top3': sum(allf)}
 
 
+def result_orders(res):
+    """同着を含む成立着順（11/23 ChatGPT 反省 P0-2：4R 3着 7・8 同着）。三連単の払戻組番が2つ以上あれば
+    そのすべてを、無ければ order の先頭3頭を返す。精算（run.settle_race）は払戻表の全組を見るので正しいが、
+    反省の first_failure・役割の当否は order[:3] だけを見ていた。証拠のみ。"""
+    tri = ((res or {}).get('payouts') or {}).get('TRIFECTA') or {}
+    outs = []
+    for k in tri:
+        try:
+            o = tuple(int(x) for x in str(k).split('-'))
+        except ValueError:
+            continue
+        if len(o) == 3 and o not in outs:
+            outs.append(o)
+    base = tuple(int(x) for x in (res or {}).get('order', [])[:3])
+    if len(outs) >= 2:
+        return sorted(outs, key=lambda o: (o != base, o))
+    return [base] if len(base) == 3 else []
+
+
+CHAIN = ('HORSE', 'ROLE_W', 'ROLE_P2', 'ROLE_P3', 'TRIO', 'HEAD', 'ORDERED_PAIR', 'THIRD')
+
+
+def failure_chain(rows, marks, tk, order):
+    """断線の多層記録（11/23 ChatGPT 反省 P0-5：単一の first_failure だけで原因を決めない）。
+    HORSE（3頭とも印内）→ ROLE_W/P2/P3（着順ごとの役割）→ TRIO（三連複の組）→ HEAD（三連単の頭に勝ち馬）
+    → ORDERED_PAIR（1→2着の並び）→ THIRD（1→2→3着の並び）の各層の成否を全部残し、欠けた層の一覧と最初の欠損を返す。
+    三連単を買っていないレースは HEAD 以降を None。証拠のみ（券面・点数には影響しない）。"""
+    if not order or len(order) < 3:
+        return None
+    w, s, t = (str(x) for x in order[:3])
+    R = {str(x['no']): x for x in (rows or [])}
+    mk = {str(k): v for k, v in (marks or {}).items()}
+    ex = [tuple(str(n) for n in x) for x in (tk.get('exact') or []) if len(x) == 3]
+    trio = {tuple(sorted(str(n) for n in x)) for x in (tk.get('trio') or [])}
+    st = {'HORSE': all(mk.get(n) for n in (w, s, t)),
+          'ROLE_W': bool((R.get(w) or {}).get('role_w')),
+          'ROLE_P2': bool((R.get(s) or {}).get('role_p2')),
+          'ROLE_P3': bool((R.get(t) or {}).get('role_p3')),
+          'TRIO': tuple(sorted((w, s, t))) in trio if trio else None,
+          'HEAD': any(x[0] == w for x in ex) if ex else None,
+          'ORDERED_PAIR': any(x[:2] == (w, s) for x in ex) if ex else None,
+          'THIRD': (w, s, t) in set(ex) if ex else None}
+    failed = [k for k in CHAIN if st[k] is False]
+    return {'layers': st, 'failed': failed, 'first': failed[0] if failed else 'NONE'}
+
+
 def race_review(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -211,7 +257,16 @@ def race_review(out, key, r):
     if xdi_miss:
         P.append({'id': 'P1:XDI_FINISHER', 'level': 'P1', 'what': '水分ボンバー上位3頭なのに内部下位半分だった馬が3着内',
                   'evidence': xdi_miss})
-    return {'key': key, 'order': res['order'][:3], 'shadow': shadow, 'funnel': funnel, 'exposure': exposure,
+    chain = failure_chain(ev['rows'], ev.get('marks'), tk, res['order'])
+    orders = result_orders(res)
+    dead_heat = None
+    if len(orders) >= 2:
+        dead_heat = {'orders': [list(o) for o in orders],
+                     'ffl_by_order': {'-'.join(map(str, o)): _run.first_failure(tk, list(o)) for o in orders},
+                     'chain_by_order': {'-'.join(map(str, o)): (failure_chain(ev['rows'], ev.get('marks'), tk, list(o)) or {}).get('first')
+                                        for o in orders}}
+        P.append({'id': 'P0:DEAD_HEAT', 'level': 'P0', 'what': '3着以内に同着：成立着順ごとに断線を記録', 'evidence': dead_heat})
+    return {'key': key, 'order': res['order'][:3], 'shadow': shadow, 'chain': chain, 'dead_heat': dead_heat, 'funnel': funnel, 'exposure': exposure,
             'low_payout': low,
             'refund': res.get('refund'),
             'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
@@ -321,7 +376,10 @@ def summarize(revs, missed):
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
             'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
             'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third')),
-            'coverage': coverage_summary(revs), 'longshot_lane': longshot_lane_trend(revs)}
+            'coverage': coverage_summary(revs), 'longshot_lane': longshot_lane_trend(revs),
+            'chain_failed': {k: sum(1 for x in revs if k in ((x.get('chain') or {}).get('failed') or [])) for k in CHAIN},
+            'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
+            'dead_heat': sum(1 for x in revs if x.get('dead_heat'))}
 
 
 def _md(title, s, revs=None):
@@ -331,6 +389,7 @@ def _md(title, s, revs=None):
          f"- 三連複 的中 {s['trio_hit']}R・PFS {s['trio_pfs']}%／三連単 的中 {s['exact_hit']}R・PFS {s['exact_pfs']}%",
          f"- ◎ 1着 {s['honmei_win']}・3着内 {s['honmei_top3']}／勝ち馬∈W {s['winner_in_W']}・2着∈P2 {s['second_in_P2']}・3着∈P3 {s['third_in_P3']}",
          f"- 最初の断線: {s['ffl']}／原因コード: {s['cause']}",
+         f"- 断線の多層記録（欠けた層ごとのレース数）: {s.get('chain_failed')}／最初の欠損: {s.get('chain_first')}／同着 {s.get('dead_heat', 0)}R",
          f"- 変換ファネル: 勝ち馬∈W {s['funnel']['winner_in_W']} → 1-2着の組 {s['funnel']['pair_in_tickets']} → 三連複 {s['funnel']['trio_bought']}"
          f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
          f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}",
