@@ -9,7 +9,10 @@ permissions:
 on:
   workflow_run:
     # New official results land here (Static Owner cohort result_evaluation.json).
-    workflows: ["JRA Candidate Automatic Official Postresult Closed Loop"]
+    # 11/23 review P0: the 15-min cron fired only 2 of 36 slots on 2026-11-23, so no
+    # Challenger was frozen before post. Every JRA FORMAL run now also triggers a freeze
+    # right after its FINAL is persisted (well before post); the cron stays as a backstop.
+    workflows: ["JRA Candidate Automatic Official Postresult Closed Loop", "KeibaMetrics Formal Request Runner"]
     types: [completed]
   schedule:
     # Every day 09:10-17:55 JST, every 15 min: freeze Challengers before post time
@@ -43,15 +46,17 @@ jobs:
       - name: Tests
         run: |
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py
+          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_index_research_triggers.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py
       - name: Reflect, analyse, freeze Shadow, evaluate forward OOS
         env:
           WEEKLY: ${{ github.event.schedule == '20 18 * * 0' || inputs.weekly == true }}
         run: |
           set -euo pipefail
           D=$(TZ=Asia/Tokyo date +%F)
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "20 18 * * 0" ] \
-             && [ ! -f "runtime/jra_race_day_plan/$D.schedule.json" ]; then
+          FREEZE_ONLY_TRIGGER=false
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "20 18 * * 0" ]; then FREEZE_ONLY_TRIGGER=true; fi
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.name }}" = "KeibaMetrics Formal Request Runner" ]; then FREEZE_ONLY_TRIGGER=true; fi
+          if [ "$FREEZE_ONLY_TRIGGER" = "true" ] && [ ! -f "runtime/jra_race_day_plan/$D.schedule.json" ]; then
             echo "NO_RACE_DAY_SCHEDULE $D"; exit 0
           fi
           args="--date $D"
