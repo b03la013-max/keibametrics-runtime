@@ -1249,7 +1249,8 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if any(marker in page_text for marker in (
             "審議中", "審議しています", "成績未確定", "着順未確定", "払戻未確定", "結果未確定")):
         raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_FINAL")
-    if any(marker in page_text for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
+    if any(marker in page_text for marker in (
+            "競走取り止め", "競走取止", "競走は中止", "競走を中止", "開催中止")):
         # Cancellations require the existing authorized refund path; the flat
         # payout representation used here cannot safely settle them.
         raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
@@ -1262,6 +1263,8 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     # Use the result table's explicit status, not incidental page text. A horse
     # already excluded from the frozen active universe cannot create exposure.
     frozen_runners = set(map(str, runner_ids))
+    stopped_runners = set()
+    individual_stop_labels = 0
     for table in tables:
         if not table or not {"着順", "馬番", "馬名"}.issubset(set(table[0])):
             continue
@@ -1270,20 +1273,32 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
             if len(row) <= status_index:
                 continue
             status = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[status_index]))
-            if status not in {"取消", "除外", "出走取消", "競走除外"}:
+            if status not in {"取消", "除外", "出走取消", "競走除外", "中止", "競走中止"}:
                 continue
             horse = (re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[horse_index]))
                      if len(row) > horse_index else "")
+            if status in {"中止", "競走中止"}:
+                if horse not in frozen_runners or horse in stopped_runners:
+                    raise FormalOrchestrationError("OFFICIAL_RESULT_DNF_UNIVERSE_HOLD")
+                stopped_runners.add(horse)
+                individual_stop_labels += status == "競走中止"
+                continue
             if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
                 raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
+    # An unaccounted label is a possible cancellation notice outside the result rows.
+    if page_text.count("競走中止") != individual_stop_labels:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
     rows = sorted(finish_tables[0], key=lambda row: row["finish"])
     positions = [row["finish"] for row in rows]
     order = [row["horse_no"] for row in rows]
+    ranked_runners = set(map(str, order))
+    if stopped_runners and (stopped_runners & ranked_runners or stopped_runners | ranked_runners != frozen_runners):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_DNF_UNIVERSE_HOLD")
     if (len(rows) < 3 or positions != list(range(1, len(rows) + 1))
-            or len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids)))):
+            or len(set(order)) != len(order) or not ranked_runners.issubset(frozen_runners)):
         raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
     # Validate published winning selection as well as amount. Flat per-bet-type
     # payouts cannot represent dead heats, refunds or multiple winning sets.
