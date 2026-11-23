@@ -203,6 +203,52 @@
    "status": "SHADOW",
    "registered": "2026-11-22T20:27+09:00",
    "why": "auto-neighbor"
+  },
+  "EXACT_BY_W": {
+   "what": "三連単を正本BAN-TAGどおり：W（1着候補）1頭→1着固定1-3-5、2頭→2頭を頭に2-3-4、3頭以上→三連単なし（30点は三連複へ）",
+   "config": {
+    "tpatch": {
+     "EXACT_RULE": "BY_W"
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-23T20:18+09:00",
+   "why": "11/22反省（ChatGPT・Claude）: 7R/12R は上位3頭を印に含むのに頭固定で不的中。正本は Head Lock 禁止・全Wの頭を着地（AWHI）"
+  },
+  "EXACT_2HEAD": {
+   "what": "三連単を常に上位W2頭を頭に 2-3-4（同じ30点上限）",
+   "config": {
+    "tpatch": {
+     "EXACT_RULE": "2HEAD"
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-23T20:18+09:00",
+   "why": "11/22反省: 1着固定の◎が勝たないと三連単は全滅（11/21〜22の三連単的中は21R中2R）"
+  },
+  "AXIS2_EXACT_BY_W": {
+   "what": "AXIS2（三連複◎○2頭軸）＋EXACT_BY_W の組合せ",
+   "config": {
+    "tpatch": {
+     "FORCE_TRIO_AXIS": 2,
+     "EXACT_RULE": "BY_W"
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-23T20:18+09:00",
+   "why": "11/22反省: ◎1頭への集中（一極集中12/12R、最多出現馬が3着外7R）を三連複・三連単の両方で外す"
+  },
+  "MKT30_PICKS": {
+   "what": "人気を順位に30%混ぜる＋キンタロー推奨ボックスの入った数×1.5をTPIに足す（MKT30とPICKSの組合せ）",
+   "config": {
+    "patch": {
+     "MARKET_W": 0.3,
+     "PICKS_W": 1.5
+    }
+   },
+   "status": "SHADOW",
+   "registered": "2026-11-23T20:18+09:00",
+   "why": "11/22夜の反省: 人気1-2番かつ推奨3名一致の馬が勝ち順位で大きく沈む（1R 1着馬=勝ち順位9位、9R 3着馬=9位、2R 3着馬=6位）。単独ではMKT30・PICKSとも勝ち馬順位を改善（3.58→3.17）。両者が重なるか補い合うかを影で確かめる"
   }
  },
  "history": [
@@ -247,116 +293,206 @@
   "boot": 2000
  },
  "last_step": {
-  "at": "2026-11-22T20:27+09:00",
+  "at": "2026-11-23T20:18+09:00",
   "table": {
    "SBO0": {
-    "n": 12,
-    "mean_rank_diff": 0.417,
-    "upper": 1.083,
-    "alpha": 0.0045,
-    "top3_diff": -0.167,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 3.8,
+    "n": 24,
+    "mean_rank_diff": 0.167,
+    "upper": 0.583,
+    "alpha": 0.0025,
+    "top3_diff": -0.042,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 30.0,
     "promote": false
    },
    "SBO60": {
-    "n": 12,
-    "mean_rank_diff": -0.25,
-    "upper": 0,
-    "alpha": 0.0045,
-    "top3_diff": 0,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 26.4,
+    "n": 24,
+    "mean_rank_diff": -0.083,
+    "upper": 0.5,
+    "alpha": 0.0025,
+    "top3_diff": -0.042,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 43.8,
     "promote": false
    },
    "BSI_EQ": {
-    "n": 12,
+    "n": 24,
     "mean_rank_diff": 0,
     "upper": 0,
-    "alpha": 0.0045,
+    "alpha": 0.0025,
     "top3_diff": 0,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 26.7,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 41.2,
     "promote": false
    },
    "BSI_REC": {
-    "n": 12,
-    "mean_rank_diff": 0.083,
-    "upper": 0.417,
-    "alpha": 0.0045,
+    "n": 24,
+    "mean_rank_diff": 0.042,
+    "upper": 0.292,
+    "alpha": 0.0025,
     "top3_diff": 0,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 3.8,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 37.4,
     "promote": false
    },
    "NOPOS": {
-    "n": 12,
-    "mean_rank_diff": -0.083,
-    "upper": 0.5,
-    "alpha": 0.0045,
-    "top3_diff": -0.167,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 3.8,
+    "n": 24,
+    "mean_rank_diff": 0.042,
+    "upper": 0.917,
+    "alpha": 0.0025,
+    "top3_diff": -0.125,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 35.0,
     "promote": false
    },
    "CUTS_ALT": {
-    "n": 12,
-    "mean_rank_diff": -0.083,
+    "n": 24,
+    "mean_rank_diff": -0.125,
     "upper": 0,
-    "alpha": 0.0045,
+    "alpha": 0.0025,
     "top3_diff": 0,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 26.6,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 58.5,
     "promote": false
    },
    "MKT30": {
-    "n": 12,
-    "mean_rank_diff": -0.417,
-    "upper": 0.167,
-    "alpha": 0.0045,
-    "top3_diff": -0.083,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 36.9,
+    "n": 24,
+    "mean_rank_diff": -0.25,
+    "upper": 0.083,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 52.9,
     "promote": false
    },
    "MKT50": {
-    "n": 12,
-    "mean_rank_diff": -0.583,
-    "upper": 0.667,
-    "alpha": 0.0045,
+    "n": 24,
+    "mean_rank_diff": -0.625,
+    "upper": 0.083,
+    "alpha": 0.0025,
     "top3_diff": 0.083,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 36.4,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 49.6,
     "promote": false
    },
    "PICKS": {
-    "n": 12,
-    "mean_rank_diff": -0.417,
-    "upper": 0,
-    "alpha": 0.0045,
-    "top3_diff": -0.083,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 45.7,
+    "n": 24,
+    "mean_rank_diff": -0.25,
+    "upper": 0.083,
+    "alpha": 0.0025,
+    "top3_diff": 0.042,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 59.9,
     "promote": false
    },
    "TRACKFIT": {
-    "n": 12,
-    "mean_rank_diff": -0.083,
-    "upper": 0.833,
-    "alpha": 0.0045,
-    "top3_diff": -0.167,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 14.4,
+    "n": 24,
+    "mean_rank_diff": -0.042,
+    "upper": 0.458,
+    "alpha": 0.0025,
+    "top3_diff": -0.083,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 35.1,
     "promote": false
    },
    "AXIS2": {
+    "n": 24,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 41.1,
+    "pfs_ex_top1_cand": 17.4,
+    "promote": false
+   },
+   "AUTO_SBO_SHARE_0.15": {
     "n": 12,
     "mean_rank_diff": 0,
     "upper": 0,
-    "alpha": 0.0045,
+    "alpha": 0.0025,
     "top3_diff": 0,
-    "pfs_ex_top1_base": 26.7,
-    "pfs_ex_top1_cand": 0.0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 27.7,
+    "promote": false
+   },
+   "AUTO_SBO_SHARE_0.45": {
+    "n": 12,
+    "mean_rank_diff": 0.083,
+    "upper": 0.667,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 33.3,
+    "promote": false
+   },
+   "AUTO_MARKET_W_0.15": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 27.6,
+    "promote": false
+   },
+   "AUTO_PICKS_W_0.75": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0.333,
+    "alpha": 0.0025,
+    "top3_diff": 0.083,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 47.7,
+    "promote": false
+   },
+   "AUTO_SCORE_win_brs0.0": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 1,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 27.5,
+    "promote": false
+   },
+   "EXACT_BY_W": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 18.6,
+    "promote": false
+   },
+   "EXACT_2HEAD": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 24.4,
+    "promote": false
+   },
+   "AXIS2_EXACT_BY_W": {
+    "n": 12,
+    "mean_rank_diff": 0,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 36.6,
+    "promote": false
+   },
+   "MKT30_PICKS": {
+    "n": 12,
+    "mean_rank_diff": -0.25,
+    "upper": 0,
+    "alpha": 0.0025,
+    "top3_diff": 0.083,
+    "pfs_ex_top1_base": 27.5,
+    "pfs_ex_top1_cand": 47.7,
     "promote": false
    }
   }
