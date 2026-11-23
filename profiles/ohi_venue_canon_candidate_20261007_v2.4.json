@@ -1,0 +1,227 @@
+{
+  "profile_id": "KM-LOCAL-OHI-v2.4-CANDIDATE-20261007-R1",
+  "canonical_name": "大井競馬攻略条項 v2.4-OHI-CANDIDATE",
+  "created_at": "2026-10-07T21:46:00+09:00",
+  "status": "CANDIDATE / SHADOW-ONLY / NON-PRODUCTION / NON-NUMERICAL / VENUE-PREDICTION-REFINEMENT / BEHAVIOR-CHANGING / PROMOTION-HOLD / FROZEN-UNKNOWN-OOS-REQUIRED",
+  "predecessor": {
+    "canonical_name": "大井競馬攻略条項 v2.3-OHI",
+    "relationship": "PRODUCTION_REMAINS_CURRENT / CANDIDATE_DOES_NOT_SUPERSEDE"
+  },
+  "production_effect": "NONE",
+  "production_pointer_change": false,
+  "predictive_behavior_change": true,
+  "numerical_change": false,
+  "krs_physics_change": false,
+  "parameter_map_change": false,
+  "mec_r3_change": false,
+  "capital_policy_change": false,
+  "ticket_authority_change": false,
+  "authority_resolution": {
+    "creation_time_reference": "KM-FAMILY-CURRENT-AUTHORITY-20261005-R40",
+    "rule": "RESOLVE CURRENT FORMAL SUCCESSOR AT EXECUTION; DO NOT PIN STALE AUTHORITY",
+    "production_venue_canon": "大井競馬攻略条項 v2.3-OHI",
+    "candidate_current_only_if_explicitly_promoted": false,
+    "r42_at_creation": "OPEN PR / NON-PRODUCTION"
+  },
+  "day_regression_basis": {
+    "date": "2026-10-07",
+    "venue": "OHI",
+    "race_count": 12,
+    "settlement_authority": "FROZEN_RECOMMENDATION / ACTUAL PURCHASE NOT VERIFIED",
+    "investment_yen": 183200,
+    "return_yen": 111440,
+    "profit_loss_yen": -71760,
+    "pfs_pct": 60.83,
+    "hit_races": 11,
+    "profitable_races": 3,
+    "hit_but_loss_races": 8,
+    "prediction_metrics": {
+      "winner_w_capture": "9/12",
+      "p2_capture": "12/12",
+      "p3_capture": "12/12",
+      "ordered_pair_ticket_capture": "8/12",
+      "ordered_exact_ticket_capture": "4/12"
+    },
+    "first_material_failure_groups": {
+      "winner_role": [
+        "R03",
+        "R06",
+        "R10"
+      ],
+      "pair_or_exact_connection": [
+        "R02",
+        "R04",
+        "R05",
+        "R07",
+        "R09"
+      ],
+      "capital_efficiency": [
+        "R01",
+        "R11",
+        "R12"
+      ],
+      "none": [
+        "R08"
+      ]
+    },
+    "caveat": "Same-day correlated evidence; training/regression only and not Frozen Unknown OOS for v2.4."
+  },
+  "venue_shadow_hypotheses": [
+    {
+      "id": "OHI-ABILITY-READINESS-SEPARATION-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "purpose": "Separate Ability Ceiling from Current Race Readiness, Venue Adaptation and Stage-fit.",
+      "triggers": [
+        "HISTORICAL_OR_CLASS_OR_DISTANCE_CEILING_HIGH",
+        "CURRENT_EXECUTION_EVIDENCE_SPARSE_OR_CONFLICT",
+        "LAYOFF_OR_TRANSFER_OR_FIRST_OHI_OR_CLASS_TRANSITION",
+        "W_REASON_OVERDEPENDENT_ON_HISTORICAL_CEILING"
+      ],
+      "action": "RE-AUDIT W REACHABILITY WHILE PRESERVING ABILITY CEILING; NO FIXED UPLIFT OR DECAY",
+      "automatic_promotion": false,
+      "numerical_rule": false
+    },
+    {
+      "id": "OHI-ACQUISITION-LEADERSHIP-COST-STALKABILITY-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "purpose": "Separate Position Acquisition, Leadership Cost, Stalkability, Pressure Exposure and Survival.",
+      "triggers": [
+        "MULTIPLE_FRONT_CANDIDATES_OR_FRONT_CONGESTION",
+        "REPEATABLE_POSITION_ACQUISITION",
+        "LEADER_FIXED_OR_CONTESTED_FRONT_RISK",
+        "STALKABILITY_OR_TRACKING_OPTION",
+        "LIGHTWEIGHT_OR_SAME_DAY_GCI_OR_PACE_PRESSURE_MATERIAL"
+      ],
+      "action": "REVIEW WINNER CONVERSION WITHOUT EQUATING FRONT ACCESS WITH FRONT SURVIVAL",
+      "automatic_promotion": false,
+      "numerical_rule": false
+    },
+    {
+      "id": "OHI-VENUE-CONDITIONED-WINNER-ROLE-MIGRATION-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "base_trigger": "LOWER_ROLE_RETAINED_W_ABSENT",
+      "independent_evidence": [
+        "POSITION_ACQUISITION",
+        "CURRENT_FORM",
+        "LIGHTWEIGHT_OR_WEIGHT_CONTEXT",
+        "SAME_DAY_GCI",
+        "LEADERSHIP_COST_OR_STALKABILITY",
+        "SURVIVAL_FAILURE_REASON",
+        "FRONT_CONGESTION",
+        "CLASS_CONTINUITY_OR_TRANSITION",
+        "DISTANCE_TRANSLATION",
+        "FIRST_OHI_OR_TRANSFER_ADAPTATION"
+      ],
+      "action": "RAISE W-REVIEW PRIORITY ONLY WHEN MULTIPLE INDEPENDENT VENUE REASONS CONVERGE",
+      "authority": "W-REVIEW != W-PROMOTION",
+      "automatic_promotion": false,
+      "automatic_purchase": false,
+      "numerical_rule": false
+    },
+    {
+      "id": "OHI-TRANSFER-FIRST-OHI-ADAPTATION-UNCERTAINTY-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "principles": [
+        "UNKNOWN != WEAK",
+        "UNKNOWN != STRONG",
+        "UNKNOWN != AUTO_ELIMINATION",
+        "FIRST_OHI != AUTOMATIC_DOWNGRADE",
+        "HIGH_EXTERNAL_CEILING != AUTOMATIC_W_CORE"
+      ],
+      "action": "PRESERVE ABILITY CEILING AND SEPARATELY EXPRESS VENUE ADAPTATION / CURRENT READINESS UNCERTAINTY",
+      "automatic_promotion": false,
+      "numerical_rule": false
+    }
+  ],
+  "regression_fixtures": [
+    {
+      "race_id": "KM-LOCAL-OHI-20261007-R01-LIVE-R1",
+      "fixture_role": "ABILITY_CEILING_VS_WINNER_CONVERSION / CAPITAL_FAILURE_NEUTRAL_CONTROL",
+      "known_result_use": "REGRESSION_ONLY"
+    },
+    {
+      "race_id": "KM-LOCAL-OHI-20261007-R06-LIVE-R1",
+      "fixture_role": "INDEPENDENT_RESCUE_POSITIVE_CONTROL",
+      "known_result_use": "REGRESSION_ONLY"
+    },
+    {
+      "race_id": "KM-LOCAL-OHI-20261007-R07-LIVE-R1",
+      "fixture_role": "ROLE_CAPTURE_PAIR_CONNECTION_SEPARATION",
+      "known_result_use": "REGRESSION_ONLY"
+    },
+    {
+      "race_id": "KM-LOCAL-OHI-20261007-R10-LIVE-R1",
+      "fixture_role": "STATIC_KRS_COMMON_BLIND_SPOT / WINNER_MIGRATION",
+      "known_result_use": "REGRESSION_ONLY"
+    }
+  ],
+  "common_handoff": {
+    "venue_canon_ownership": false,
+    "topics": [
+      "PROTECTION_BURDEN_RATIO",
+      "MARKET_PAYOUT_SUFFICIENCY",
+      "CONSERVATIVE_CAPITAL",
+      "CORE_ONLY_DISPOSITION",
+      "SET_ONLY_SET_PAIR",
+      "EXACT_TOP_N_PURCHASE_WIDTH",
+      "PROTECTION_CAPITAL_CEILING",
+      "EQUAL_BUDGET_EQUAL_TICKET_NORMALIZATION",
+      "PAIR_RESIDUAL_PURCHASE_AUTHORITY",
+      "PAIR_LOCAL_SELECTIVE_EXACT_PURCHASE_AUTHORITY",
+      "PRODUCTION_MEC_R3",
+      "PRODUCTION_CAPITAL_POLICY",
+      "KRS_PHYSICS_PARAMETER_MAP",
+      "TICKET_STAKE"
+    ],
+    "production_effect": "NONE"
+  },
+  "krs_boundary": {
+    "firewall": "KEEP",
+    "automatic_w_pair_exact_promotion": false,
+    "venue_candidate_may_promote_krs_to_production": false,
+    "family_handoff_condition": "VENUE W-REVIEW EVIDENCE + INDEPENDENT KRS SUPPORT MAY ENTER FAMILY SHADOW REVIEW ONLY"
+  },
+  "oos_validation": {
+    "todays_races_eligible": false,
+    "reason": "KNOWN_RESULT / TRAINING_REGRESSION_ONLY",
+    "next_unknown_races": "PREREGISTERED RESULT-BLIND FREEZE REQUIRED",
+    "automatic_promotion": false,
+    "required_artifacts": [
+      "PRODUCTION_V2_3_STATIC_SNAPSHOT",
+      "CANDIDATE_OFF_SNAPSHOT",
+      "CANDIDATE_ON_REVIEW",
+      "ROLE_DIFF",
+      "ACTIVATION_REASON",
+      "SOURCE_BASIS_CUTOFF_TIMESTAMP",
+      "CANDIDATE_WIDTH",
+      "POST_RESULT_RANK_GAIN_HARM"
+    ],
+    "metrics": [
+      "WINNER_RANK",
+      "W_CAPTURE",
+      "P2_CAPTURE_PRESERVATION",
+      "P3_CAPTURE_PRESERVATION",
+      "ALTERNATIVE_WINNER_CAPTURE",
+      "FALSE_W_PROMOTION",
+      "POSITIVE_CONTROL_DESTRUCTION",
+      "CANDIDATE_WIDTH",
+      "ABILITY_READINESS_CONFLICT_RESOLUTION",
+      "ACQUISITION_LEADERSHIP_STALKABILITY_CLASSIFICATION"
+    ]
+  },
+  "promotion_gate": {
+    "preregistered_result_blind_activation": true,
+    "frozen_unknown_oos_required": true,
+    "same_race_production_v23_comparison": true,
+    "positive_negative_controls": true,
+    "false_promotion_audit": true,
+    "width_inflation_audit": true,
+    "multiple_race_days": true,
+    "explicit_human_review": true,
+    "automatic_promotion": false
+  }
+}
