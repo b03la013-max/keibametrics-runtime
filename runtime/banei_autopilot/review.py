@@ -40,6 +40,48 @@ def cross_pair_third(exact, order):
             'cross_pair_third': bool(pair_thirds) and t not in pair_thirds and t in other_thirds}
 
 
+def role_set_coverage(rows, order):
+    """役割の被覆と集合の大きさを一緒に保存する（地方 根幹思想 Rev1 §11 Coverage≠Discrimination・
+    Scientific Reset §6）。無作為基準＝集合の頭数÷出走頭数（その頭数を無作為に選んだときの的中確率）。
+    較正済みの conformal 集合ではない。証拠のみ（券面・点数には影響しない）。"""
+    if not rows or not order or len(order) < 3:
+        return None
+    n = len(rows)
+    out = {}
+    for pos, role in (('1', 'role_w'), ('2', 'role_p2'), ('3', 'role_p3')):
+        members = {str(x['no']) for x in rows if x.get(role)}
+        out[role] = {'size': len(members), 'hit': str(order[int(pos) - 1]) in members,
+                     'random_base': round(len(members) / n, 3) if n else None}
+    return out
+
+
+def top2_gap(rows, key='win_score'):
+    """上位2頭の得点差（地方 KRS-Engine 運用接続規程 v1.6 Rev.4 の LOW-DISCRIMINATION を読み替え）。
+    差が小さいレースは馬の区別がついていない。閾値は置かず、差の大小で◎の成績を分けて数えるだけ（証拠のみ）。"""
+    sc = sorted((x.get(key) for x in rows or [] if x.get(key) is not None), reverse=True)
+    return round(sc[0] - sc[1], 2) if len(sc) >= 2 else None
+
+
+def coverage_summary(revs):
+    """累計：役割ごとの的中率と無作為基準の平均、上位2頭の差（中央値で上下に分けた◎1着数）。"""
+    cov = [x['role_coverage'] for x in revs if x.get('role_coverage')]
+    res = {}
+    for role in ('role_w', 'role_p2', 'role_p3'):
+        c = [x[role] for x in cov]
+        if c:
+            res[role] = {'races': len(c), 'hit_rate': round(sum(x['hit'] for x in c) / len(c), 3),
+                         'random_base': round(sum(x['random_base'] or 0 for x in c) / len(c), 3),
+                         'mean_size': round(sum(x['size'] for x in c) / len(c), 2)}
+    g = sorted(x['top2_gap'] for x in revs if x.get('top2_gap') is not None)
+    if g:
+        med = g[len(g) // 2]
+        lo = [x for x in revs if x.get('top2_gap') is not None and x['top2_gap'] < med]
+        hi = [x for x in revs if x.get('top2_gap') is not None and x['top2_gap'] >= med]
+        res['top2_gap'] = {'median': med, 'low_races': len(lo), 'low_honmei_win': sum(x['honmei_finish'] == 1 for x in lo),
+                           'high_races': len(hi), 'high_honmei_win': sum(x['honmei_finish'] == 1 for x in hi)}
+    return res or None
+
+
 def race_review(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -156,6 +198,7 @@ def race_review(out, key, r):
             'honmei': ev.get('honmei'), 'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
+            'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
 
@@ -255,7 +298,8 @@ def summarize(revs, missed):
             'hit_but_loss': sum(1 for x in revs if 0 < x['return'] < x['stake']),
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
             'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
-            'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third'))}
+            'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third')),
+            'coverage': coverage_summary(revs)}
 
 
 def _md(title, s, revs=None):
@@ -269,6 +313,15 @@ def _md(title, s, revs=None):
          f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
          f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
+    cv = s.get('coverage') or {}
+    if any(k in cv for k in ('role_w', 'role_p2', 'role_p3')):
+        L.append('- 役割の被覆（的中率／無作為基準・平均頭数）: ' + '・'.join(
+            f"{nm} {cv[k]['hit_rate']:.0%}／{cv[k]['random_base']:.0%}・{cv[k]['mean_size']}頭"
+            for k, nm in (('role_w', 'W'), ('role_p2', 'P2'), ('role_p3', 'P3')) if k in cv))
+    if cv.get('top2_gap'):
+        g = cv['top2_gap']
+        L.append(f"- 上位2頭の得点差（中央値 {g['median']}）: 差が小さい {g['low_races']}R の◎1着 {g['low_honmei_win']}"
+                 f"／差が大きい {g['high_races']}R の◎1着 {g['high_honmei_win']}")
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
