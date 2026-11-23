@@ -26,6 +26,7 @@
 |---|---|---|
 | 3着の別並び補償（`P2:CROSS_PAIR_THIRD`、`exposure.cross_pair_third`） | 過去の反省（ばんえい 2026-09-05 6R・7R、ChatGPT 自己集計・未検証）。v3.7-BAN Rev.2 の起案根拠 | Drive 精読 q-922（2026-11-22） |
 | 直前見直しの変更台帳（`check10` の `changes`：各馬の騎手・馬体重・人気・オッズ・出走の有無の before/after と受信時刻。Rev2 判定には使わない） | ばんえい 2026-11-22 全12R反省（ChatGPT）P0-4「出走集合と変更時点」（11R の騎手変更が予測入力に反映されたか未確認） | Drive 精読 q-1050（2026-11-23） |
+| 役割の被覆と無作為基準（`role_coverage`：W/P2/P3 の頭数・的中・頭数÷出走頭数、`coverage` に累計）と上位2頭の得点差（`top2_gap`、中央値で上下に分けた◎1着数。閾値なし） | 地方の設計原則（根幹思想 Rev1 §11 Coverage≠Discrimination、Scientific Reset §6、KRS-Engine 運用接続規程 v1.6 Rev.4 の LOW-DISCRIMINATION を読み替え）。データ branch 21R の参考値：P2 的中 66.7% 対 無作為 63.3% | Drive 精読 q111・q117・q129（2026-11-23） |
 
 ## 1. 情報の取り出し
 
