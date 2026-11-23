@@ -15,3 +15,4 @@
 - 新規登録：G004-PAIRFULL-pairs4（GEN:PAIRFULL:pairs=4）← 反省 P1:CAP_LOST_HIT（9件・136,240円）、2026-11-24 から比較
 - 新規登録：G005-WPLUS-add1（GEN:WPLUS:add=1）← 反省 P1:ROLE_W_MISS（12件・69,280円）、2026-11-24 から比較
 - 比較中の自動案：5／6（G001-P2PLUS-add1・G002-CORE-n2・G003-PAIRFULL-pairs6・G004-PAIRFULL-pairs4・G005-WPLUS-add1）
+- 追加登録：G006-MKTP2-blend50（2着候補を市場順と半々で組み直す）← 2着の取りこぼし、2026-11-24 から比較
