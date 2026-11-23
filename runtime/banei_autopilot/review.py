@@ -126,6 +126,15 @@ def result_orders(res):
 CHAIN = ('HORSE', 'ROLE_W', 'ROLE_P2', 'ROLE_P3', 'TRIO', 'HEAD', 'ORDERED_PAIR', 'THIRD')
 
 
+def winner_off_ticket(tk, winner, stake=None):
+    """勝ち馬が券面のどの組にも入らないまま点数を使ったか（中央 11/23 反省 P0-05「W 被覆なしの点数拡張」の読み替え。証拠のみ）。"""
+    if winner is None or not tk.get('points'):
+        return None
+    on = any(winner in x for x in (tk.get('trio') or [])) or any(winner in x for x in (tk.get('exact') or []))
+    return {'winner_on_ticket': on, 'points': tk['points'], 'wasted_points': 0 if on else tk['points'],
+            'wasted_stake': 0 if on or stake is None else stake}
+
+
 def failure_chain(rows, marks, tk, order):
     """断線の多層記録（11/23 ChatGPT 反省 P0-5：単一の first_failure だけで原因を決めない）。
     HORSE（3頭とも印内）→ ROLE_W/P2/P3（着順ごとの役割）→ TRIO（三連複の組）→ HEAD（三連単の頭に勝ち馬）
@@ -231,6 +240,7 @@ def race_review(out, key, r):
     hub_share = round(cnt[hub] / len(tk['trio']), 2) if hub else None
     exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
                 'hub_failed': bool(hub and hub not in res['order'][:3])}
+    exposure['winner_off_ticket'] = winner_off_ticket(tk, w_, res.get('stake'))
     cpt = cross_pair_third(tk['exact'], res['order'])
     exposure['cross_pair_third'] = bool(cpt and cpt['cross_pair_third'])
     if exposure['cross_pair_third']:
@@ -378,6 +388,8 @@ def summarize(revs, missed):
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
             'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
             'cross_pair_third': sum(1 for x in revs if (x.get('exposure') or {}).get('cross_pair_third')),
+            'winner_off_ticket': sum(1 for x in revs if ((x.get('exposure') or {}).get('winner_off_ticket') or {}).get('winner_on_ticket') is False),
+            'winner_off_ticket_stake': sum(((x.get('exposure') or {}).get('winner_off_ticket') or {}).get('wasted_stake') or 0 for x in revs),
             'coverage': coverage_summary(revs), 'longshot_lane': longshot_lane_trend(revs),
             'chain_failed': {k: sum(1 for x in revs if k in ((x.get('chain') or {}).get('failed') or [])) for k in CHAIN},
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
@@ -394,7 +406,8 @@ def _md(title, s, revs=None):
          f"- 断線の多層記録（欠けた層ごとのレース数）: {s.get('chain_failed')}／最初の欠損: {s.get('chain_first')}／同着 {s.get('dead_heat', 0)}R",
          f"- 変換ファネル: 勝ち馬∈W {s['funnel']['winner_in_W']} → 1-2着の組 {s['funnel']['pair_in_tickets']} → 三連複 {s['funnel']['trio_bought']}"
          f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
-         f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}",
+         f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}"
+         f"／勝ち馬が券面に無いまま買った {s.get('winner_off_ticket', 0)}R（{s.get('winner_off_ticket_stake', 0):,}円）",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
     cv = s.get('coverage') or {}
     if any(k in cv for k in ('role_w', 'role_p2', 'role_p3')):
