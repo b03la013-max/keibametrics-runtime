@@ -152,3 +152,16 @@ def test_ticket_shape_arms_frozen_with_tickets(tmp_path):
             assert set(a["dropped_bet_types"]) == dropped
             assert all(t["bet_type"] not in dropped for t in a["tickets"])
             assert a["investment"] == sum(t["stake"] for t in a["tickets"])
+
+
+def test_w_plus_static2_same_budget_keeps_production_ticket_count():
+    """11/23 review P0-01: wider W compared at the same number of points as Production."""
+    rows = rc.run(["20261123"])
+    changed = [r for r in rows if r.get("W_PLUS_STATIC2_SAME_BUDGET")]
+    assert changed
+    for r in changed:
+        a, w2 = r["W_PLUS_STATIC2_SAME_BUDGET"], r["W_PLUS_STATIC2"]
+        if "mec_refused" in a:
+            continue
+        assert a["investment"] <= r["baseline"]["investment"]
+        assert a["W_hit"] == w2["W_hit"]
