@@ -30,6 +30,10 @@ Candidates
   EXACTA returned 97%. Races whose tickets are all TRIFECTA become no-bet.
 - CAP30 (11/22 review P0-04, ticket count): races with more than 30 Production tickets keep 30
   (CORE tier first, then Production order); fewer points at the same role sets, no MEC rebuild.
+- W_STATIC_TOP3_SINGLE_HEAD (11/23 review P1, role failure): when the formal W has exactly one head, add
+  the Static top-3 runners missing from W as PROTECTED heads (at most two). 11/23: in 5 of 18 paid races
+  the winner sat at Static rank 2-3 outside a single-head W; W_PLUS_STATIC2 covers rank 2 only, so the
+  pair (W_PLUS_STATIC2, this) separates "one more head" from "rank 3 as well".
 - EXACTA_ONLY (11/22 review P1, ticket shape): keep only the frozen Production EXACTA tickets (drop TRIFECTA
   and TRIO, no MEC rebuild). Separates "TRIFECTA is the drag" from "the whole trio/trifecta layer is".
 """
@@ -98,6 +102,15 @@ def w_plus_static2(f):
         return False
     _mirror_pairs(f, new_head=nxt, tag='W_PLUS_STATIC2')
     return True
+
+
+def w_static_top3_single_head(f):
+    W = _live(f, 'W')
+    rank = [str(r) for r in f['static_prediction']['ranking']]
+    if len(W) != 1 or len(rank) < 3:
+        return False
+    picks = [r for r in rank[:3] if r not in W][:2]
+    return bool(picks) and _add_heads(f, picks, 'W_STATIC_TOP3_SINGLE_HEAD')
 
 
 def p2_krs_head_local(f):
@@ -311,7 +324,8 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'P3_MARKET_TOP5': p3_market_top5, 'P3_STATIC_SAME_COUNT_CONTROL': p3_static_same_count_control,
               'SKIP_HEAVY_GOING': skip_heavy_going,
               'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control,
-              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30}
+              'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30,
+              'W_STATIC_TOP3_SINGLE_HEAD': w_static_top3_single_head}
 
 
 def _settle(f, official):

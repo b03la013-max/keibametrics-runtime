@@ -1,0 +1,36 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261128-REVIEW1123",
+ "registered_at": "2026-11-23T19:30:00+09:00",
+ "registered_by": "Claude (scheduled race-day review 2026-11-23; Owner standing instruction 2026-11-21 19:19). Record only; merge needs Owner approval.",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261128_REVIEW1122.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-28",
+ "first_eligible_rule": "the first JRA card whose candidate freeze runs after this file and the code are on main; if the merge lands after 2026-11-28 the first eligible card moves to that later card and the earlier card never counts",
+ "evidence_rule": "same as the extended profile (frozen before result only; venue x surface; min cell 12R; stages 30/100/300; no significance claim below 100R). The known-result look at 2026-11-21..23 (hypothesis formed after seeing 11/23) is context only and never counts.",
+ "review_basis": {
+  "date": "2026-11-23",
+  "settled_paid_races": 18,
+  "pfs": "0.0% (44,100 -> 0, net -44,100; 0 hit races)",
+  "winner_classification_paid_and_paper_20R": "Static 1-3 in W 3 / Static 1-3 outside W (role) 5 / Static 4-6 4 / Static 7+ 8",
+  "P1_role_failure": "the 5 role failures (FKS R07 rank2, FKS R08 rank3, FKS R11 rank3, TKY R01 rank2, TKY R11 rank3) all had a single-head W. 3 days: 8 role failures in 50 paid races.",
+  "context_replay_11_23_18R": "baseline 0.0%; W_PLUS_STATIC2 8.6% (net -51,080); W_STATIC_TOP3_SINGLE_HEAD 49.4% (excl. max 24.4%, net -32,850); W_PLUS_MARKET_TOP3 59.2% (net -33,530) - context only, formed after the result"
+ },
+ "budget_note": "adds heads, so investment rises (MEC rebuild with the Production builder); report PFS, PFS excl. max payout, net profit change and investment change together, and compare with W_PLUS_STATIC2 (one added head) and W_PLUS_MARKET_TOP3 (market signal).",
+ "arms": [
+  {
+   "id": "W_STATIC_TOP3_SINGLE_HEAD",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_ROLE",
+   "rule": "when the formal W has exactly one head, add the Static ranking top-3 runners missing from W (at most two) as PROTECTED heads; MEC rebuilt by build_mec_plan; all other roles unchanged",
+   "metric": "net profit change vs frozen Production tickets; PFS and PFS excl. max payout; winner-in-W count",
+   "promote_if": "at 300R net profit change > 0, PFS excl. max payout above Production and above W_PLUS_STATIC2, venue_rule == CONSISTENT_IMPROVEMENT -> Owner decision",
+   "reject_if": "at 100R net profit change < W_PLUS_STATIC2's (the third head costs more than it returns) or < 0 with venue_rule CONSISTENT_DEGRADATION"
+  }
+ ],
+ "not_registered": {
+  "P3_rank_problem": "3rd place at Static 7+ in 8 of 20 races; already tracked by P3_MARKET_TOP5 / P3_STATIC_SAME_COUNT_CONTROL (11/22), no duplicate arm",
+  "ticket_shape": "DROP_TRIFECTA / EXACTA_ONLY / CAP30 already registered; 11/23 they only reduce the loss (0 hits)"
+ },
+ "decision_dates": {"interim": "2026-11-30", "first": "2026-12-07", "second": "2026-12-28"},
+ "owner_decision_only": "Production weights, numbers, tickets, capital policy, the three proclamations and the 60-point cap are unchanged by this file; adoption is decided by the Owner on the decision dates."
+}

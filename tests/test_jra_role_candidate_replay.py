@@ -152,3 +152,32 @@ def test_ticket_shape_arms_frozen_with_tickets(tmp_path):
             assert set(a["dropped_bet_types"]) == dropped
             assert all(t["bet_type"] not in dropped for t in a["tickets"])
             assert a["investment"] == sum(t["stake"] for t in a["tickets"])
+
+
+def test_w_static_top3_single_head_adds_static_top3_only_for_single_head():
+    """11/23 review P1: single-head W gets the missing Static top-3 runners as heads (at most two)."""
+    import copy
+    rid = "KM-JRA-FKS-20261123-R08"  # single head 14 (Static 1); winner 11 was Static 3
+    final = json.loads(Path(f"runtime/final_artifacts/{rid}.json").read_text())
+    rank = [str(r) for r in final["static_prediction"]["ranking"]]
+    f = copy.deepcopy(final)
+    before = rc._live(f, "W")
+    assert len(before) == 1
+    assert rc.w_static_top3_single_head(f)
+    after = set(rc._live(f, "W"))
+    assert after == set(before) | set(rank[:3]) and len(after - set(before)) <= 2
+    # a multi-head W is untouched
+    g = copy.deepcopy(f)
+    assert not rc.w_static_top3_single_head(g)
+    assert rc.w_static_top3_single_head in rc.CANDIDATES.values()
+
+
+def test_w_static_top3_single_head_never_more_than_two_heads_added():
+    import copy
+    final = json.loads(Path(f"runtime/final_artifacts/{RID}.json").read_text())
+    f = copy.deepcopy(final)
+    W = rc._live(f, "W")
+    if len(W) != 1:
+        return
+    rc.w_static_top3_single_head(f)
+    assert len(set(rc._live(f, "W")) - set(W)) <= 2
