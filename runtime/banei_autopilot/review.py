@@ -126,6 +126,15 @@ def result_orders(res):
 CHAIN = ('HORSE', 'ROLE_W', 'ROLE_P2', 'ROLE_P3', 'TRIO', 'HEAD', 'ORDERED_PAIR', 'THIRD')
 
 
+def compression_loss(fin, order3, tk):
+    """着順の組が役割の全組合せ（W×P2×P3）にあったのに、30点への圧縮で券面から外れたか（証拠のみ）。"""
+    w_, s_, t_ = order3
+    in_univ = all(fin[k]['in_role'] for k in ('1', '2', '3'))
+    return {'in_universe': in_univ,
+            'compressed_out_trio': bool(in_univ and not any(set(x) == {w_, s_, t_} for x in tk.get('trio') or [])),
+            'compressed_out_exact': bool(in_univ and not any(tuple(x) == (w_, s_, t_) for x in tk.get('exact') or []))}
+
+
 def winner_off_ticket(tk, winner, stake=None):
     """勝ち馬が券面のどの組にも入らないまま点数を使ったか（中央 11/23 反省 P0-05「W 被覆なしの点数拡張」の読み替え。証拠のみ）。"""
     if winner is None or not tk.get('points'):
@@ -285,6 +294,9 @@ def race_review(out, key, r):
               'pair_in_tickets': any(len(x) == 3 and x[0] == w_ and x[1] == s_ for x in tk['exact'])
               or any({w_, s_} <= set(x) for x in tk['trio']),
               'trio_bought': trio_ret > 0, 'exact_bought': ex_ret > 0, 'profit': (res['return'] or 0) > (res['stake'] or 0)}
+    # 圧縮で消えた勝ち筋（Coverage Preservation の点検、証拠のみ）: 着順の組が役割の全組合せ（Universe）には
+    # あったのに、30点への圧縮で券面から外れたか。役割の段階で無ければ圧縮の責任ではない。
+    funnel.update(compression_loss(fin, (w_, s_, t_), tk))
     # 着順馬ごとの経路（Formal Post-Race Review 16〜18節の簡易版）: 役割 → 三連複に入ったか → 三連単に入ったか
     for k, f in fin.items():
         n_ = f['no']
@@ -567,7 +579,8 @@ def summarize(revs, missed):
             'third_in_P3': sum(x['finishers']['3']['in_role'] for x in revs),
             'ffl': dict(ffl), 'cause': dict(cause), 'p0p1': dict(p), 'rev_audit': a,
             'funnel': {k: sum(1 for x in revs if (x.get('funnel') or {}).get(k)) for k in
-                       ('winner_in_W', 'pair_in_tickets', 'trio_bought', 'exact_bought', 'profit')},
+                       ('winner_in_W', 'pair_in_tickets', 'trio_bought', 'exact_bought', 'profit',
+                        'in_universe', 'compressed_out_trio', 'compressed_out_exact')},
             'hit_but_loss': sum(1 for x in revs if 0 < x['return'] < x['stake']),
             'extreme_hub': sum(1 for x in revs if (x.get('exposure') or {}).get('extreme_hub')),
             'hub_failed': sum(1 for x in revs if (x.get('exposure') or {}).get('hub_failed')),
@@ -595,6 +608,8 @@ def _md(title, s, revs=None):
          f" → 三連単 {s['funnel']['exact_bought']} → 収支プラス {s['funnel']['profit']}／的中したが投資割れ {s['hit_but_loss']}"
          f"／一極集中 {s['extreme_hub']}・最多出現馬が3着外 {s['hub_failed']}"
          f"／勝ち馬が券面に無いまま買った {s.get('winner_off_ticket', 0)}R（{s.get('winner_off_ticket_stake', 0):,}円）",
+         f"- 圧縮で消えた勝ち筋: 着順の組が役割の全組合せにあった {s['funnel'].get('in_universe', 0)}R のうち、"
+         f"30点への圧縮で三連複から外れた {s['funnel'].get('compressed_out_trio', 0)}R・三連単から外れた {s['funnel'].get('compressed_out_exact', 0)}R",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
     cv = s.get('coverage') or {}
     if any(k in cv for k in ('role_w', 'role_p2', 'role_p3')):
