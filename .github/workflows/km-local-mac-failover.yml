@@ -1,0 +1,69 @@
+name: KeibaMetrics LOCAL Mac failover
+run-name: LOCAL Mac failover check
+
+# Owner decision 2026-11-24 13:54 JST: when the Owner's Mac (self-hosted runner km-local) is not picking up the
+# LOCAL autopilot (asleep / offline), automatically continue on a GitHub-hosted runner. Replaces the Claude
+# watchdog scheduled tasks. The GitHub-hosted fallback has no NAR history or private caches, so the external
+# evidence connection is skipped there (EXT_TABLES_FAIL is logged and the formal pipeline continues).
+# Rule: no LOCAL run in progress, at least one run waiting, and no LOCAL run has been in progress or finished
+# for >= STALE_MIN minutes -> cancel the waiting run(s) and dispatch runner=github. Never starts a second
+# loop while one is in progress. No other workflow is touched.
+permissions:
+  actions: write
+  contents: read
+  issues: write   # one failover notice on the Owner delivery issue #424
+
+on:
+  schedule:
+    # every 30 min, 08:17-21:47 JST (23 UTC previous day and 00-12 UTC)
+    - cron: "17,47 23,0-12 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: km-local-mac-failover
+  cancel-in-progress: true
+
+jobs:
+  failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      WF: km-local-race-day-autopilot.yml
+      STALE_MIN: "25"
+    steps:
+      - name: Check the LOCAL worker and fail over if the Mac is not picking it up
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/workflows/$WF/runs?per_page=20" > runs.json
+          python3 - <<'PY'
+          import json, os, subprocess
+          from datetime import datetime, timezone
+          runs = json.load(open('runs.json'))['workflow_runs']
+          now = datetime.now(timezone.utc)
+          ts = lambda s: datetime.fromisoformat(s.replace('Z', '+00:00'))
+          live = [r for r in runs if r['status'] == 'in_progress']
+          waiting = [r for r in runs if r['status'] in ('queued', 'pending', 'waiting', 'requested')]
+          done = [r for r in runs if r['status'] == 'completed' and r['conclusion'] in ('success', 'failure', 'timed_out')]
+          last = max([ts(r['updated_at']) for r in live + done] or [ts('2000-01-01T00:00:00Z')])
+          age = (now - last).total_seconds() / 60
+          print(f'in_progress={len(live)} waiting={len(waiting)} minutes_since_last_activity={age:.0f}')
+          if live:
+              print('OK: a worker is in progress'); raise SystemExit(0)
+          if not waiting:
+              print('OK: nothing waiting (the autopilot schedule will queue the next run)'); raise SystemExit(0)
+          if age < int(os.environ['STALE_MIN']):
+              print('OK: waiting run is recent'); raise SystemExit(0)
+          repo, wf = os.environ['REPO'], os.environ['WF']
+          for r in waiting:
+              subprocess.run(['gh', 'api', '-X', 'POST', f"repos/{repo}/actions/runs/{r['id']}/cancel"], check=False)
+          subprocess.run(['gh', 'workflow', 'run', wf, '-R', repo, '--ref', 'main', '-f', 'mode=loop', '-f', 'runner=github'],
+                         check=True)
+          print(f'FAILOVER: Mac not picking up for {age:.0f} min -> dispatched runner=github')
+          subprocess.run(['gh', 'api', '-X', 'POST', f'repos/{repo}/issues/424/comments', '-f',
+                          f'body=【地方版】Macが{age:.0f}分間応答しないため、GitHub側の実行に自動で切り替えました（外部情報の接続は止まりますが、正式予想・配信・精算は続きます）。Macを起こすと翌日からMacに戻ります。'],
+                         check=False)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(f'FAILOVER: Mac not picking up the LOCAL autopilot for {age:.0f} min -> GitHub-hosted run dispatched\n')
+          PY

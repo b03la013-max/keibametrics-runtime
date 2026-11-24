@@ -234,7 +234,8 @@ def evaluate(race):
                      # evidence only (not in TPI): 馬体重の増減率・好走体重レンジの出所・NAR過去走数
                      'body_delta_pct': h.get('body_delta_pct'), 'good_bw_src': h.get('good_bw_src'),
                      'nar_starts': h.get('nar_starts'), 'jbr_hits': h.get('jbr_hits'),
-                     'jockey': h.get('jockey'), 'body_weight': h.get('body_weight'),   # 直前見直しの変更台帳用
+                     'jockey': h.get('jockey'), 'jockey_changed_from': h.get('jockey_changed_from'),
+                     'body_weight': h.get('body_weight'),   # 直前見直しの変更台帳用
                      '_sbo_avg': _f((h.get('idx_sbo') or {}).get('avg')),
                      'front_type': h.get('front_type'), 'fades_after_barrier': h.get('fades_after_barrier'),
                      'promoted': h.get('promoted'), 'win_streak': h.get('win_streak'),

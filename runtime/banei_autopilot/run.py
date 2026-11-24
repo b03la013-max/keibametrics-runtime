@@ -293,7 +293,12 @@ def first_failure(tk, order):
 
 def settle_race(reader, q, key, out):
     r = q['races'][key]
-    res = ST.parse_result(reader.result_page(r['rid']))
+    html = reader.result_page(r['rid'])
+    res = ST.parse_result(html)
+    ns = source.result_non_starters(html)                         # 取消・除外は返還（競走中止ではない）
+    if ns:
+        res['non_starters'] = sorted(set(res.get('non_starters') or []) | set(ns))
+        res['did_not_finish'] = [n for n in (res.get('did_not_finish') or []) if n not in ns]
     if res is None:
         return
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -361,6 +366,45 @@ class LazyHist(dict):
         return super().get(k, default)
 
 
+ALERT_ERR_N = 3          # 同じレースで連続3回の失敗 → 警告
+ALERT_SETTLE_MIN = 60    # 発走60分後になっても精算できていない → 警告
+
+
+def alert(q, out, kind, key, msg):
+    """異常を配信Issueへ1回だけ知らせる（同じ種類・同じレースは重ねない）。失敗しても本処理は止めない。"""
+    seen = q.setdefault('alerts', {})
+    tag = f'{kind}:{key}'
+    if tag in seen:
+        return False
+    seen[tag] = now_jst().isoformat()
+    log(out, 'ALERT', tag, msg)
+    issue = os.environ.get('KM_BAN_DELIVERY_ISSUE')
+    if issue:
+        try:
+            _gh('POST', f'/repos/{REPO}/issues/{issue}/comments',
+                {'body': f'### ⚠️ ばんえい自動運用の警告｜{kind}｜{key}\n\n{msg}\n\n<sub>自動監視（run.alert）。同じ種類・同じレースは1回だけ通知します。</sub>'})
+        except Exception as e:
+            log(out, 'ALERT_POST_FAIL', tag, f'{type(e).__name__}:{str(e)[:100]}')
+    return True
+
+
+def watch(q, out, now):
+    """レース別の未完了監視：締切超過・連続失敗・精算遅れ・反省失敗を警告する。"""
+    for key, r in q['races'].items():
+        post = datetime.fromisoformat(r['post'])
+        if r['state'] == 'MISSED_DEADLINE':
+            alert(q, out, 'MISSED_DEADLINE', key, f"{r['no']}R（{r['post'][11:16]}発走）の予想が締切までに作れませんでした。最後のエラー: {r.get('last_error') or 'なし（実行が止まっていた可能性）'}")
+        if r.get('err_n', 0) >= ALERT_ERR_N:
+            alert(q, out, 'REPEATED_ERROR', key, f"{r['no']}R で {r['err_n']} 回連続して失敗しています: {r.get('last_error')}")
+        if r['state'] == 'PREDICTION_COMPLETE' and not r.get('delivered') and now >= post - timedelta(minutes=CUTOFF):
+            alert(q, out, 'NOT_DELIVERED', key, f"{r['no']}R の予想は作成済みですが締切までに配信できませんでした: {r.get('delivery_error')}")
+        if r['state'] == 'PREDICTION_COMPLETE' and now >= post + timedelta(minutes=ALERT_SETTLE_MIN):
+            alert(q, out, 'SETTLE_LATE', key, f"{r['no']}R は発走{ALERT_SETTLE_MIN}分後でも精算できていません: {r.get('last_error') or '結果待ち'}")
+    for k in ('REVIEW_FAIL', 'IMPROVE_FAIL'):
+        if q.get(k.lower()):
+            alert(q, out, k, 'day', q[k.lower()])
+
+
 def tick(day, out, reader, hist):
     qp = out / 'queue.json'
     q = json.loads(qp.read_text()) if qp.exists() else discover(reader, day, out)
@@ -392,7 +436,10 @@ def tick(day, out, reader, hist):
                 break
             except Exception as e:                               # one race never stops the day
                 r['last_error'] = f'{type(e).__name__}:{str(e)[:160]}'
+                r['err_n'] = r.get('err_n', 0) + 1
                 log(out, 'ERROR', key, r['last_error'])
+            else:
+                r.pop('err_n', None)
             dump(qp, q)
     n_set = sum(1 for r in q['races'].values() if r['state'] == 'SETTLED')
     if n_set and (q.get('reviewed_n') != n_set or not q.get('review_done')):
@@ -408,10 +455,17 @@ def tick(day, out, reader, hist):
                     ev_ = registry.step(out.parent, log=lambda *a: log(out, *a))
                     q['improve'] = [list(e[:2]) for e in ev_]
                 except Exception as e:
-                    log(out, 'IMPROVE_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
+                    q['improve_fail'] = f'{type(e).__name__}:{str(e)[:160]}'
+                    log(out, 'IMPROVE_FAIL', q['improve_fail'])
         except Exception as e:                                   # the review never stops the day
-            log(out, 'REVIEW_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
+            q['review_fail'] = f'{type(e).__name__}:{str(e)[:160]}'
+            log(out, 'REVIEW_FAIL', q['review_fail'])
         dump(qp, q)
+    try:
+        watch(q, out, now_jst())
+        dump(qp, q)
+    except Exception as e:
+        log(out, 'WATCH_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
     report(q, out)
     return q
 

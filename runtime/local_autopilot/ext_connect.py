@@ -31,10 +31,11 @@ EXT_FROM = '2026-11-22'
 EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
-MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD']
+MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
-DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8}
+DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
+                'KM3': 0.0}   # 亀谷 v3 (B4 2026-11-24): starts at 0, only the weekly hold-out refit can move it
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
@@ -213,6 +214,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                                'trainer': em.key(x.get('trainer')), 'frame': em.frame_band(x.get('frame_no')), 'horse': hk,
                                'sex': cur['sex'], 'age': x.get('age'), 'bwchg': em.chg_band(x.get('current_body_weight_change')),
                                'season': em.season(day), 'spd': em.spd_of(hh), 'labels': em.labels(cur, hh),
+                               'cand_labels': em.cand_labels(cur, hh),
                                'pop': pop or 99, 'style': em.style(hh), 'early_now': None}
     sp = [r['spd'] for r in rows.values() if r['spd'] is not None]
     mu = sum(sp) / len(sp) if len(sp) >= 2 else None
@@ -239,6 +241,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                    'ranking_components': {k: round(s, 1) for k, (s, _) in fixed.items()}
                    | {k: round(comp[k][0], 1) for k in MEASURED if k in comp},
                    'labels': [f'{a}={b}' for a, b in r['labels']],
+                   'cand_labels': [f'{a}={b}' for a, b in r.get('cand_labels') or []],
                    'pattern_detail': comp.get('PAT', (None, []))[1],
                    'full29_evidence': evidence}
     status = {'tables': bool(cells), 'tables_period': (t or {}).get('period'), 'tables_starts': (t or {}).get('starts'),

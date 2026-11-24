@@ -20,6 +20,10 @@ from cryptography.exceptions import InvalidSignature
 
 from verify_source_envelope import verify_payload
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import km_oidc_witness  # noqa: E402
+
 
 REPOSITORY = "b03la013-max/keibametrics-runtime"
 REPOSITORY_ID = "1373764421"
@@ -28,6 +32,10 @@ REF = "refs/heads/main"
 WORKFLOW = REPOSITORY + "/.github/workflows/km-jra-source-first-runner.yml"
 ISSUER = "https://token.actions.githubusercontent.com"
 BUNDLE_NAME = "source_attestation_bundle.json"
+# Current Authority R55 (Owner 2026-11-21 10:46): GitHub OIDC token witness works in a
+# private repository; the Sigstore bundle path stays for envelopes minted before R55.
+WITNESS_NAME = "source_oidc_witness.json"
+WITNESS_PURPOSE = "JRA_SOURCE"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
@@ -205,10 +213,20 @@ def verify(envelope: Path | str, *, request: dict | None = None, deadline: float
                 or _timestamp(frozen_at) > _timestamp(cutoff)):
             raise RuntimeError("JRA_SOURCE_ATTESTATION_SOURCE_FREEZE_INVALID")
     revision, run = _source_context(source)
+    witness = envelope.with_name(WITNESS_NAME)
     bundle = envelope.with_name(BUNDLE_NAME)
     if bundle.is_symlink() or (bundle.exists() and not bundle.is_file()):
         raise RuntimeError("JRA_SOURCE_ATTESTATION_BUNDLE_PATH_INVALID")
-    if bundle.is_file():
+    if witness.exists() or witness.is_symlink():
+        try:
+            proof = km_oidc_witness.verify(
+                envelope, witness, workflow=WORKFLOW.rsplit("/", 1)[-1], purpose=WITNESS_PURPOSE,
+                sha=revision, run_id=run)
+        except (km_oidc_witness.WitnessError, OSError, ValueError, KeyError) as error:
+            raise RuntimeError("JRA_SOURCE_ATTESTATION_OIDC_WITNESS_INVALID:" + str(error)[:300]) from None
+        timestamp = proof["witnessed_at"]
+        method = "GITHUB_OIDC_WITNESS:" + proof["key_source"]
+    elif bundle.is_file():
         if not 0 < bundle.stat().st_size <= MAX_RESPONSE_BYTES:
             raise RuntimeError("JRA_SOURCE_ATTESTATION_BUNDLE_SIZE_INVALID")
         timestamp = _verify_bundle(envelope, bundle, revision, run, verification_deadline)

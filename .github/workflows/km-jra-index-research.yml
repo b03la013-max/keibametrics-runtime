@@ -5,6 +5,7 @@ run-name: JRA 20-index reflection / Challenger research
 # runtime/jra_index_research. Never touches the Production prediction path.
 permissions:
   contents: write
+  issues: read
 
 on:
   workflow_run:
@@ -46,7 +47,7 @@ jobs:
       - name: Tests
         run: |
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_index_research_triggers.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py
+          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_index_research_triggers.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py tests/test_jra_delivery_ledger.py
       - name: Reflect, analyse, freeze Shadow, evaluate forward OOS
         env:
           WEEKLY: ${{ github.event.schedule == '20 18 * * 0' || inputs.weekly == true }}
@@ -85,6 +86,8 @@ jobs:
           python runtime/analysis/jra_nobet_shadow.py freeze "$D" | tee nobet_freeze.txt
           python runtime/analysis/jra_nobet_shadow.py evaluate > /dev/null
           if grep -q "A4 ERROR" nobet_freeze.txt; then { echo "## A4 ERROR (no-bet shadow)"; cat nobet_freeze.txt; } >> "$GITHUB_STEP_SUMMARY"; fi
+          # Delivery ledger (Owner 2026-11-24 13:54): FINAL saved / Issue #421 posted / ASSISTED sent kept apart.
+          GITHUB_TOKEN="${{ github.token }}" python runtime/analysis/jra_delivery_ledger.py build "$D" || echo "DELIVERY_LEDGER_FAILED" >> "$GITHUB_STEP_SUMMARY"
           if grep -q "A4 ERROR" feature_freeze.txt; then { echo "## A4 ERROR (feature challenger)"; cat feature_freeze.txt; } >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Persist research artefacts only
         run: |
@@ -92,7 +95,7 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/jra_index_research runtime/jra_zai_forward_oos runtime/jra_role_candidate_forward runtime/jra_keibabook_forward_oos
-          for d in runtime/jra_info_gap_challenger/forward runtime/jra_conversion_challenger/forward runtime/jra_feature_challenger/forward runtime/jra_nobet_shadow; do if [ -d "$d" ]; then git add "$d"; fi; done
+          for d in runtime/jra_info_gap_challenger/forward runtime/jra_conversion_challenger/forward runtime/jra_feature_challenger/forward runtime/jra_nobet_shadow runtime/jra_delivery_ledger; do if [ -d "$d" ]; then git add "$d"; fi; done
           git add runtime/jra_feature_challenger/coverage_*.json runtime/jra_feature_challenger/coverage_*.md 2>/dev/null || true
           if git diff --cached --quiet; then echo "NO_RESEARCH_CHANGE"; exit 0; fi
           git commit -m "research: JRA 20-index reflection / Challenger Shadow / ZAI OOS [skip ci]"

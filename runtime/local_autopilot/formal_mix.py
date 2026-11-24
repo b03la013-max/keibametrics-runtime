@@ -109,9 +109,76 @@ def gen_variant(summary, name, base=None):
             out += [('TRIFECTA', [a, b, c]) for c in rank if c not in (a, b)]
         out = out[:CAP]
         return out + [t for t in base if t not in out][:max(0, CAP - len(out))] if out else base
+    if fam == 'MKTP2':          # (Owner 2026-11-23 22:22, head-local P2) the second-place set re-formed with the market:
+        # on 227 settled formal races the market order separated the actual 2nd from the other non-winners with
+        # AUC 0.741 against 0.651 for p2_score, so P2' = the same number of horses by a blend of market position
+        # and model P2 position (blend = market share in %); W heads unchanged, 60 points rebuilt W->P2'->P2'/P3
+        mo = summary.get('_market_order') or []
+        if not mo:
+            return base
+        roles = summary.get('roles') or {}
+        p3 = [int(h) for h in rank if 'P3' in (roles.get(str(h)) or [])]
+        cand = [h for h in rank if h not in w or h in p2]
+        bw = k['blend'] / 100.0
+        bpos = {h: bw * (mo.index(h) if h in mo else len(mo)) + (1 - bw) * (p2.index(h) if h in p2 else len(p2) + rank.index(h))
+                for h in rank}
+        p2n = sorted(cand, key=lambda h: (bpos[h], rank.index(h)))[:len(p2)]
+        thirds = sorted(set(p2n) | set(p3), key=lambda h: (bpos[h], rank.index(h)))
+        pos = {h: i for i, h in enumerate(rank)}
+        ex = sorted([(a, b) for a in w for b in p2n if a != b], key=lambda ab: (pos[ab[0]] + bpos[ab[1]]))[:6]
+        tri = sorted([(a, b, c) for a in w for b in p2n for c in thirds if len({a, b, c}) == 3],
+                     key=lambda t: (pos[t[0]] + bpos[t[1]] + bpos[t[2]]))
+        out = [('EXACTA', [a, b]) for a, b in ex] + [('TRIFECTA', list(t)) for t in tri]
+        out = out[:CAP]
+        return out + [t for t in base if t not in out][:max(0, CAP - len(out))]
+    if fam == 'KRSCAP':         # (Owner 2026-11-24 23:42) the 60 points chosen from the signed full MEC by the KRS
+        # simulation instead of the Static rank sum: score = simulated occurrence of that exact order (top-20
+        # trifecta/exacta tables) else the product of the per-horse SSR rates; 三連複 = sum of its 6 orders.
+        # mode 1: KRS score only; mode 2: MEC tier first (CORE > PROTECTION > TAIL), KRS score within a tier
+        kv = summary.get('_krs')
+        mec = [(t['bet_type'], [int(x) for x in t['selection']], t.get('mec_tier')) for t in summary.get('signed_final_tickets') or []]
+        if not kv or not mec:
+            return base
+        tier = {'CORE': 0, 'PROTECTION': 1, 'TAIL': 2}
+        order = sorted(range(len(mec)), key=lambda i: ((tier.get(mec[i][2], 3) if k['mode'] == 2 else 0),
+                                                      -krs_score(kv, mec[i][0], mec[i][1]), i))
+        out = []
+        for i in order:
+            t = (mec[i][0], mec[i][1])
+            if t not in out:
+                out.append(t)
+            if len(out) >= CAP:
+                break
+        return out
     if fam == 'CORE':           # CORE_LAYER_60 with the core pair set = top-n P2
         return core_layer(summary, base, w, p2, core_n=k['n'])
     raise ValueError(f'unknown family {fam}')
+
+
+def krs_view(util):
+    """krs_prediction_utility -> {'tri': {(a,b,c): f}, 'ex': {(a,b): f}, 'ssr': {h: (W, P2, P3)}} (uncalibrated
+    simulation occurrence rates, used only to ORDER tickets inside the same 60-point budget)."""
+    if not util:
+        return None
+    tri = {(int(x['W']), int(x['P2']), int(x['P3'])): float(x['frequency']) for x in util.get('top_trifecta_occurrence') or []}
+    ex = {(int(x['W']), int(x['P2'])): float(x['frequency']) for x in util.get('top_exacta_occurrence') or []}
+    ssr = {int(x['horse_no']): (float(x.get('SSR-W') or 0), float(x.get('SSR-P2') or 0), float(x.get('SSR-P3') or 0))
+           for x in util.get('summary') or []}
+    return {'tri': tri, 'ex': ex, 'ssr': ssr} if ssr else None
+
+
+def krs_score(kv, bt, sel):
+    g = lambda h, i: kv['ssr'].get(h, (0, 0, 0))[i]
+    if bt == 'TRIFECTA' and len(sel) == 3:
+        return kv['tri'].get(tuple(sel), g(sel[0], 0) * g(sel[1], 1) * g(sel[2], 2))
+    if bt == 'EXACTA' and len(sel) == 2:
+        return kv['ex'].get(tuple(sel), g(sel[0], 0) * g(sel[1], 1))
+    if bt == 'TRIO' and len(sel) == 3:
+        from itertools import permutations
+        return sum(krs_score(kv, 'TRIFECTA', list(p)) for p in permutations(sel))
+    if bt == 'QUINELLA' and len(sel) == 2:
+        return krs_score(kv, 'EXACTA', sel) + krs_score(kv, 'EXACTA', sel[::-1])
+    return 0.0
 
 
 def _fixed_variants(summary):
@@ -230,9 +297,29 @@ def races(root, since=None):
         ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
         row = {'day': row_day, 'key': key}
         summ['_market_order'] = _market_order(Path(root) / row_day, key)
+        for kp in (sp.parent / f'{key}.krs_prediction_utility.json', Path(root) / row_day / 'formal' / f'{key}.krs_prediction_utility.json'):
+            if kp.exists():
+                try:
+                    summ['_krs'] = krs_view(json.loads(kp.read_text()))
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
+                break
         for name, t in variants(summ, gen).items():
             i, p, h = sm.settle(t, res['payouts'], ns)
             row[name] = (i, p, h, len(t))
+        # REV1_MIX (evidence only, Owner 2026-11-23 22:22): what the delivered policy would have paid had the
+        # Revision 1 tickets been kept (only races with a signed Revision 2; otherwise identical by definition)
+        try:
+            if d == eff:
+                s1 = json.loads((sp.parent / f'{key}.summary.json').read_text())
+                s1['_market_order'] = summ['_market_order']
+                t = variant_of(s1, 'MIX_P2BOX20')
+            else:
+                t = variant_of(summ, 'MIX_P2BOX20')
+            i, p, h = sm.settle(t, res['payouts'], ns)
+            row['REV1_MIX'] = (i, p, h, len(t))
+        except Exception:
+            pass
         out.append(row)
     return out
 

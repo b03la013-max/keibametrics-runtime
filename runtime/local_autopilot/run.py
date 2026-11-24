@@ -677,13 +677,27 @@ def settle_formal(r, key, out, html):
         r['formal_settlement'].update(
             result_receipt_sha256=st['result_receipt_sha256'], result_receipt_verified=st['result_receipt_verified'],
             runtime_pfs=(art.get('settlement') or {}).get('pfs'),
-            first_material_failure=(art.get('failure_localization') or {}).get('primary_failure'),
+            # P0-1 (ChatGPT 11/24 21:52): classify the DELIVERED 60-point tickets (same object as the money);
+            # the Runtime label judges the signed full MEC and is kept under its own name
+            first_material_failure=_delivered_first(sm, res, st),
+            first_material_failure_runtime_full_mec=(art.get('failure_localization') or {}).get('primary_failure'),
             learning_state_id=(art.get('learning_event') or {}).get('state_id'),
             learning_production_change_authorized=(art.get('learning_event') or {}).get('production_change_authorized'))
         log('FORMAL_RESULT', key, st['invest'], st['payout'], 'RESULT_RECEIPT_VERIFIED' if verified else
             f"RESULT_RECEIPT_NOT_VERIFIED:{rc}:{st['result_receipt_errors']}")
     except Exception as exc:
         log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
+
+
+def _delivered_first(sm, res, st):
+    try:
+        from runtime.local_autopilot.review import delivered_failure
+        roles = {int(h): r for h, r in (sm.get('roles') or {}).items()}
+        ft = [(t['bet_type'], [int(x) for x in t['selection']]) for t in sm.get('tickets') or []]
+        row = dict(st, no_bet_reason='CAPITAL_POLICY_NO_BET' if sm.get('no_bet') else None)
+        return delivered_failure(roles, ft, [int(x) for x in res['order']], row)
+    except Exception:
+        return None
 
 
 CHECK10_RETRY_WAIT_S = 20

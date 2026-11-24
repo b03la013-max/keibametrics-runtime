@@ -489,7 +489,8 @@ def run_formal(r, out_dir, deadline):
                 promo = auto_promote.active_variant(Path(out_dir).parent, r['race_date'])
                 if promo:
                     capped = auto_promote.apply_to_cap(capped, req['static_prediction']['ranking'], roles, tickets,
-                                                       formal_mix._market_order(Path(out_dir), key), promo)
+                                                       formal_mix._market_order(Path(out_dir), key), promo,
+                                                       krs=arts.get('krs_prediction_utility'))
                     capped['sha256'] = _sha(capped)
                     mark('AUTO_PROMOTION', candidate=promo['candidate'], variant=promo['variant'],
                          tickets=len(capped['tickets']), investment=capped['kept_investment'])

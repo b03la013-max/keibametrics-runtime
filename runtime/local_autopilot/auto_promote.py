@@ -37,6 +37,7 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C22-KEEP-MEC-TRIO20': ('KEEP_MEC_TRIO20', 'KM_LOCAL_FORWARD_OOS_PREREG_20261120_R8.json'),
     'C24-W-PLUS-TOP2POP-SAME-BUDGET': ('W_PLUS_TOP2POP_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261120_R9.json'),
     'C28-CORE-LAYER-60': ('CORE_LAYER_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261122_R12.json'),
+    'C29-KRS-CAP-60': ('GEN:KRSCAP:mode=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261125_R13.json'),
 }
 
 
@@ -165,11 +166,12 @@ def decide(root, today, rows_fn=None):
     return rec
 
 
-def apply_to_cap(capped, ranking, roles, signed_tickets, market_order, promo):
+def apply_to_cap(capped, ranking, roles, signed_tickets, market_order, promo, krs=None):
     """Replace the capped recommendation by the promoted variant (BEFORE /final, so it is signed)."""
     from runtime.local_autopilot import formal_mix
     summ = {'ranking': [str(x) for x in ranking], 'roles': {str(k): v for k, v in roles.items()},
-            'tickets': capped['tickets'], 'signed_final_tickets': signed_tickets, '_market_order': market_order}
+            'tickets': capped['tickets'], 'signed_final_tickets': signed_tickets, '_market_order': market_order,
+            '_krs': formal_mix.krs_view(krs)}
     vt = formal_mix.variant_of(summ, promo['variant'])
     by_key = {(str(t.get('bet_type')), tuple(str(x) for x in t['selection'])): t for t in signed_tickets}
     out = []

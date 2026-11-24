@@ -62,9 +62,34 @@ def _horse_identity(h: dict) -> str | None:
     return hashlib.sha256(("\x1f".join([name, sire, dam])).encode("utf-8")).hexdigest()
 
 
+def _oidc_witnessed(path: Path, *, signer: str | None, not_after: datetime | None):
+    """Current Authority R55: GitHub OIDC token witness (works in a private repository).
+
+    Returns None when no witness sidecar exists (fall back to Sigstore), else True/False.
+    """
+    import km_oidc_witness as W
+    if path.name == 'source_receipt_envelope.json' and signer in (None, 'km-jra-source-first-runner.yml'):
+        witness, signer, purpose = path.with_name('source_oidc_witness.json'), 'km-jra-source-first-runner.yml', 'JRA_SOURCE'
+    elif signer:
+        witness, purpose = path.with_suffix('.oidc_witness.json'), None
+    else:
+        return None
+    if not (witness.exists() or witness.is_symlink()):
+        return None
+    try:
+        proof = W.verify(path, witness, workflow=signer, purpose=purpose,
+                         not_after=not_after.timestamp() if not_after else None)
+        return bool(proof)
+    except (W.WitnessError, OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def _attested(path: Path, *, signer: str | None = None,
               not_after: datetime | None = None) -> bool:
     """Verify artifact bytes against GitHub OIDC / Sigstore, not an in-file flag."""
+    witnessed_ok = _oidc_witnessed(path, signer=signer, not_after=not_after)
+    if witnessed_ok is not None:
+        return witnessed_ok
     bundle = path.with_suffix('.sigstore.jsonl') if signer else None
     if signer is None and path.name == 'source_receipt_envelope.json':
         source_bundle = path.with_name('source_attestation_bundle.json')

@@ -1,0 +1,25 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-W-WIDTH-v1",
+  "registered_at": "2026-11-23T21:25:00+09:00",
+  "owner_approval": "2026-11-23 21:0x AskUserQuestion「進めてよい」 (ChatGPT 11/23 review P0-01: W role selection; research and pre-registration only, Production formulas and weights unchanged)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-28",
+  "diagnosis": "docs/reviews/JRA_W_WIDTH_DIAGNOSIS_20261123.md",
+  "arms": {
+    "W_PLUS_STATIC2": {"tracker": "runtime/analysis/jra_role_candidate_replay.py", "status": "already registered (11/21); kept", "what": "single-head W gets the Static rank-2 runner as PROTECTED; MEC rebuilt (more points)"},
+    "W_PLUS_STATIC2_SAME_BUDGET": {"tracker": "runtime/analysis/jra_role_candidate_replay.py", "status": "new", "what": "W_PLUS_STATIC2, then the rebuilt MEC tickets are cut back to the Production ticket count (CORE first, then MEC order)", "question": "does a wider W help at the same number of points?"}
+  },
+  "primary_metrics": ["W capture", "PFS", "net vs Production on the same races", "PFS excluding the largest payout", "ticket count"],
+  "stages": [30, 100, 300],
+  "decision": "Owner only (11/30 interim, 12/7, 12/28); no promotion below 100 forward races",
+  "known_result_replay_context_only": {
+    "W_set_equals_static_topN": "301 settled non-newcomer races 2026-10-11..11-23: the formal W set equals the Static (ZAI_WIN) top-|W| in every race (W capture 103/301 = 34.2% for both)",
+    "BASE_mode": {"races": 158, "mean_W": 1.04, "W_capture_pct": 20.9, "static_top2_capture_pct": 39.9, "static_top3_capture_pct": 51.3},
+    "REVIEW_mode": {"races": 143, "mean_W": 2.97, "W_capture_pct": 49.0},
+    "replay_20261114_23_102R": {"production": {"investment": 222500, "payout": 86020, "pfs": 38.66, "W_hit": 34},
+                                "W_PLUS_STATIC2": {"investment": 278800, "payout": 113470, "pfs": 40.7, "W_hit": 43},
+                                "W_PLUS_STATIC2_SAME_BUDGET": {"investment": 222500, "payout": 82540, "pfs": 37.1, "W_hit": 43},
+                                "CAP30": {"investment": 180400, "payout": 76060, "pfs": 42.16}},
+    "replay_20261123_18R": {"production": {"investment": 44100, "payout": 0}, "W_PLUS_STATIC2": {"investment": 55900, "payout": 4820}, "W_PLUS_STATIC2_SAME_BUDGET": {"investment": 44100, "payout": 1530}}
+  }
+}

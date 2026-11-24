@@ -1,0 +1,25 @@
+name: KeibaMetrics OIDC Witness Self-Test
+# Current Authority R55 (Owner 2026-11-21 10:46): proves the private-repository-capable
+# SOURCE trust witness on a real GitHub-hosted runner. Production effect NONE.
+permissions:
+  contents: read
+  id-token: write
+on:
+  pull_request:
+    paths:
+      - runtime/km_oidc_witness.py
+      - scripts/km_oidc_witness_selftest.py
+      - .github/workflows/km-oidc-witness-selftest.yml
+  workflow_dispatch:
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q cryptography pytest
+      - run: python scripts/km_oidc_witness_selftest.py
+      - run: python -m pytest -q tests/test_km_oidc_witness.py tests/test_family_authority_r55.py
