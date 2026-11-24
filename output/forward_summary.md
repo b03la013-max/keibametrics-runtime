@@ -312,4 +312,4 @@
 | 2026-11-24 | NGY_09 | `1158d37eb55c6552` | 済 | 6000 | 0 | True | PREDICTION_ROLE_W |
 | 2026-11-24 | NGY_10 | `110b75e7c2cf430e` | 済 | 6000 | 8110 | True | CAPITAL_EFFICIENCY |
 | 2026-11-24 | NGY_11 | `2afbf925c07bb74d` | 済 | 6000 | 0 | True | PREDICTION_ROLE_P2 |
-| 2026-11-24 | NGY_12 | `070254a5b1a82e45` | 待 | – | – | – | – |
+| 2026-11-24 | NGY_12 | `0e8b765aa34b29cb` | 待 | – | – | – | – |
