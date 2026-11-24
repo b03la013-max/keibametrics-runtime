@@ -1133,7 +1133,7 @@
    "post_initial": "2026-11-24T13:25:00+09:00",
    "post_current": "2026-11-24T13:25:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "POSTRESULT_DIAGNOSTIC",
    "editions": [
     {
      "edition": "朝版",
@@ -1492,7 +1492,69 @@
      "USER_ACK_VERIFIED": false
     }
    },
-   "formal_effective": "rev2"
+   "formal_effective": "rev2",
+   "result_attempts": 1,
+   "settlement": {
+    "order": [
+     5,
+     3,
+     1,
+     2,
+     10,
+     8,
+     4,
+     7,
+     9
+    ],
+    "invest": 700,
+    "refund": 0,
+    "effective_invest": 700,
+    "payout": 0,
+    "win_hit": 1,
+    "top_in3": 1,
+    "top3_capture": 1,
+    "ordered_pair": 0,
+    "exact_triple": 0,
+    "settled_at": "2026-11-24T13:47:35.572211+09:00",
+    "revision": "MIZ_04.r2",
+    "ticket_sha256": "24454da143e097e7fe5f2e2d51dc179e1a6e2938de936c7c3ae819779dac4afc",
+    "diagnosis": {
+     "winner_rank": 1,
+     "second_rank": 9,
+     "third_rank": 5,
+     "first_failure": "P2_MISS",
+     "scope": "RANK_ONLY_NOT_TICKET_FACE"
+    }
+   },
+   "formal_result_attempts": 1,
+   "formal_settlement": {
+    "invest": 6000,
+    "refund": 0,
+    "effective_invest": 6000,
+    "payout": 0,
+    "pfs": 0.0,
+    "win_hit": 0,
+    "diagnosis": {
+     "winner_rank": 3,
+     "second_rank": 8,
+     "third_rank": 4,
+     "first_failure": "W_WIDTH_OR_ROLE",
+     "scope": "RANK_ONLY_NOT_TICKET_FACE"
+    },
+    "signed_final_settlement": {
+     "invest": 12000,
+     "refund": 0,
+     "effective_invest": 12000,
+     "payout": 0,
+     "pfs": 0.0
+    },
+    "result_receipt_sha256": "b5d91ae7c9837afa058a721f873fc308bd95687e7002e03ae6a755c2d857406f",
+    "result_receipt_verified": true,
+    "runtime_pfs": 0.0,
+    "first_material_failure": "PREDICTION_ROLE_P2",
+    "learning_state_id": "KM-LOCAL-MIZ-20261124-R04-RKT-LEARNING-NEXT",
+    "learning_production_change_authorized": false
+   }
   },
   "MIZ_05": {
    "venue_id": "MIZ",
@@ -4543,7 +4605,7 @@
    "post_initial": "2026-11-24T14:30:00+09:00",
    "post_current": "2026-11-24T14:30:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "PREDICTION_COMPLETE",
    "editions": [
     {
      "edition": "朝版",
@@ -4582,13 +4644,51 @@
       "captured_at": "2026-11-23T11:18:54.154Z",
       "sha256": "1b808e613fa05088eea7374cee430989f8c09335ca042ee76f2cefe55496cb50"
      }
+    },
+    {
+     "edition": "直前版",
+     "rev": "NGY_01.r2",
+     "source_sha256": "17abb28b7059e7a4d042c1cc3bd41845ddbdeea1e644f2329a43e42ab85bd3d0",
+     "ticket_sha256": "66daf6c2d8822e808fae335e42b6793939cbcb1929715fe6bcae7c412d363e53",
+     "source_fetched_at": "2026-11-24T13:46:35.759516+09:00",
+     "saved_at": "2026-11-24T13:46:36.532290+09:00",
+     "frozen_at": "2026-11-24T13:46:36.532290+09:00",
+     "revision": "取消・除外の変化を反映して再予測",
+     "delivery": {
+      "GENERATED": "2026-11-24T13:46:36.532290+09:00",
+      "FROZEN": "2026-11-24T13:46:36.532290+09:00",
+      "COMMITTED": null,
+      "PUSH_VERIFIED": null,
+      "LINK_AVAILABLE": null,
+      "USER_DELIVERY_SENT": "NOT_CONNECTED",
+      "USER_REACHED": "NOT_CONNECTED",
+      "USER_ACK_VERIFIED": "NOT_CONNECTED"
+     },
+     "before_cutoff": true,
+     "top": 10,
+     "quad": 3,
+     "aki_form": "1-3-6",
+     "sbo": {
+      "status": "USED",
+      "fetched_at": "2026-11-24T13:46:36.214847+09:00",
+      "sha256": "1388451bc31b4c2ae249608512128ccbf075ced53b337156f56132e814eeabae",
+      "coverage": 7,
+      "active": 11
+     },
+     "keibabook": {
+      "status": "NOT_PROVIDED",
+      "captured_at": "2026-11-24T00:17:47.018Z",
+      "sha256": "d0992d17250db2aa7a18a6c51befc2b1920a40e9899ff3173b998a118b10462d"
+     }
     }
    ],
    "attempts": 0,
    "last_error": null,
-   "source_fetched_at": "2026-11-23T21:12:48.701412+09:00",
-   "active_runners": 12,
-   "scratched": [],
+   "source_fetched_at": "2026-11-24T13:46:35.759516+09:00",
+   "active_runners": 11,
+   "scratched": [
+    "フークストロンガー"
+   ],
    "push_verified_at": "2026-11-23T21:15:52+09:00"
   },
   "NGY_02": {
@@ -5225,8 +5325,8 @@
   "plan_complete_at": "2026-11-23T21:03:39.443625+09:00",
   "first_tick_at": "2026-11-23T21:00:35.894787+09:00",
   "first_prediction_at": "2026-11-23T21:03:40.012314+09:00",
-  "requests": 65,
-  "wait_seconds": 3284.6711127758026,
+  "requests": 67,
+  "wait_seconds": 3385.3167357444763,
   "all_first_editions_at": "2026-11-23T21:39:15.979528+09:00",
   "rediscovered_at": "2026-11-24T06:00:32.583579+09:00"
  },
