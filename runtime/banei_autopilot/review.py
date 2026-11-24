@@ -360,7 +360,7 @@ def race_review(out, key, r):
                                                                if str(n) == str(ev.get('honmei'))), None),
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
-            'info_coverage': info_coverage(ev['rows']),
+            'info_coverage': info_coverage(ev['rows']), 'role_counts': role_counts(ev['rows']),
             'market_drift': market_drift((r.get('check10') or {}).get('changes'), res['order'], ev.get('honmei')),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
@@ -534,6 +534,33 @@ def by_info_coverage(revs):
     return out or None
 
 
+def role_counts(rows):
+    """役割ごとの頭数（W・P2・P3）。証拠のみ。"""
+    if not rows:
+        return None
+    return {k: sum(1 for x in rows if x.get(f'role_{k.lower()}')) for k in ('W', 'P2', 'P3')}
+
+
+def by_w_count(revs):
+    """W の頭数（1・2・3・4頭以上）ごとの本番の成績：R・勝ち馬∈W・2着∈P2・投資・払戻・PFS（証拠のみ、閾値なし）。
+    出典：Drive「JRA_20261101_改修結果監査」（q489 W単独24R は W捕捉4・払戻0円、W複数9R は W捕捉5）と
+    「改修プロンプト（1101結果反映）」（q481 単独W Shadow）の読み替え。W の頭数の決め方・券面は変えない。"""
+    out = {}
+    for x in revs:
+        n = (x.get('role_counts') or {}).get('W')
+        b = 'UNKNOWN' if n is None else '4+' if n >= 4 else str(n)
+        d = out.setdefault(b, {'races': 0, 'winner_in_W': 0, 'second_in_P2': 0, 'stake': 0, 'return': 0})
+        f = x.get('finishers') or {}
+        d['races'] += 1
+        d['winner_in_W'] += int(bool((f.get('1') or {}).get('in_role')))
+        d['second_in_P2'] += int(bool((f.get('2') or {}).get('in_role')))
+        d['stake'] += x.get('stake') or 0
+        d['return'] += x.get('return') or 0
+    for d in out.values():
+        d['pfs'] = _pct(d['return'], d['stake'])
+    return out or None
+
+
 def axis_dependency_summary(revs):
     """axis_dependency の集計：軸の頭数別に R数・軸依存の券の平均割合・全損R（片軸以上が3着外）・全損点数・二頭とも3着外のR。"""
     out = {}
@@ -593,6 +620,7 @@ def summarize(revs, missed):
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
+            'by_w_count': by_w_count(revs),
             'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs)}
 
 
@@ -643,6 +671,11 @@ def _md(title, s, revs=None):
         L.append('- 情報充足帯別（DCR平均：R・◎1着・◎3着内・勝ち馬∈W・TPI欠け頭数・PFS）: ' + '／'.join(
             f"{b} {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['winner_in_W']}・{d['tpi_unknown']}・{d['pfs']}%"
             for b, d in sorted(s['by_info_coverage'].items(), key=lambda kv: order.index(kv[0]))))
+    if s.get('by_w_count'):
+        order = ['0', '1', '2', '3', '4+', 'UNKNOWN']
+        L.append('- W の頭数別（R・勝ち馬∈W・2着∈P2・PFS）: ' + '／'.join(
+            f"W{b}頭 {d['races']}R・{d['winner_in_W']}・{d['second_in_P2']}・{d['pfs']}%"
+            for b, d in sorted(s['by_w_count'].items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)))
     if s.get('axis_dependency'):
         L.append('- 軸への依存（軸の頭数：R・軸を含む券の平均割合・全軸3着内・軸依存の券が全損・その点数・二頭とも3着外）: ' + '／'.join(
             f"{k}頭軸 {d['races']}R・{d['axis_share_mean']:.0%}・{d['all_axis_top3']}・{d['wipeout']}R・{d['wipeout_points']}点・{d['co_failure']}R"
