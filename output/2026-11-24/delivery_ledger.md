@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-24（17:40時点）
+# 地方版 配送台帳 2026-11-24（17:46時点）
 
-- 管理Race 36／発走済み 27
+- 管理Race 36／発走済み 28
 - PAPER：凍結 36・Push検証 36・送信 31（発走前 31）・読み戻し一致 31・本人確認 0
 - 正式：試行 31・Signed FINAL 31（NO-BET 0）・発走前送信 31・読み戻し一致 31・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 28／重要変更 26／Revision 2署名 26
+- 10分前チェック：確認 29／重要変更 27／Revision 2署名 27
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -29,7 +29,7 @@
 | NGY_04 | 16:10 | POSTRESULT_DIAGNOSTIC | 15:27 | ○ | SIGNED_FINAL | 16:02 | ○ |  |
 | NGY_05 | 16:45 | POSTRESULT_DIAGNOSTIC | 16:02 | ○ | SIGNED_FINAL | 16:37 | ○ |  |
 | NGY_06 | 17:20 | POSTRESULT_DIAGNOSTIC | 16:38 | ○ | SIGNED_FINAL | 17:12 | ○ |  |
-| NGY_07 | 17:55 | PRESTART_PUSH_VERIFIED | 17:12 | ○ | SIGNED_FINAL | 17:13 | ○ |  |
+| NGY_07 | 17:55 | PRESTART_PUSH_VERIFIED | 17:12 | ○ | SIGNED_FINAL | 17:46 | ○ |  |
 | NGY_08 | 18:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_09 | 19:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_10 | 19:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
