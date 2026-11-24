@@ -285,9 +285,10 @@ def test_workflow_requires_verified_independent_pre_cutoff_prediction_clock(tmp_
     elif case=='before_freeze':stamp=start-timedelta(seconds=1)
     elif case=='future_timestamp':stamp=now+timedelta(minutes=1)
     elif case=='future_freeze':start=now+timedelta(minutes=1)
-    field='time' if case=='valid_time' else 'timestamp'
-    proof=[{'verificationResult':{'verifiedTimestamps':[{field:stamp.isoformat()}]}}]
-    if case=='missing_timestamp':proof=[{'verificationResult':{'verifiedTimestamps':[]}}]
+    # Current Authority R55: km_oidc_witness.py verify output (GitHub OIDC iat).
+    proof={'witnessed_at':stamp.replace(microsecond=0).isoformat(),'key_source':'GITHUB_LIVE_JWKS'}
+    if case=='valid_time':proof['witnessed_at']=stamp.isoformat()
+    if case=='missing_timestamp':proof={}
     elif case=='unverified_timestamp':proof=[{'timestamp':stamp.isoformat()}]
     # These are explicitly synthetic clock-boundary records, NOT signed Race data.
     frozen=tmp_path/'synthetic_prediction.json'
@@ -326,12 +327,13 @@ def test_workflow_runs_four_arms_once_and_preserves_production_and_independent_w
     assert 'directory / "jra_formal_completion_verification.json"' in launcher
     assert 'root / "runtime/final_artifacts"' in launcher
     assert 'if output.exists():' in launcher
-    attest=job.index('uses: actions/attest@v4')
-    verify=job.index('gh attestation verify "$OUTPUT"')
+    # Current Authority R55: GitHub OIDC token witness (private repository capable).
+    attest=job.index('python runtime/km_oidc_witness.py mint "$OUTPUT"')
+    verify=job.index('python runtime/km_oidc_witness.py verify "$OUTPUT"')
     upload=job.index('id: witness')
     commit=job.index('git add "$OUTPUT"')
     assert attest<verify<upload<commit
-    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml"' in job
+    assert '--workflow km-jra-formal-single-entry.yml --purpose BVI_ENV_PREDICTION' in job
     assert "steps.admission.outputs.admitted == 'true' && steps.witness.outcome == 'success'" in job
     assert "datetime.now(cutoff.tzinfo)>cutoff" in job
     assert 'git add runtime/final_artifacts' not in job

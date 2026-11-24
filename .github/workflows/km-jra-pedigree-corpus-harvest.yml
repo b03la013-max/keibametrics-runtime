@@ -108,8 +108,12 @@ jobs:
                   stage=stage,targets=targets,planned_at=now,schedule_target=schedule_target)
               raise
           PY
+      - name: Witness the day plan with a GitHub OIDC token (Current Authority R55)
+        if: ${{ success() && steps.plan.outcome == 'success' }}
+        run: python runtime/km_oidc_witness.py mint runtime_out/pedigree_day_plan.json runtime_out/pedigree_day_plan.oidc_witness.json --purpose JRA_PEDIGREE_DAY_PLAN
       - uses: actions/attest@v4
         if: ${{ success() && steps.plan.outcome == 'success' }}
+        continue-on-error: true  # Sigstore needs a public repository (Current Authority R55)
         with:
           subject-path: runtime_out/pedigree_day_plan.json
       - uses: actions/upload-artifact@v4
@@ -118,6 +122,7 @@ jobs:
           name: jra-pedigree-day-plan
           path: |
             runtime_out/pedigree_day_plan.json
+            runtime_out/pedigree_day_plan.oidc_witness.json
             runtime_out/pedigree_day_plan_failure.json
           if-no-files-found: error
   harvest:
@@ -158,9 +163,18 @@ jobs:
           python scripts/jra_weekend_bvi_intake.py collect-window \
             --plan runtime_out/pedigree_day_plan.json --index '${{ matrix.index }}' \
             --run-id '${{ github.run_id }}-${{ github.run_attempt }}'
-      - name: Attest original producer bytes
+      - name: Witness original producer bytes with a GitHub OIDC token
+        # Current Authority R55 (Owner 2026-11-21 10:46): works in a private repository.
+        if: steps.acquire.outputs.new == 'true'
+        env:
+          FILE: ${{ steps.acquire.outputs.file }}
+        run: |
+          set -euo pipefail
+          python runtime/km_oidc_witness.py mint "$FILE" "${FILE%.json}.oidc_witness.json" --purpose JRA_PEDIGREE_HARVEST
+      - name: Attest original producer bytes (Sigstore, public repository only)
         id: batch_attestation
         if: steps.acquire.outputs.new == 'true'
+        continue-on-error: true
         uses: actions/attest@v4
         with:
           subject-path: ${{ steps.acquire.outputs.file }}
@@ -174,12 +188,9 @@ jobs:
           PYTHONPATH: runtime:runtime/jra_source_runtime
         run: |
           set -euo pipefail
-          test -s "$BUNDLE"
-          PROOF="${FILE%.json}.sigstore.jsonl"
-          cp -- "$BUNDLE" "$PROOF"
-          gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml" \
-            --bundle "$PROOF"
+          python runtime/km_oidc_witness.py verify "$FILE" "${FILE%.json}.oidc_witness.json" \
+            --workflow km-jra-pedigree-corpus-harvest.yml --purpose JRA_PEDIGREE_HARVEST \
+            --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID"
           python scripts/jra_weekend_bvi_intake.py admit --file "$FILE" \
             --receipt "runtime/pedigree_intake_receipts/$(basename "$FILE" .json)-admitted-${{ github.run_id }}.json"
       - name: Persist independently verified facts or isolated acquisition failure
@@ -242,15 +253,19 @@ jobs:
             --summary-output "$SUMMARY"
           echo "file=$SUMMARY" >> "$GITHUB_OUTPUT"
       - uses: actions/attest@v4
+        continue-on-error: true  # Sigstore needs a public repository (Current Authority R55)
         with:
           subject-path: |
             runtime_out/jra_bvi_full_day_audit.json
             ${{ steps.summary.outputs.file }}
-      - name: Independently verify the daily measurement receipt
+      - name: Witness and independently verify the daily measurement receipt (GitHub OIDC token)
         env:
-          GH_TOKEN: ${{ github.token }}
           SUMMARY: ${{ steps.summary.outputs.file }}
-        run: gh attestation verify "$SUMMARY" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml"
+        run: |
+          set -euo pipefail
+          python runtime/km_oidc_witness.py mint "$SUMMARY" "${SUMMARY%.json}.oidc_witness.json" --purpose JRA_PEDIGREE_DAY_AUDIT
+          python runtime/km_oidc_witness.py verify "$SUMMARY" "${SUMMARY%.json}.oidc_witness.json" \
+            --workflow km-jra-pedigree-corpus-harvest.yml --purpose JRA_PEDIGREE_DAY_AUDIT --run-id "$GITHUB_RUN_ID"
       - name: Persist only daily aggregate measurement, never rewrite a prediction
         env:
           TARGET_BRANCH: ${{ github.ref_name }}

@@ -268,6 +268,35 @@ def _reverse_owner_issue_delivery(prefix):
     return prefix.replace(fin,'',1).replace(nob,'',1).replace('  issues: write\n','',1)
 
 
+R55_NO_BET_WITNESS = (
+    "      - name: Independently witness JRA NO_BET terminal with a GitHub OIDC token\n"
+    "        # Current Authority R55 (Owner 2026-11-21 10:46): works in a private repository.\n"
+    "        if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'\n"
+    "        shell: bash\n"
+    "        run: |\n"
+    "          set -euo pipefail\n"
+    "          python runtime/km_oidc_witness.py mint runtime_out/jra_production_no_bet_terminal.json \\\n"
+    "            runtime_out/jra_production_no_bet_terminal.oidc_witness.json --purpose JRA_NO_BET_TERMINAL\n"
+    "\n"
+    "      - name: Independently attest JRA NO_BET terminal with GitHub OIDC (Sigstore, public repository only)\n"
+    "        if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'\n"
+    "        continue-on-error: true\n")
+R55_NO_BET_ORIGINAL = (
+    "      - name: Independently attest JRA NO_BET terminal with GitHub OIDC\n"
+    "        if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'\n")
+R55_UPLOAD_NEW = ("          path: |\n            runtime_out/jra_production_no_bet_terminal.json\n"
+                  "            runtime_out/jra_production_no_bet_terminal.oidc_witness.json\n")
+R55_UPLOAD_OLD = "          path: runtime_out/jra_production_no_bet_terminal.json\n"
+
+
+def _reverse_r55_oidc_witness(prefix):
+    """Current Authority R55 (Owner 2026-11-21 10:46): exact NO_BET witness delta only."""
+    if R55_NO_BET_WITNESS not in prefix:
+        return prefix
+    assert prefix.count(R55_NO_BET_WITNESS) == 1 and prefix.count(R55_UPLOAD_NEW) == 1
+    return prefix.replace(R55_NO_BET_WITNESS, R55_NO_BET_ORIGINAL, 1).replace(R55_UPLOAD_NEW, R55_UPLOAD_OLD, 1)
+
+
 def _assert_production_prefix_boundary(workflow,original):
     """Only reviewed SOURCE and Delivery steps may extend the original prefix.
 
@@ -278,6 +307,7 @@ def _assert_production_prefix_boundary(workflow,original):
     marker='\n  pedigree-forward-shadow:'
     assert workflow.count(marker)==1
     prefix=workflow.split(marker)[0];baseline=original.split(marker)[0]
+    prefix=_reverse_r55_oidc_witness(prefix)
     prefix=_reverse_owner_issue_delivery(prefix)
     if prefix==baseline:return
     wait_marker='      - name: Wait for canonical Signed SOURCE\n'

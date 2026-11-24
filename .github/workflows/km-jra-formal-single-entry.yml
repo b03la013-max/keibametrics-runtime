@@ -482,8 +482,18 @@ jobs:
           python runtime/jra_owner_issue_delivery.py --race-id "$RACE_ID" --post-at "$POST_AT" \
             --no-bet-reason "$REASON" --receipt runtime_out/jra_owner_issue_delivery.json
 
-      - name: Independently attest JRA NO_BET terminal with GitHub OIDC
+      - name: Independently witness JRA NO_BET terminal with a GitHub OIDC token
+        # Current Authority R55 (Owner 2026-11-21 10:46): works in a private repository.
         if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runtime/km_oidc_witness.py mint runtime_out/jra_production_no_bet_terminal.json \
+            runtime_out/jra_production_no_bet_terminal.oidc_witness.json --purpose JRA_NO_BET_TERMINAL
+
+      - name: Independently attest JRA NO_BET terminal with GitHub OIDC (Sigstore, public repository only)
+        if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
+        continue-on-error: true
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: runtime_out/jra_production_no_bet_terminal.json
@@ -494,7 +504,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jra-production-evidence-no-bet-terminal
-          path: runtime_out/jra_production_no_bet_terminal.json
+          path: |
+            runtime_out/jra_production_no_bet_terminal.json
+            runtime_out/jra_production_no_bet_terminal.oidc_witness.json
           if-no-files-found: error
 
 
@@ -864,9 +876,17 @@ jobs:
           # succeeded and its exact SOURCE/Request/FINAL bindings are verified.
           python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
             --intent-path "${{ inputs.intent_path }}" --event-sha "${{ github.sha }}"
-      - name: Attest exact research prediction before cutoff
+      - name: Witness exact research prediction before cutoff (GitHub OIDC token)
+        if: steps.freeze.outputs.output != ''
+        env:
+          OUTPUT: ${{ steps.freeze.outputs.output }}
+        run: |
+          set -euo pipefail
+          python runtime/km_oidc_witness.py mint "$OUTPUT" runtime_out/pedigree_env_prediction.oidc_witness.json --purpose BVI_ENV_PREDICTION
+      - name: Attest exact research prediction before cutoff (Sigstore, public repository only)
         id: research_attestation
         if: steps.freeze.outputs.output != ''
+        continue-on-error: true
         uses: actions/attest@v4
         with:
           subject-path: ${{ steps.freeze.outputs.output }}
@@ -874,17 +894,12 @@ jobs:
         id: admission
         if: steps.freeze.outputs.output != ''
         env:
-          GH_TOKEN: ${{ github.token }}
           OUTPUT: ${{ steps.freeze.outputs.output }}
-          BUNDLE: ${{ steps.research_attestation.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          test -s "$BUNDLE"
-          cp -- "$BUNDLE" runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
-          gh attestation verify "$OUTPUT" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml" \
-            --bundle runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl \
-            --format json > runtime_out/pedigree_env_prediction_verification.json
+          python runtime/km_oidc_witness.py verify "$OUTPUT" runtime_out/pedigree_env_prediction.oidc_witness.json \
+            --workflow km-jra-formal-single-entry.yml --purpose BVI_ENV_PREDICTION \
+            --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" > runtime_out/pedigree_env_prediction_verification.json
           python - <<'PY'
           import json,os
           from datetime import datetime
@@ -892,11 +907,11 @@ jobs:
           frozen=json.load(open(os.environ['OUTPUT']))
           start=dt(frozen['frozen_at']);cutoff=dt(frozen['prediction_cutoff'])
           now=datetime.now(cutoff.tzinfo)
-          proofs=json.load(open('runtime_out/pedigree_env_prediction_verification.json'))
-          stamps=[dt(stamp.get('timestamp') or stamp['time'])
-              for proof in proofs
-              for stamp in (proof.get('verificationResult') or {}).get('verifiedTimestamps',[])]
-          if not (start<=now<=cutoff and any(start<=stamp<=now for stamp in stamps)):
+          proof=json.load(open('runtime_out/pedigree_env_prediction_verification.json'))
+          witnessed=proof.get('witnessed_at') if isinstance(proof,dict) else None
+          stamp=dt(witnessed) if isinstance(witnessed,str) else None
+          # OIDC iat has whole-second precision.
+          if not (stamp and start<=now<=cutoff and start.replace(microsecond=0)<=stamp<=now):
               raise SystemExit('BVI_ENV_PREDICTION_INDEPENDENT_TIMESTAMP_NOT_PRE_CUTOFF')
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('admitted=true\n')
           PY
@@ -909,7 +924,7 @@ jobs:
           path: |
             ${{ steps.freeze.outputs.output }}
             runtime_out/pedigree_env_prediction_verification.json
-            runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
+            runtime_out/pedigree_env_prediction.oidc_witness.json
           if-no-files-found: error
           retention-days: 90
       - name: Commit immutable comparison before cutoff without delaying Production
