@@ -1,0 +1,41 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261128-DRIVE01",
+ "registered_at": "2026-11-22T01:30:00+09:00",
+ "registered_by": "Claude (中央版 Drive 精読 定期タスク, 2026-11-22 01時台; 07_攻略・情報源 の q552/q554/q565)",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261122_REVIEW1121.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-28",
+ "eligibility_note": "Counted only for races frozen by runtime/analysis/jra_role_candidate_replay.py freeze after this file is on main (Owner merge). Races before the merge are not Forward OOS.",
+ "sources": {
+  "P3_SHORTEN_SPRINT_FRONT": "Drive 07_攻略・情報源/定性研究資料 短距離戦・高配当捕捉資料.txt (ledger q552); numeric claims in the source are UNVERIFIED",
+  "P3_FIRST_DIRT_BIG_OUTER_FRONT": "Drive 07_攻略・情報源/定性研究資料 複勝軸選定と穴馬激走パターン.txt (ledger q554); UNVERIFIED",
+  "W_WIND8_MARKET_TOP3": "Drive 07_攻略・情報源 YouTube 書き起こし『風の強い日の競馬/風速8mの壁』(ledger q565): poster's own tally, 189 races, favourite win rate about 34% -> 20.6% at >= 8 m/s; UNVERIFIED, small sample"
+ },
+ "inputs_rule": "race card (recent runs, declared body weight, horse_no), market order and JMA wind come only from the signed request snapshot frozen at or before prediction_cutoff; otherwise the arm does not fire",
+ "evidence_rule": "same as the extended profile. Known-result replay over settled races is context only (参考値, computed after the results were known).",
+ "budget_note": "arms rebuild tickets with Production MEC, so investment differs; report PFS, PFS excl. max payout, net profit change and investment change together.",
+ "arms": [
+  {"id": "P3_SHORTEN_SPRINT_FRONT", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CANDIDATE",
+   "rule": "today <= 1400m, last run >= 1600m, no recent run <= 1400m, last-run best corner position <= 50% of field -> add to P3 under every pair",
+   "metric": "net profit change vs frozen Production tickets; must beat P3_SHORTEN_SAME_COUNT_CONTROL",
+   "promote_if": "at 100 firing races beats Production and the control on net profit and PFS excl. max payout -> Owner decision",
+   "reject_if": "at 50 firing races not better than the control"},
+  {"id": "P3_SHORTEN_SAME_COUNT_CONTROL", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CONTROL",
+   "rule": "in the same firing races add the same number of P3 runners by pre-cutoff market order (Static rank if no market)",
+   "metric": "net profit change", "promote_if": "control arm", "reject_if": "n/a"},
+  {"id": "P3_FIRST_DIRT_BIG_OUTER_FRONT", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CANDIDATE",
+   "rule": "dirt today, all recent runs on turf, declared body weight >= 460kg, horse_no > field/2, some recent first-corner position <= 40% of field -> add to P3",
+   "metric": "net profit change; must beat P3_FIRST_DIRT_SAME_COUNT_CONTROL",
+   "promote_if": "at 100 firing races beats Production and the control -> Owner decision",
+   "reject_if": "at 50 firing races not better than the control"},
+  {"id": "P3_FIRST_DIRT_SAME_COUNT_CONTROL", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CONTROL",
+   "rule": "same races, same count, by market order", "metric": "net profit change", "promote_if": "control arm", "reject_if": "n/a"},
+  {"id": "W_WIND8_MARKET_TOP3", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CANDIDATE",
+   "rule": "pre-cutoff JMA wind_speed_ms >= 8.0 -> add pre-cutoff market top-3 missing from W as PROTECTED heads",
+   "metric": "net profit change; must beat W_WIND8_STATIC_SAME_COUNT_CONTROL",
+   "promote_if": "at 30 firing races beats Production and the control -> Owner decision (rare condition: about 1% of races)",
+   "reject_if": "at 30 firing races not better than the control"},
+  {"id": "W_WIND8_STATIC_SAME_COUNT_CONTROL", "tracker": "runtime/analysis/jra_role_candidate_replay.py", "kind": "SHADOW_CONTROL",
+   "rule": "same windy races, add the same number of heads by Static rank", "metric": "net profit change", "promote_if": "control arm", "reject_if": "n/a"}
+ ]
+}
