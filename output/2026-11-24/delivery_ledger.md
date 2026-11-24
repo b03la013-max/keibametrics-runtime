@@ -1,19 +1,19 @@
-# 地方版 配送台帳 2026-11-24（11:42時点）
+# 地方版 配送台帳 2026-11-24（12:04時点）
 
 - 管理Race 36／発走済み 1
-- PAPER：凍結 36・Push検証 36・送信 3（発走前 3）・読み戻し一致 3・本人確認 0
+- PAPER：凍結 36・Push検証 35・送信 3（発走前 3）・読み戻し一致 3・本人確認 0
 - 正式：試行 3・Signed FINAL 3（NO-BET 0）・発走前送信 3・読み戻し一致 3・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 1／重要変更 0／Revision 2署名 0
+- 10分前チェック：確認 2／重要変更 1／Revision 2署名 1
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
-| MIZ_01 | 11:40 | PRESTART_PUSH_VERIFIED | 10:59 | ○ | SIGNED_FINAL | 11:00 | ○ |  |
-| MIZ_02 | 12:10 | PRESTART_PUSH_VERIFIED | 11:27 | ○ | SIGNED_FINAL | 11:29 | ○ |  |
-| MIZ_03 | 12:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| MIZ_01 | 11:40 | POSTRESULT_DIAGNOSTIC | 10:59 | ○ | SIGNED_FINAL | 11:00 | ○ |  |
+| MIZ_02 | 12:10 | PRESTART_PUSH_VERIFIED | 11:27 | ○ | SIGNED_FINAL | 12:04 | ○ |  |
+| MIZ_03 | 12:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | MIZ_04 | 13:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_05 | 14:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_06 | 14:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
