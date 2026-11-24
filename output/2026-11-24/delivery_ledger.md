@@ -1,6 +1,6 @@
-# 地方版 配送台帳 2026-11-24（15:04時点）
+# 地方版 配送台帳 2026-11-24（15:11時点）
 
-- 管理Race 36／発走済み 14
+- 管理Race 36／発走済み 15
 - PAPER：凍結 36・Push検証 36・送信 18（発走前 18）・読み戻し一致 18・本人確認 0
 - 正式：試行 18・Signed FINAL 18（NO-BET 0）・発走前送信 18・読み戻し一致 18・本人確認 0
 - 発走前PAPER配送なしで発走：なし
@@ -40,7 +40,7 @@
 | URW_03 | 13:20 | POSTRESULT_DIAGNOSTIC | 12:38 | ○ | SIGNED_FINAL | 13:11 | ○ |  |
 | URW_04 | 13:50 | POSTRESULT_DIAGNOSTIC | 13:08 | ○ | SIGNED_FINAL | 13:41 | ○ |  |
 | URW_05 | 14:20 | POSTRESULT_DIAGNOSTIC | 13:37 | ○ | SIGNED_FINAL | 14:11 | ○ |  |
-| URW_06 | 14:50 | PRESTART_PUSH_VERIFIED | 14:07 | ○ | SIGNED_FINAL | 14:43 | ○ |  |
+| URW_06 | 14:50 | POSTRESULT_DIAGNOSTIC | 14:07 | ○ | SIGNED_FINAL | 14:43 | ○ |  |
 | URW_07 | 15:25 | PRESTART_PUSH_VERIFIED | 14:44 | ○ | SIGNED_FINAL | 14:44 | ○ |  |
 | URW_08 | 16:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_09 | 16:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
