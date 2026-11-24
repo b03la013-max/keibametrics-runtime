@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-24（18:11時点）
+# 地方版 配送台帳 2026-11-24（18:15時点）
 
 - 管理Race 36／発走済み 30
 - PAPER：凍結 36・Push検証 36・送信 32（発走前 32）・読み戻し一致 32・本人確認 0
@@ -29,7 +29,7 @@
 | NGY_04 | 16:10 | POSTRESULT_DIAGNOSTIC | 15:27 | ○ | SIGNED_FINAL | 16:02 | ○ |  |
 | NGY_05 | 16:45 | POSTRESULT_DIAGNOSTIC | 16:02 | ○ | SIGNED_FINAL | 16:37 | ○ |  |
 | NGY_06 | 17:20 | POSTRESULT_DIAGNOSTIC | 16:38 | ○ | SIGNED_FINAL | 17:12 | ○ |  |
-| NGY_07 | 17:55 | PRESTART_PUSH_VERIFIED | 17:12 | ○ | SIGNED_FINAL | 17:46 | ○ |  |
+| NGY_07 | 17:55 | POSTRESULT_DIAGNOSTIC | 17:12 | ○ | SIGNED_FINAL | 17:46 | ○ |  |
 | NGY_08 | 18:35 | PRESTART_PUSH_VERIFIED | 17:51 | ○ | SIGNED_FINAL | 17:52 | ○ |  |
 | NGY_09 | 19:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_10 | 19:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
