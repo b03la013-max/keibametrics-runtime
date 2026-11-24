@@ -108,3 +108,21 @@ def test_mktp2_reforms_second_set_with_market():
     assert len(v) <= fm.CAP and any(t[0] == 'EXACTA' and t[1] == [1, 8] for t in v)
     s['_market_order'] = []
     assert fm.variant_of(s, 'GEN:MKTP2:blend=50') == fm.signed(s)
+
+
+def test_krscap_orders_mec_by_simulation():
+    s = _s()
+    mec = [{'bet_type': 'TRIFECTA', 'selection': [1, 2, 3], 'mec_tier': 'CORE'},
+           {'bet_type': 'TRIFECTA', 'selection': [4, 2, 1], 'mec_tier': 'CORE'},
+           {'bet_type': 'EXACTA', 'selection': [1, 2], 'mec_tier': 'TAIL'}]
+    s['signed_final_tickets'] = mec
+    util = {'top_trifecta_occurrence': [{'W': 4, 'P2': 2, 'P3': 1, 'frequency': 0.2}],
+            'top_exacta_occurrence': [{'W': 1, 'P2': 2, 'frequency': 0.3}],
+            'summary': [{'horse_no': h, 'SSR-W': 0.1, 'SSR-P2': 0.1, 'SSR-P3': 0.1} for h in range(1, 9)]}
+    s['_krs'] = fm.krs_view(util)
+    v1 = fm.variant_of(s, 'GEN:KRSCAP:mode=1')
+    assert v1[0] == ('EXACTA', [1, 2]) and v1[1] == ('TRIFECTA', [4, 2, 1])
+    v2 = fm.variant_of(s, 'GEN:KRSCAP:mode=2')
+    assert v2[0] == ('TRIFECTA', [4, 2, 1]) and v2[-1] == ('EXACTA', [1, 2])
+    s['_krs'] = None
+    assert fm.variant_of(s, 'GEN:KRSCAP:mode=1') == fm.signed(s)

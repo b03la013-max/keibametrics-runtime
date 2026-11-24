@@ -36,6 +36,7 @@ FAMILY_GRID = {   # family -> parameter sets in the order they are tried (the fi
     'CORE': [{'n': 2}, {'n': 4}],
     'PAIRFULL': [{'pairs': 6}, {'pairs': 4}],
     'MKTP2': [{'blend': 50}, {'blend': 75}],
+    'KRSCAP': [{'mode': 1}, {'mode': 2}],
 }
 PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (same budget)
     'P1:HIT_BUT_LOSS': ['CORE', 'TRIOBOX', 'WAXTRIO'],
@@ -43,7 +44,7 @@ PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (sa
     'P1:ROLE_W_MISS': ['WPLUS'],
     'P1:ROLE_P3_MISS': ['THIRDK'],
     'P1:TICKET_ORDER_MISS': ['WAXTRIO', 'TRIOBOX'],
-    'P1:CAP_LOST_HIT': ['PAIRFULL', 'CORE'],   # from review/formal_eval.json (60-point cap dropped a hit)
+    'P1:CAP_LOST_HIT': ['PAIRFULL', 'KRSCAP', 'CORE'],   # from review/formal_eval.json (60-point cap dropped a hit)
 }
 
 
