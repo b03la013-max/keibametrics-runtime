@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-24（16:39時点）
+# 地方版 配送台帳 2026-11-24（16:40時点）
 
 - 管理Race 36／発走済み 22
 - PAPER：凍結 36・Push検証 36・送信 26（発走前 26）・読み戻し一致 26・本人確認 0
@@ -19,7 +19,7 @@
 | MIZ_06 | 14:35 | POSTRESULT_DIAGNOSTIC | 13:54 | ○ | SIGNED_FINAL | 14:28 | ○ |  |
 | MIZ_07 | 15:10 | POSTRESULT_DIAGNOSTIC | 14:28 | ○ | SIGNED_FINAL | 15:03 | ○ |  |
 | MIZ_08 | 15:45 | POSTRESULT_DIAGNOSTIC | 15:03 | ○ | SIGNED_FINAL | 15:37 | ○ |  |
-| MIZ_09 | 16:20 | PRESTART_PUSH_VERIFIED | 15:39 | ○ | SIGNED_FINAL | 16:12 | ○ |  |
+| MIZ_09 | 16:20 | POSTRESULT_DIAGNOSTIC | 15:39 | ○ | SIGNED_FINAL | 16:12 | ○ |  |
 | MIZ_10 | 16:55 | PRESTART_PUSH_VERIFIED | 16:14 | ○ | SIGNED_FINAL | 16:14 | ○ |  |
 | MIZ_11 | 17:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_12 | 18:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
