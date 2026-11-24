@@ -343,3 +343,19 @@ def test_special_notes_jockey_change_and_result_scratch():
            '<td class="time">-</td> <td class="lead"> <span style="color: #ff0000; ">取消</span> </td> </tr>'
            '<tr> <td class="order">9</td> <td class="number">3</td> <td class="lead"> </td> </tr>')
     assert source.result_non_starters(res) == [4]
+
+
+def test_watch_alerts_once_per_race(tmp_path, monkeypatch):
+    posts = []
+    monkeypatch.setenv('KM_BAN_DELIVERY_ISSUE', '429')
+    monkeypatch.setattr(run, '_gh', lambda m, p, b=None: posts.append(b['body']) or {})
+    now = run.now_jst()
+    q = {'races': {
+        '01': {'no': 1, 'post': (now - timedelta(minutes=90)).isoformat(), 'state': 'PREDICTION_COMPLETE', 'delivered': 'x'},
+        '02': {'no': 2, 'post': (now - timedelta(minutes=5)).isoformat(), 'state': 'MISSED_DEADLINE', 'last_error': 'E'},
+        '03': {'no': 3, 'post': (now + timedelta(minutes=60)).isoformat(), 'state': 'DISCOVERED', 'err_n': 3, 'last_error': 'X'},
+    }, 'review_fail': 'boom'}
+    run.watch(q, tmp_path, now)
+    run.watch(q, tmp_path, now)
+    assert set(q['alerts']) == {'SETTLE_LATE:01', 'MISSED_DEADLINE:02', 'REPEATED_ERROR:03', 'REVIEW_FAIL:day'}
+    assert len(posts) == 4
