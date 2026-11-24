@@ -14,7 +14,7 @@ sys.path[:0]=[str(ROOT/'runtime'),str(ROOT/'tests')]
 from test_jra_role_learning_repair import fixture
 from jra_shadow_checkpoint import pack,execute,restore,write_once,validate,CODES,MODEL
 from jra_role_learning_shadow import digest
-from jra_formal_artifact_wait import wait,select_artifact
+from jra_formal_artifact_wait import wait,select_artifact,ApiNoResponse,MAX_NO_RESPONSE
 
 
 class IsolationTests(unittest.TestCase):
@@ -126,6 +126,18 @@ class WorkflowIsolationTests(unittest.TestCase):
   self.assertEqual(len(calls),1)
   with self.assertRaises(ValueError):select_artifact(provider_run('completed'),[])
   self.assertIsNone(select_artifact(provider_run(),[provider_artifact('krs-utility-123')]))
+ def test_api_no_response_is_retried_bounded_case_kyo_20261122_r07(self):
+  calls=[]
+  def fetch(path):
+   calls.append(path)
+   if len(calls)==1:raise ApiNoResponse('timeout')
+   return {'artifacts':[provider_artifact()]} if '/artifacts?' in path else provider_run()
+  self.assertEqual(wait(123,fetch,pause=lambda t:None)['id'],1)
+  self.assertEqual(len(calls),3)
+  def never(path):calls.append(path);raise ApiNoResponse('timeout')
+  calls.clear()
+  with self.assertRaises(ApiNoResponse):wait(123,never,pause=lambda t:None)
+  self.assertEqual(len(calls),MAX_NO_RESPONSE+1)
  def test_old_completed_run_compatibility_and_expired_refusal(self):
   run=provider_run('completed')
   self.assertEqual(select_artifact(run,[provider_artifact('krs-utility-123')])['id'],1)
