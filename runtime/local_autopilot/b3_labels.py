@@ -151,3 +151,92 @@ def labels2(cur, hist):
         k = sum(1 for p in hist[-3:] if p.get('early') is not None and p['early'] >= 0.6)
         out.append(('FAVSLOW', f"{'SPRINT' if cur['distance'] <= 1000 else 'OTHER'}|{'2+' if k >= 2 else k}"))
     return out
+
+
+# ---------------------------------------------------------------- B3 third part (pre-registered 2026-11-25 06時台)
+"""
+  CLSFIN  クラスの「組」を含む格の移動 x 前走着順帯 x 同格以上での直近3走の最高着順
+          格 = engine.class_level（A/B/C と数字、組は1つ下がるごとに -0.08）。組が括弧なし（'C2三'・'C3-10'・'C3 10組'）
+          でも読む。移動 UP（今回の方が格上）/ SAME / DOWN、前走着順 1-3 / 4-6 / 7+、
+          同格以上（前走以前3走のうち格が今回以上）の最高着順 1-3 / 4-6 / 7+ / NONE。
+          (Drive: 地方競馬攻略一般 ch.2/6「過去3走の組×着順から実力クラスを出す」、n36。engine.class_level は組差 0.08
+          だけで、組×着順の表は無かった)
+  人気帯別の表（label_pop_table）: 候補ラベルの値ごとに 単勝人気帯（1-2 / 3-5 / 6+）別の 件数・3着内・期待・A/E を出す
+          (Drive n259「勝率が高い≠回収率が高い」：ext_model は A/E を人気で補正するが、どの人気帯で効くかは出していなかった。
+          払戻を持たないので回収率は未対応＝一部対応)
+"""
+import re as _re
+import unicodedata as _ud
+
+PREREG3 = {'registered': '2026-11-25T06', 'bundle': 'B3', 'labels': ['CLSFIN'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS3 = {'CLSFIN': 'CLF'}
+_KN = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
+
+
+def _kanji_num(s):
+    if not s:
+        return None
+    if s.isdigit():
+        return int(s)
+    if s == '十':
+        return 10
+    if s.startswith('十'):
+        return 10 + _KN.get(s[1:], 0)
+    if '十' in s:
+        a, b = s.split('十', 1)
+        return _KN.get(a, 0) * 10 + (_KN.get(b, 0) if b else 0)
+    return _KN.get(s)
+
+
+def level_of(text):
+    """Class level incl. 組 (higher = stronger). None when the text has no A/B/C class."""
+    from runtime.local_autopilot import engine
+    t = _ud.normalize('NFKC', str(text or ''))
+    lv = engine.class_level(t)
+    if lv is None:
+        return None
+    if _re.search(r'[\(（][一二三四五六七八九十]+[\)）]', t):
+        return round(lv, 3)
+    m = _re.search(r'[ABC]\s*[1-9]\s*(?:[-ー]\s*(\d{1,2})|([一二三四五六七八九十]+)|\s+(\d{1,2})組)', t)
+    if m:
+        g = _kanji_num(m[1] or m[2] or m[3])
+        if g:
+            lv -= 0.08 * (g - 1)
+    return round(lv, 3)
+
+
+def labels3(cur, hist):
+    """Third B3 part. cur / hist carry 'lvl' (level_of of the race condition). -> [(name, value)]"""
+    if not hist:
+        return []
+    c, last = cur.get('lvl'), hist[-1]
+    p = last.get('lvl')
+    if c is None or p is None:
+        return []
+    mv = 'UP' if c > p + 0.01 else 'DOWN' if c < p - 0.01 else 'SAME'
+    best = [h.get('finish') for h in hist[-3:] if h.get('lvl') is not None and h['lvl'] >= c - 0.01 and h.get('finish')]
+    return [('CLSFIN', f"{mv}|{_fin(last.get('finish'))}|{_fin(min(best)) if best else 'NONE'}")]
+
+
+def label_pop_table(rows, exp, names=None):
+    """Candidate label value x 単勝人気帯 -> {n, top3, exp, ae}. rows / exp as in ext_model.build (training rows and
+    expectation()). Evidence only: used to see in which popularity band a label works (n259)."""
+    out = {}
+    for r in rows:
+        e = exp.get((r['venue'], min(r['pop'], 10), r['fband']))
+        pb = pop_band(r.get('pop'))
+        if e is None or pb is None:
+            continue
+        for name, val in r.get('cand_labels') or []:
+            if names and name not in names:
+                continue
+            d = out.setdefault(f'{name}={val}', {}).setdefault(pb, {'n': 0, 'top3': 0, 'exp': 0.0})
+            d['n'] += 1
+            d['top3'] += int(bool(r['top3']))
+            d['exp'] += e
+    for by in out.values():
+        for d in by.values():
+            d['exp'] = round(d['exp'], 3)
+            d['ae'] = round(d['top3'] / d['exp'], 3) if d['exp'] else None
+    return out

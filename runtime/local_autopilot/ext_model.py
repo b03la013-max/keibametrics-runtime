@@ -171,7 +171,19 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels2(cur, hist)  # B3 second part (2026-11-25): LEADX / SEASEX / REST2 / FAVSLOW / DEBUTX
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels3(cur, hist)  # B3 third part (2026-11-25 06): CLSFIN（組×着順）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
+
+
+def _lvl(text):
+    from runtime.local_autopilot import b3_labels as b3
+    try:
+        return b3.level_of(text)
+    except Exception:
+        return None
 
 
 def _kame3(cur, hist):
@@ -193,7 +205,8 @@ def _kame3(cur, hist):
 
 
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
-                   'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX'}
+                   'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
+                   'CLSFIN': 'CLF'}
 
 
 def labels(cur, hist):
@@ -314,7 +327,7 @@ def _rows(races, std=None):
             fr = sum(1 for s in ws if s == 'FRONT') / len(ws)
             bias = 'FRONT' if fr >= 0.6 else 'BACK' if fr <= 0.15 else 'NEUTRAL'
         cur0 = {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'), 'going': race.get('going'),
-                'cls': hs.class_code(race.get('cond')), 'weather': race.get('weather'),
+                'cls': hs.class_code(race.get('cond')), 'lvl': _lvl(race.get('cond')), 'weather': race.get('weather'),
                 'special': hs.special_flag(race['venue'], race.get('cond')), 'daybias': bias}
         done, rr = [], []
         for x in race['runners']:
@@ -340,7 +353,7 @@ def _rows(races, std=None):
                            'season': season(race['date']), 'spd': spd_of(prev), 'labels': labels(cur, prev),
                            'cand_labels': cand_labels(cur, prev), 'style': style(prev), 'early_now': early})
             done.append((hk, {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
-                              'finish': x.get('finish'), 'early': early, 'late': late, 'cls': cur0['cls'],
+                              'finish': x.get('finish'), 'early': early, 'late': late, 'cls': cur0['cls'], 'lvl': cur0['lvl'],
                               'jockey': x.get('jockey'), 'fig': None if fig is None else round(fig, 1),
                               'f3best': (None if best3 is None or hs._f3(x.get('last3f')) is None else hs._f3(x.get('last3f')) == best3),
                               'field': field, 'pos': fc, 'bw': x.get('bw')}))

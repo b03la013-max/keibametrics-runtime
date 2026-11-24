@@ -32,14 +32,15 @@ EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
 MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3', 'ITV', 'BWS', 'BWP', 'SHF', 'FRS',
-            'LDX', 'SSX', 'RS2', 'FSL', 'DBX']
+            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
 DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
                 'KM3': 0.0,   # 亀谷 v3 (B4 2026-11-24): starts at 0, only the weekly hold-out refit can move it
                 # B3 pattern labels (b3_labels, 2026-11-25): same rule, weight 0 until the hold-out refit adopts one
                 'ITV': 0.0, 'BWS': 0.0, 'BWP': 0.0, 'SHF': 0.0, 'FRS': 0.0,
-                'LDX': 0.0, 'SSX': 0.0, 'RS2': 0.0, 'FSL': 0.0, 'DBX': 0.0}   # B3 second part, same rule
+                'LDX': 0.0, 'SSX': 0.0, 'RS2': 0.0, 'FSL': 0.0, 'DBX': 0.0,   # B3 second part, same rule
+                'CLF': 0.0}   # B3 third part (組×着順), same rule
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
@@ -146,7 +147,7 @@ def card_history(r, race_day):
         out.append({'date': dt, 'venue': v, 'distance': s.get('distance'), 'finish': s.get('finish'),
                     'early': (pos[0] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
                     'late': (pos[-1] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
-                    'cls': em.class_code(s.get('race_name')), 'jockey': s.get('ride_jockey'),
+                    'cls': em.class_code(s.get('race_name')), 'lvl': em._lvl(s.get('race_name')), 'jockey': s.get('ride_jockey'),
                     'field': fs, 'pos': pos[0] if pos else None, 'bw': s.get('ride_body_weight')})
     return sorted(out, key=lambda x: x['date'])
 
@@ -208,7 +209,8 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
         pop = x.get('popularity') or odds_rank.get(x['horse_no'])
         cur = {'date': day, 'venue': v, 'distance': d, 'going': race.get('going'), 'age': x.get('age'),
                'sex': (x.get('sex_age') or '')[:1] or None, 'pop': pop, 'frame_no': x.get('frame_no'),
-               'jockey': x.get('current_jockey'), 'cls': hs.class_code(race.get('race_name')), 'weather': weather,
+               'jockey': x.get('current_jockey'), 'cls': hs.class_code(race.get('race_name')), 'lvl': em._lvl(race.get('race_name')),
+               'weather': weather,
                'bw': x.get('current_body_weight'),
                'special': hs.special_flag(v, race.get('race_name')), 'daybias': daybias,
                'sire': x.get('sire'), 'damsire': x.get('damsire')}
