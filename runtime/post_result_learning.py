@@ -85,17 +85,135 @@ def _mec_actual_coverage(final_artifact, top3):
       "semantic_tail_floor_count":mec.get("semantic_tail_floor_count"),
     }
 
+_JRA_TRIO_REVIEW = "DECISION_AWARE_V4"
+_INDEPENDENT_REVIEW_MODES = {"DECISION_AWARE_V3", _JRA_TRIO_REVIEW}
+
+
+def _trio_key(selection):
+    if not isinstance(selection, (list, tuple)):
+        return None
+    ids = frozenset(map(str, selection))
+    return ids if len(selection) == len(ids) == 3 and all(
+        rid.isascii() and rid.isdecimal() and 1 <= int(rid) <= 18 and str(int(rid)) == rid
+        for rid in ids) else None
+
+
+def _jra_trio_reachability(final, orders, roles, settlement, paper):
+    """KMS unordered funnel from existing frozen evidence and actual settlement."""
+    fp = final.get("final_prediction_package") or {}
+    rank = {str(rid): i for i, rid in enumerate(fp.get("ranking") or [], 1)}
+    mec = final.get("minimum_efficient_coverage") or {}
+    final_ticket = final.get("final_ticket") or {}
+    capital = final.get("capital_policy_decision") or {}
+    units = mec.get("coverage_units")
+    candidates = mec.get("tickets")
+    role_basis_observed = isinstance(fp.get("roles"), dict) or isinstance(final.get("role_registry"), list)
+    final_trios = [t for t in final_ticket.get("tickets") or []
+                   if t.get("bet_type") == "TRIO"]
+    trio_keys = [_trio_key(t.get("selection")) for t in final_trios]
+    common_members = (frozenset.intersection(*trio_keys)
+                      if trio_keys and all(trio_keys) else None)
+    wins = settlement.get("winning_tickets")
+    refunds = settlement.get("refunded_tickets")
+    status = str(settlement.get("status") or "").upper()
+    zero_exposure = (not final_trios and (paper or final_ticket.get("no_bet") is True
+                    or capital.get("decision") == "NO_BET"))
+    invested = sum(t["stake"] for t in final_trios)
+    refunded = returned = effective = pfs = None
+    if not invested:
+        refunded = returned = effective = 0
+    elif status in {"SETTLED", "COMPLETE"}:
+        if isinstance(refunds, list):
+            refunded = sum(t["refund"] for t in refunds if t.get("bet_type") == "TRIO")
+        elif settlement.get("refund") == 0:
+            refunded = 0
+        if isinstance(wins, list):
+            returned = sum(t["return"] for t in wins if t.get("bet_type") == "TRIO")
+        if refunded is not None and 0 <= refunded <= invested:
+            effective = invested - refunded
+        if returned is not None and effective:
+            pfs = round(100.0 * returned / effective, 9)
+
+    outcomes = []
+    for top3 in sorted({tuple(sorted(order)) for order in orders}):
+        key = _trio_key(top3)
+        members = [
+            {"runner_id": rid, "static_rank": rank.get(str(rid)),
+             "active_roles": sorted(roles.get(str(rid), set()) & {"W", "P2", "P3"})}
+            for rid in top3
+        ]
+        missing = ([row["runner_id"] for row in members if not row["active_roles"]]
+                   if role_basis_observed else None)
+        sources = None if units is None else sorted({u["kind"] for u in units
+            if u.get("kind") in {"TAIL_SET", "EXACT_THIRD"} and _trio_key(u.get("parts")) == key})
+        generated = None if candidates is None else any(t.get("bet_type") == "TRIO"
+            and _trio_key(t.get("selection")) == key for t in candidates)
+        stake = sum(t["stake"] for t in final_trios if _trio_key(t.get("selection")) == key)
+        outcome_return = None if returned is None else sum(
+            t["return"] for t in wins or [] if t.get("bet_type") == "TRIO"
+            and _trio_key(t.get("selection")) == key)
+        if stake:
+            failure = ("TRIO_SETTLEMENT_UNAVAILABLE" if outcome_return is None else
+                       "TRIO_SETTLEMENT_NO_RECORDED_RETURN" if not outcome_return else
+                       "TRIO_CAPITAL_EFFICIENCY" if pfs is not None and pfs < 100 else "NONE")
+        elif zero_exposure:
+            failure = "NOT_APPLICABLE_ZERO_EXPOSURE"
+        elif generated is True:
+            failure = "TRIO_FINAL_SELECTION_MISSING"
+        elif generated is False and sources:
+            failure = "MEC_TRIO_NOT_GENERATED"
+        elif missing:
+            failure = "PLACE_ROLE_MEMBER_MISSING"
+        elif generated is False and sources == []:
+            failure = "JOINT_SET_NOT_REACHABLE"
+        else:
+            failure = "TRIO_REACHABILITY_UNAVAILABLE"
+        outcomes.append({
+            "official_unordered_top3": list(top3),
+            "members": members,
+            "missing_place_role_members": missing,
+            "mec_joint_set_evidence": sources,
+            "mec_trio_candidate_reachable": generated,
+            "final_trio_ticket_coverage": stake > 0,
+            "all_shared_ticket_members_survive": (
+                common_members <= key if common_members else None),
+            "frozen_trio_stake": stake,
+            "settled_trio_return": outcome_return,
+            "first_trio_failure": failure,
+        })
+
+    return {
+        "place_member_basis": "FROZEN_W_P2_P3_UNION_PROXY",
+        "capital_decision": capital.get("decision"),
+        # This measures joint exposure. A common selection does not prove
+        # that a designated axis or two-axis policy caused the dependence.
+        "shared_final_trio_ticket_members": (
+            sorted(map(int, common_members)) if common_members is not None else None),
+        "final_trio_disposition": next((row for row in final_ticket.get("bet_type_dispositions") or []
+                                        if row.get("bet_type") == "TRIO"), None),
+        "trio_ticket_count": len(final_trios),
+        "frozen_trio_investment": invested,
+        "trio_refund": refunded,
+        "effective_trio_investment": effective,
+        "settled_trio_return": returned,
+        "trio_profit_loss": returned - effective if returned is not None and effective is not None else None,
+        "trio_pfs": pfs,
+        "actual_purchase_inferred": False,
+        "by_valid_unordered_set": outcomes,
+    }
+
+
 def build_post_result_review(result:dict, final_artifact:dict, *, review_semantics="LEGACY")->dict:
-    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2", "DECISION_AWARE_V3"}:
+    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2"} | _INDEPENDENT_REVIEW_MODES:
         raise LearningError("REVIEW_SEMANTICS_UNSUPPORTED")
     if not isinstance(result,dict) or not isinstance(final_artifact,dict):
         raise LearningError("INPUT_NOT_OBJECT")
     race_id=str(result.get("race_id") or "")
     if not race_id or race_id!=str(final_artifact.get("race_id") or ""):
         raise LearningError("RACE_ID_MISMATCH")
-    if review_semantics=="DECISION_AWARE_V3" and (
+    if review_semantics in _INDEPENDENT_REVIEW_MODES and (
             final_artifact.get("family_id")!="JRA" or not race_id.startswith("KM-JRA-")):
-        raise LearningError("DECISION_AWARE_V3_JRA_ONLY")
+        raise LearningError(review_semantics+"_JRA_ONLY")
     top3=(result.get("official_result") or {}).get("top3")
     if not isinstance(top3,list) or len(top3)!=3:
         raise LearningError("OFFICIAL_TOP3_REQUIRED")
@@ -176,7 +294,7 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
 
-    decision_aware=review_semantics in {"DECISION_AWARE_V2", "DECISION_AWARE_V3"}
+    decision_aware=review_semantics != "LEGACY"
     capital_decision=final_artifact.get("capital_policy_decision") or {}
     ft=final_artifact.get("final_ticket") or {}
     paper=bool(capital_decision.get("decision")=="PAPER" and ft.get("no_bet") is True
@@ -271,7 +389,7 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
              "mec_coverage":order_mec}
             for order,role_order,order_coverage,order_mec in zip(orders,role_orders,coverages,mec_orders)]
         review["prediction"]["dead_heat_capture_aggregation"]="ANY_VALID_ORDER_PER_ROLE; JOINT_ORDERS_RETAINED"
-    if review_semantics=="DECISION_AWARE_V3":
+    if review_semantics in _INDEPENDENT_REVIEW_MODES:
         # All three role captures are independent observations. A missed winner
         # does not make the actual second/third horse's Role capture unobservable.
         independent=["PREDICTION_ROLE_"+role for role,key in
@@ -315,6 +433,9 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
     if refund or "effective_investment" in settlement:
         review["capital"].update(refund=refund,effective_investment=effective_inv)
     review["pfs_improvement"]=build_pfs_improvement_assessment(review)
+    if review_semantics == _JRA_TRIO_REVIEW:
+        review["trio_reachability"] = _jra_trio_reachability(
+            final_artifact, orders, roles, settlement, paper)
     review["sha256"]=_sha(review)
     return review
 
@@ -334,10 +455,11 @@ def build_learning_state(review:dict, *, effective_time=None)->dict:
     elif ff=="CAPITAL_EFFICIENCY":
         shadow.append("CAPITAL_ALLOCATION_EFFICIENCY")
 
-    v3=review.get("review_semantics")=="DECISION_AWARE_V3"
+    semantics=review.get("review_semantics")
+    v3=semantics in _INDEPENDENT_REVIEW_MODES
     if v3:
         if not str(review.get("race_id") or "").startswith("KM-JRA-"):
-            raise LearningError("DECISION_AWARE_V3_JRA_ONLY")
+            raise LearningError(semantics+"_JRA_ONLY")
         failures=review.get("failure_localization") or {}
         if ff in (failures.get("dependent_conversion_failures") or []):
             shadow=[]
@@ -373,11 +495,19 @@ def build_learning_state(review:dict, *, effective_time=None)->dict:
       "production_change_authorized":False,
     }
     if v3:
-        state["review_semantics"]="DECISION_AWARE_V3"
+        state["review_semantics"]=semantics
         state["reference_metrics"].update({
             key:(review.get("failure_localization") or {}).get(key,[])
             for key in ("independent_role_failures","secondary_independent_role_failures",
                         "independent_conversion_failures","dependent_conversion_failures")})
+    if semantics == _JRA_TRIO_REVIEW:
+        trio = review["trio_reachability"]
+        state["reference_metrics"]["trio_reachability"] = {
+            "trio_pfs": trio["trio_pfs"],
+            "by_valid_unordered_set": [
+                {k: row[k] for k in ("official_unordered_top3", "first_trio_failure")}
+                for row in trio["by_valid_unordered_set"]],
+        }
     if effective_time is not None:
         from datetime import datetime
         when=datetime.fromisoformat(effective_time.replace('Z','+00:00'))
