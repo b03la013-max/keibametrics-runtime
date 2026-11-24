@@ -17,15 +17,15 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:00:35 / 21:03:39 / 21:03:40 / 21:39:15 |
 | 最早発走 | 11:40 |
-| Provider要求 | 123回・待機4955秒 |
+| Provider要求 | 125回・待機5014秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想36Rのうち実行36R／391頭×29＝11339セル（期待値 11339）：CALCULATED 9677・RULED-NEUTRAL 1662・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 11339／。KRS実試行 0（外部Engine未呼出）。
+予想36Rのうち実行36R／391頭×29＝11339セル（期待値 11339）：CALCULATED 9701・RULED-NEUTRAL 1638・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 11339／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較36R：◎一致 14/36・順位相関（Spearman平均）0.63。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較36R：◎一致 15/36・順位相関（Spearman平均）0.63。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）
 
@@ -65,7 +65,7 @@
 | [9R](URW_09.md) | 16:35 | POSTRESULT_DIAGNOSTIC | 直前版 | 15:50 | 15:50 | ◎9 ダンシングラスカル | ワイド 9-7 / 9-3<br>三連複 4-7-9 / 7-8-9 / 5-7-9 / 1-7-9 / 3-7-9 | 7-5-9 払戻2,400円 |
 | [10R](URW_10.md) | 17:10 | POSTRESULT_DIAGNOSTIC | 直前版 | 16:25 | 16:25 | ◎2 アラビアンレイン | 単勝 2<br>馬単 2→4,8 | 2-3-1 払戻190円 |
 | [11R](URW_11.md) | 17:45 | PRESTART_PUSH_VERIFIED | 直前版 | 17:00 | 17:00 | ◎9 スマイルスライヴ | ワイド 9-1 / 9-8<br>三連複 1-3-12 / 1-3-9 / 1-9-12 / 1-2-9 / 1-5-9 |  |
-| [12R](URW_12.md) | 18:20 | PRESTART_PUSH_VERIFIED | 朝版 | 21:34 | 21:34 | ◎9 ポピーレッド | ワイド 9-12 / 9-1<br>三連複 6-9-12 / 2-9-12 / 1-9-12 / 2-6-9 / 1-6-9 |  |
+| [12R](URW_12.md) | 18:20 | PREDICTION_COMPLETE | 直前版 | 17:35 | 17:35 | ◎12 ユメデアエタラ | ワイド 12-6 / 12-5<br>三連複 6-9-12 / 4-6-12 / 6-8-12 / 1-6-12 / 5-6-12 |  |
 
 ## 名古屋
 
