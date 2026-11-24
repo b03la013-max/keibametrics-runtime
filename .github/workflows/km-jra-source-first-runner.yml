@@ -172,29 +172,41 @@ jobs:
         run: |
           python runtime/jra_source_runtime/verify_source_envelope.py runtime_out/source_receipt_envelope.json > runtime_out/source_verification.json
 
-      - name: Attest JRA SOURCE envelope with GitHub OIDC
+      - name: Witness JRA SOURCE envelope with a GitHub OIDC token
+        # Current Authority R55 (Owner 2026-11-21 10:46): works in a private repository.
+        if: steps.acquire.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python runtime/km_oidc_witness.py mint runtime_out/source_receipt_envelope.json \
+            runtime_out/source_oidc_witness.json --purpose JRA_SOURCE
+
+      - name: Attest JRA SOURCE envelope with GitHub OIDC (Sigstore, public repository only)
         if: steps.acquire.outcome == 'success'
         id: attest
+        continue-on-error: true
         uses: actions/attest@v4
         with:
           subject-path: runtime_out/source_receipt_envelope.json
 
-      - name: Verify GitHub attestation before persistence
+      - name: Verify GitHub OIDC witness before persistence
         if: steps.acquire.outcome == 'success'
         env:
           ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
           REQUEST_FILE: ${{ steps.req.outputs.request }}
         run: |
           set -euo pipefail
-          test -s "$ATTESTATION_BUNDLE"
-          cp -- "$ATTESTATION_BUNDLE" runtime_out/source_attestation_bundle.json
+          test -s runtime_out/source_oidc_witness.json
+          # Optional second proof while the repository is public; not required.
+          if [ -n "${ATTESTATION_BUNDLE:-}" ] && [ -s "$ATTESTATION_BUNDLE" ]; then
+            cp -- "$ATTESTATION_BUNDLE" runtime_out/source_attestation_bundle.json
+          fi
           python runtime/jra_source_runtime/verify_source_attestation.py runtime_out/source_receipt_envelope.json --request "$REQUEST_FILE"
           python - <<'PY'
           import json,os,pathlib
           p=pathlib.Path("runtime_out/source_attestation.json")
           p.write_text(json.dumps({
             "status":"PASS",
-            "trust":"GITHUB_OIDC_SIGSTORE",
+            "trust":"GITHUB_OIDC_TOKEN_WITNESS",
             "repository":os.environ["GITHUB_REPOSITORY"],
             "sha":os.environ["GITHUB_SHA"],
             "run_id":os.environ["GITHUB_RUN_ID"]
