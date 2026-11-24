@@ -282,7 +282,8 @@ def race_review(out, key, r):
             'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
             'rev_audit': res.get('rev_audit'), 'paper': res.get('paper'), 'finishers': fin,
-            'honmei': ev.get('honmei'), 'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
+            'honmei': ev.get('honmei'), 'honmei_pop': (rows.get(str(ev.get('honmei'))) or {}).get('pop'),
+            'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
@@ -399,6 +400,31 @@ def by_moisture_band(revs):
     return out or None
 
 
+POP_BANDS = (('1', 1, 1), ('2-3', 2, 3), ('4-6', 4, 6), ('7+', 7, 99))
+
+
+def by_honmei_pop_band(revs):
+    """◎の人気帯（1番人気・2-3・4-6・7番人気以下）ごとの本番の成績：R数・◎1着・◎3着内・投資・払戻・PFS（証拠のみ、閾値なし）。
+    出典：Drive「馬券購入法」（q424 単勝オッズ帯別の回収率）と亀谷「スマート出馬表」（q425 人気で調整して比べる）の読み替え。
+    ばんえいは人気帯で本命を選び直さない（本番の点数・印・券面には使わない）。"""
+    out = {}
+    for x in revs:
+        try:
+            pop = int(x.get('honmei_pop'))
+        except (TypeError, ValueError):
+            pop = None
+        b = next((n for n, lo, hi in POP_BANDS if pop is not None and lo <= pop <= hi), 'UNKNOWN')
+        d = out.setdefault(b, {'races': 0, 'honmei_win': 0, 'honmei_top3': 0, 'stake': 0, 'return': 0})
+        d['races'] += 1
+        d['honmei_win'] += int(x.get('honmei_finish') == 1)
+        d['honmei_top3'] += int(bool(x.get('honmei_finish')))
+        d['stake'] += x.get('stake') or 0
+        d['return'] += x.get('return') or 0
+    for d in out.values():
+        d['pfs'] = _pct(d['return'], d['stake'])
+    return out or None
+
+
 def summarize(revs, missed):
     S = sum(x['stake'] for x in revs)
     B = sum(x['return'] for x in revs)
@@ -435,7 +461,8 @@ def summarize(revs, missed):
             'chain_failed': {k: sum(1 for x in revs if k in ((x.get('chain') or {}).get('failed') or [])) for k in CHAIN},
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
-            'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs)}
+            'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
+            'by_honmei_pop_band': by_honmei_pop_band(revs)}
 
 
 def _md(title, s, revs=None):
@@ -473,6 +500,11 @@ def _md(title, s, revs=None):
         L.append('- 水分帯別（R・◎1着・◎3着内・勝ち馬∈W・PFS）: ' + '／'.join(
             f"{b} {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['winner_in_W']}・{d['pfs']}%"
             for b, d in sorted(s['by_moisture_band'].items())))
+    if s.get('by_honmei_pop_band'):
+        order = [n for n, _, _ in POP_BANDS] + ['UNKNOWN']
+        L.append('- ◎の人気帯別（R・◎1着・◎3着内・PFS）: ' + '／'.join(
+            f"{b}番人気 {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['pfs']}%"
+            for b, d in sorted(s['by_honmei_pop_band'].items(), key=lambda kv: order.index(kv[0]))))
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
