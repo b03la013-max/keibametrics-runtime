@@ -135,6 +135,28 @@ def winner_off_ticket(tk, winner, stake=None):
             'wasted_stake': 0 if on or stake is None else stake}
 
 
+def axis_dependency(tk, order):
+    """二頭軸の共倒れ監査（Drive q461「JRA_20261107_P0_P2_Verification」京都2R：三連複の全券が2頭の同時好走に依存して全損、の読み替え）。
+    tickets.axis が2頭（◎○二頭軸）のとき、両軸を含む券の点数・割合、両軸とも3着内だったか、片軸が3着外で両軸依存の券が全部外れたか。
+    1頭軸のときは軸を含む券の割合と軸の3着内だけ。証拠のみ（券面・点数・見送りには使わない）。"""
+    axis = [int(a) for a in (tk.get('axis') or [])]
+    if not axis or not order or len(order) < 3:
+        return None
+    top3 = {int(n) for n in order[:3]}
+    tix = [tuple(int(n) for n in x) for x in (tk.get('trio') or [])] + [tuple(int(n) for n in x) for x in (tk.get('exact') or [])]
+    if not tix:
+        return None
+    dep = [x for x in tix if all(a in x for a in axis)]
+    in3 = [a in top3 for a in axis]
+    out = {'axis': axis, 'n_axis': len(axis), 'tickets': len(tix), 'axis_tickets': len(dep),
+           'axis_share': round(len(dep) / len(tix), 2), 'axis_in_top3': sum(in3),
+           'all_axis_top3': all(in3)}
+    out['axis_wipeout'] = bool(dep) and not out['all_axis_top3']      # 軸依存の券は1点も当たらない
+    out['wipeout_points'] = len(dep) if out['axis_wipeout'] else 0
+    out['co_failure'] = len(axis) >= 2 and not any(in3)                # 二頭軸が両方とも3着外
+    return out
+
+
 def failure_chain(rows, marks, tk, order):
     """断線の多層記録（11/23 ChatGPT 反省 P0-5：単一の first_failure だけで原因を決めない）。
     HORSE（3頭とも印内）→ ROLE_W/P2/P3（着順ごとの役割）→ TRIO（三連複の組）→ HEAD（三連単の頭に勝ち馬）
@@ -241,6 +263,7 @@ def race_review(out, key, r):
     exposure = {'hub': hub, 'hub_share': hub_share, 'extreme_hub': bool(hub_share and hub_share >= 0.9),
                 'hub_failed': bool(hub and hub not in res['order'][:3])}
     exposure['winner_off_ticket'] = winner_off_ticket(tk, w_, res.get('stake'))
+    exposure['axis_dependency'] = axis_dependency(tk, res['order'])
     cpt = cross_pair_third(tk['exact'], res['order'])
     exposure['cross_pair_third'] = bool(cpt and cpt['cross_pair_third'])
     if exposure['cross_pair_third']:
@@ -460,6 +483,26 @@ def by_info_coverage(revs):
     return out or None
 
 
+def axis_dependency_summary(revs):
+    """axis_dependency の集計：軸の頭数別に R数・軸依存の券の平均割合・全損R（片軸以上が3着外）・全損点数・二頭とも3着外のR。"""
+    out = {}
+    for x in revs:
+        a = (x.get('exposure') or {}).get('axis_dependency')
+        if not a:
+            continue
+        d = out.setdefault(str(a['n_axis']), {'races': 0, 'share_sum': 0.0, 'all_axis_top3': 0, 'wipeout': 0,
+                                              'wipeout_points': 0, 'co_failure': 0})
+        d['races'] += 1
+        d['share_sum'] += a['axis_share']
+        d['all_axis_top3'] += int(a['all_axis_top3'])
+        d['wipeout'] += int(a['axis_wipeout'])
+        d['wipeout_points'] += a['wipeout_points']
+        d['co_failure'] += int(a['co_failure'])
+    for d in out.values():
+        d['axis_share_mean'] = round(d.pop('share_sum') / d['races'], 2)
+    return out or None
+
+
 def summarize(revs, missed):
     S = sum(x['stake'] for x in revs)
     B = sum(x['return'] for x in revs)
@@ -497,7 +540,8 @@ def summarize(revs, missed):
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
-            'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs)}
+            'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
+            'axis_dependency': axis_dependency_summary(revs)}
 
 
 def _md(title, s, revs=None):
@@ -545,6 +589,10 @@ def _md(title, s, revs=None):
         L.append('- 情報充足帯別（DCR平均：R・◎1着・◎3着内・勝ち馬∈W・TPI欠け頭数・PFS）: ' + '／'.join(
             f"{b} {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['winner_in_W']}・{d['tpi_unknown']}・{d['pfs']}%"
             for b, d in sorted(s['by_info_coverage'].items(), key=lambda kv: order.index(kv[0]))))
+    if s.get('axis_dependency'):
+        L.append('- 軸への依存（軸の頭数：R・軸を含む券の平均割合・全軸3着内・軸依存の券が全損・その点数・二頭とも3着外）: ' + '／'.join(
+            f"{k}頭軸 {d['races']}R・{d['axis_share_mean']:.0%}・{d['all_axis_top3']}・{d['wipeout']}R・{d['wipeout_points']}点・{d['co_failure']}R"
+            for k, d in sorted(s['axis_dependency'].items())))
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
