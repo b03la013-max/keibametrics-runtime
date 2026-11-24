@@ -84,3 +84,70 @@ def labels(cur, hist):
             out.append(('FAVRST', 'LONGER' if days >= 1.5 * med and days >= 15 else
                         'SHORTER' if days <= 0.6 * med else 'USUAL'))
     return out
+
+
+# ---------------------------------------------------------------- B3 second part (pre-registered 2026-11-25 03時台)
+"""
+  LEADX   前走で逃げた（初角先頭）馬の今回: HABIT（直近5走の初角平均が前1/4）/ ONCE x 前走着順帯
+          (Drive: 『前走逃げ→今回ハナを取れず番手』の着順。ext_model の LEAD=REPEAT は再逃げの常連だけで着順帯なし)
+  SEASEX  季節（12-2/3-5/6-8/9-11月）x 性別（牝 / 牡セ） (YouTube #18・#19「夏は牝馬」、主張・未検証)
+  REST2   休み明け2戦目（前走の前の間隔 91日以上・今回の間隔 56日以内）x 前走比の馬体重 UP/FLAT/DOWN（±2%）
+          (Drive: 休み明け2戦目の増減注意・上積み、主張・未検証)
+  FAVSLOW 1・2番人気 x 距離（1000m以下 SPRINT / OTHER）x 直近3走で初角が後ろ4割に入った回数 0/1/2+
+          (Drive 要検証5「800/900m の出遅れ癖人気馬」、危険な人気馬の細目「前走までの出遅れ」)
+  DEBUTX  初出走馬 x 性別 x 人気帯（1-2 / 3-5 / 6+）  (第374条 新馬の情報量区分の代わりに、初出走馬の
+          市場の織り込みを人気帯ごとに実測する。生まれ月・兄姉成績は取得元が無く未接続)
+"""
+PREREG2 = {'registered': '2026-11-25T03', 'bundle': 'B3', 'labels': ['LEADX', 'SEASEX', 'REST2', 'FAVSLOW', 'DEBUTX'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS2 = {'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX'}
+
+
+def season_of(d):
+    try:
+        m = int(str(d)[5:7])
+    except (TypeError, ValueError):
+        return None
+    return 'WIN' if m in (12, 1, 2) else 'SPR' if m in (3, 4, 5) else 'SUM' if m in (6, 7, 8) else 'AUT'
+
+
+def _fin(f):
+    return 'NA' if not f else '1-3' if f <= 3 else '4-6' if f <= 6 else '7+'
+
+
+def pop_band(pop):
+    return None if not pop else '1-2' if pop <= 2 else '3-5' if pop <= 5 else '6+'
+
+
+def labels2(cur, hist):
+    """Second B3 part. cur / hist as in labels(). -> [(name, value)]"""
+    out = []
+    sg = sex_group(cur.get('sex'))
+    se = season_of(cur.get('date'))
+    if se and sg:
+        out.append(('SEASEX', f'{se}|{sg}'))
+    pop = cur.get('pop')
+    if not hist:
+        pb = pop_band(pop)
+        if pb and sg:
+            out.append(('DEBUTX', f'{sg}|{pb}'))
+        return out
+    last = hist[-1]
+    lf = _fin(last.get('finish'))
+    if last.get('early') is not None and last['early'] <= 0.0:
+        ear = [p['early'] for p in hist[-5:] if p.get('early') is not None]
+        habit = len(ear) >= 2 and sum(ear) / len(ear) <= 0.25
+        out.append(('LEADX', f"{'HABIT' if habit else 'ONCE'}|{lf}"))
+    if len(hist) >= 2:
+        g_prev = _days(last.get('date'), hist[-2].get('date'))
+        g_now = _days(cur.get('date'), last.get('date'))
+        if g_prev is not None and g_prev >= 91 and g_now is not None and 0 < g_now <= 56:
+            d = None
+            if cur.get('bw') and last.get('bw'):
+                p = 100.0 * (cur['bw'] - last['bw']) / last['bw']
+                d = 'UP' if p > 2 else 'DOWN' if p < -2 else 'FLAT'
+            out.append(('REST2', f"{d or 'NA'}|{lf}"))
+    if pop and pop <= 2 and cur.get('distance'):
+        k = sum(1 for p in hist[-3:] if p.get('early') is not None and p['early'] >= 0.6)
+        out.append(('FAVSLOW', f"{'SPRINT' if cur['distance'] <= 1000 else 'OTHER'}|{'2+' if k >= 2 else k}"))
+    return out

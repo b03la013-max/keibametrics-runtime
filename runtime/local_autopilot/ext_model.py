@@ -167,6 +167,10 @@ def cand_labels(cur, hist):
         extra = b3.labels(cur, hist)          # B3 (2026-11-25): INTV / BWSZ / BWPCT / SHFR / FAVRST
     except Exception:
         extra = []
+    try:
+        extra = extra + b3.labels2(cur, hist)  # B3 second part (2026-11-25): LEADX / SEASEX / REST2 / FAVSLOW / DEBUTX
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -188,7 +192,8 @@ def _kame3(cur, hist):
     return [('KAME3', v)] if v else []
 
 
-CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS'}
+CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
+                   'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX'}
 
 
 def labels(cur, hist):
