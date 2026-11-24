@@ -359,3 +359,13 @@ def test_watch_alerts_once_per_race(tmp_path, monkeypatch):
     run.watch(q, tmp_path, now)
     assert set(q['alerts']) == {'SETTLE_LATE:01', 'MISSED_DEADLINE:02', 'REPEATED_ERROR:03', 'REVIEW_FAIL:day'}
     assert len(posts) == 4
+
+
+def test_compression_loss_only_when_in_universe():
+    import review
+    fin = {k: {'in_role': True} for k in ('1', '2', '3')}
+    tk = {'trio': [[2, 5, 8]], 'exact': [[8, 5, 2]]}
+    assert review.compression_loss(fin, (5, 8, 2), tk) == {'in_universe': True, 'compressed_out_trio': False, 'compressed_out_exact': True}
+    fin['2']['in_role'] = False                                  # 役割の段階で外れたなら圧縮の責任ではない
+    assert review.compression_loss(fin, (5, 8, 2), {'trio': [], 'exact': []}) == {
+        'in_universe': False, 'compressed_out_trio': False, 'compressed_out_exact': False}
