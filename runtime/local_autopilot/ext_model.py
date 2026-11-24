@@ -161,7 +161,16 @@ def _yymmdd(d):
 
 def cand_labels(cur, hist):
     """Candidate labels measured as their OWN components (not in PAT, weight 0 until the hold-out refit adopts one).
-    KAME3: 亀谷 sire rules v3 (kametani_v3, B4 2026-11-24)."""
+    KAME3: 亀谷 sire rules v3 (kametani_v3, B4 2026-11-24); INTV/BWSZ/BWPCT/SHFR/FAVRST: b3_labels (B3 2026-11-25)."""
+    from runtime.local_autopilot import b3_labels as b3
+    try:
+        extra = b3.labels(cur, hist)          # B3 (2026-11-25): INTV / BWSZ / BWPCT / SHFR / FAVRST
+    except Exception:
+        extra = []
+    return _kame3(cur, hist) + extra
+
+
+def _kame3(cur, hist):
     from runtime.local_autopilot import kametani_v3 as k3
     if not (cur.get('sire') or cur.get('damsire')):
         return []
@@ -179,7 +188,7 @@ def cand_labels(cur, hist):
     return [('KAME3', v)] if v else []
 
 
-CAND_COMPONENTS = {'KAME3': 'KM3'}
+CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS'}
 
 
 def labels(cur, hist):

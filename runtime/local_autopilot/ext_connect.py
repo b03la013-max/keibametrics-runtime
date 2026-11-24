@@ -31,11 +31,13 @@ EXT_FROM = '2026-11-22'
 EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
-MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3']
+MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3', 'ITV', 'BWS', 'BWP', 'SHF', 'FRS']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
 DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
-                'KM3': 0.0}   # 亀谷 v3 (B4 2026-11-24): starts at 0, only the weekly hold-out refit can move it
+                'KM3': 0.0,   # 亀谷 v3 (B4 2026-11-24): starts at 0, only the weekly hold-out refit can move it
+                # B3 pattern labels (b3_labels, 2026-11-25): same rule, weight 0 until the hold-out refit adopts one
+                'ITV': 0.0, 'BWS': 0.0, 'BWP': 0.0, 'SHF': 0.0, 'FRS': 0.0}
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
