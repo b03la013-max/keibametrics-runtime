@@ -561,6 +561,29 @@ def by_w_count(revs):
     return out or None
 
 
+def rank_discrimination(revs):
+    """実1〜3着馬の指数順位（win_rank・place_rank・hole_rank）の分布：着順ごとに 平均順位・1位・3位以内・5位以内の数
+    （Mapping Discrimination、証拠のみ・閾値なし）。出典：Drive「Formal Post-Race Review（Prediction Utility）」§5
+    （q491、実1〜3着馬の各指数順位で識別力を測る）の読み替え。指数・役割・券面は変えない。"""
+    out = {}
+    for x in revs:
+        for pos, f in (x.get('finishers') or {}).items():
+            for idx in ('win_rank', 'place_rank', 'hole_rank'):
+                v = (f or {}).get(idx)
+                if not v:
+                    continue
+                d = out.setdefault(pos, {}).setdefault(idx, {'n': 0, 'sum': 0, 'top1': 0, 'top3': 0, 'top5': 0})
+                d['n'] += 1
+                d['sum'] += v
+                d['top1'] += int(v == 1)
+                d['top3'] += int(v <= 3)
+                d['top5'] += int(v <= 5)
+    for byidx in out.values():
+        for d in byidx.values():
+            d['mean'] = round(d.pop('sum') / d['n'], 2)
+    return out or None
+
+
 def axis_dependency_summary(revs):
     """axis_dependency の集計：軸の頭数別に R数・軸依存の券の平均割合・全損R（片軸以上が3着外）・全損点数・二頭とも3着外のR。"""
     out = {}
@@ -620,7 +643,7 @@ def summarize(revs, missed):
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
-            'by_w_count': by_w_count(revs),
+            'by_w_count': by_w_count(revs), 'rank_discrimination': rank_discrimination(revs),
             'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs)}
 
 
@@ -676,6 +699,12 @@ def _md(title, s, revs=None):
         L.append('- W の頭数別（R・勝ち馬∈W・2着∈P2・PFS）: ' + '／'.join(
             f"W{b}頭 {d['races']}R・{d['winner_in_W']}・{d['second_in_P2']}・{d['pfs']}%"
             for b, d in sorted(s['by_w_count'].items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)))
+    if s.get('rank_discrimination'):
+        nm = {'win_rank': '勝', 'place_rank': '連', 'hole_rank': '穴'}
+        L.append('- 実1〜3着馬の指数順位（着順：指数 平均順位・1位・3位内・5位内／件数）: ' + '／'.join(
+            f"{pos}着 " + '・'.join(f"{nm[i]} {d['mean']}・{d['top1']}・{d['top3']}・{d['top5']}/{d['n']}"
+                                   for i, d in sorted(by.items(), key=lambda kv: list(nm).index(kv[0])))
+            for pos, by in sorted(s['rank_discrimination'].items())))
     if s.get('axis_dependency'):
         L.append('- 軸への依存（軸の頭数：R・軸を含む券の平均割合・全軸3着内・軸依存の券が全損・その点数・二頭とも3着外）: ' + '／'.join(
             f"{k}頭軸 {d['races']}R・{d['axis_share_mean']:.0%}・{d['all_axis_top3']}・{d['wipeout']}R・{d['wipeout_points']}点・{d['co_failure']}R"
