@@ -381,6 +381,24 @@ def payout_robustness(revs, k=3):
     return out
 
 
+def by_moisture_band(revs):
+    """水分帯（engine.moisture_band）ごとの本番の成績：R数・◎1着・◎3着内・勝ち馬∈W・投資・払戻・PFS（証拠のみ、閾値なし）。
+    出典：Drive YouTube（q-1052 同水分帯・別水分帯の実績の分離）の読み替え。単日・少数Rでは数値を変えない（R30/R100＋Owner承認）。"""
+    out = {}
+    for x in revs:
+        b = x.get('moisture_band') or 'UNKNOWN'
+        d = out.setdefault(b, {'races': 0, 'honmei_win': 0, 'honmei_top3': 0, 'winner_in_W': 0, 'stake': 0, 'return': 0})
+        d['races'] += 1
+        d['honmei_win'] += int(x.get('honmei_finish') == 1)
+        d['honmei_top3'] += int(bool(x.get('honmei_finish')))
+        d['winner_in_W'] += int(bool(((x.get('finishers') or {}).get('1') or {}).get('in_role')))
+        d['stake'] += x.get('stake') or 0
+        d['return'] += x.get('return') or 0
+    for d in out.values():
+        d['pfs'] = _pct(d['return'], d['stake'])
+    return out or None
+
+
 def summarize(revs, missed):
     S = sum(x['stake'] for x in revs)
     B = sum(x['return'] for x in revs)
@@ -417,7 +435,7 @@ def summarize(revs, missed):
             'chain_failed': {k: sum(1 for x in revs if k in ((x.get('chain') or {}).get('failed') or [])) for k in CHAIN},
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
-            'robustness': payout_robustness(revs)}
+            'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs)}
 
 
 def _md(title, s, revs=None):
@@ -451,6 +469,10 @@ def _md(title, s, revs=None):
         L.append(f"- 回収の頑健性（購入 {r['races']}R）: 上位払戻を除いた PFS 1R除き {r['pfs_without_top1']}%"
                  f"・2R除き {r['pfs_without_top2']}%・3R除き {r['pfs_without_top3']}%"
                  f"／収支プラス {r['profit_races']}R／最長連敗 {r['longest_losing_streak']}R")
+    if s.get('by_moisture_band'):
+        L.append('- 水分帯別（R・◎1着・◎3着内・勝ち馬∈W・PFS）: ' + '／'.join(
+            f"{b} {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['winner_in_W']}・{d['pfs']}%"
+            for b, d in sorted(s['by_moisture_band'].items())))
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
