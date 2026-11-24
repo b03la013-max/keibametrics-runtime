@@ -181,6 +181,44 @@ def failure_chain(rows, marks, tk, order):
     return {'layers': st, 'failed': failed, 'first': failed[0] if failed else 'NONE'}
 
 
+def market_drift(changes, order, honmei=None):
+    """直前見直しの2時点オッズ（check10 の変更台帳 changes の odds の before/after）から、オッズが下がった馬（売れた）・
+    上がった馬（売れなかった）と3着内の対応を残す（中央 next_execution_prompt §P1-02「同一レース内2時点の市場」の読み替え。
+    証拠のみ、閾値なし、本番の点数・印・券面には使わない）。"""
+    if not changes or not isinstance(changes, dict) or not isinstance(changes.get('diffs'), list) or len(order) < 3:
+        return None
+    top3 = {str(n) for n in order[:3]}
+    short, drift = [], []
+    for d in changes['diffs']:
+        if d.get('field') != 'odds':
+            continue
+        a, b = d.get('before'), d.get('after')
+        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)) or a <= 0 or a == b:
+            continue
+        (short if b < a else drift).append({'no': d.get('no'), 'before': a, 'after': b, 'ratio': round(b / a, 3)})
+    hon = next((x for x in short + drift if str(x['no']) == str(honmei)), None) if honmei is not None else None
+    return {'shortened': len(short), 'drifted': len(drift),
+            'shortened_top3': sum(1 for x in short if str(x['no']) in top3),
+            'drifted_top3': sum(1 for x in drift if str(x['no']) in top3),
+            'winner_move': next(('short' if x in short else 'drift' for x in short + drift if str(x['no']) == str(order[0])), 'none'),
+            'honmei_move': None if hon is None else ('short' if hon in short else 'drift'),
+            'moves': sorted(short + drift, key=lambda x: x['ratio'])[:6], 'evidence_only': True}
+
+
+def market_drift_summary(revs):
+    """market_drift の集計：見直しで2時点オッズがあったR数、売れた馬・売れなかった馬それぞれの頭数と3着内数、勝ち馬の動き。"""
+    xs = [x['market_drift'] for x in revs if x.get('market_drift')]
+    if not xs:
+        return None
+    from collections import Counter
+    out = {'races': len(xs)}
+    for k in ('shortened', 'drifted', 'shortened_top3', 'drifted_top3'):
+        out[k] = sum(x[k] for x in xs)
+    out['winner_move'] = dict(Counter(x['winner_move'] for x in xs))
+    out['honmei_move'] = dict(Counter(x['honmei_move'] or 'none' for x in xs))
+    return out
+
+
 def race_review(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
@@ -311,6 +349,7 @@ def race_review(out, key, r):
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
             'info_coverage': info_coverage(ev['rows']),
+            'market_drift': market_drift((r.get('check10') or {}).get('changes'), res['order'], ev.get('honmei')),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
 
@@ -541,7 +580,7 @@ def summarize(revs, missed):
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
-            'axis_dependency': axis_dependency_summary(revs)}
+            'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs)}
 
 
 def _md(title, s, revs=None):
@@ -593,6 +632,10 @@ def _md(title, s, revs=None):
         L.append('- 軸への依存（軸の頭数：R・軸を含む券の平均割合・全軸3着内・軸依存の券が全損・その点数・二頭とも3着外）: ' + '／'.join(
             f"{k}頭軸 {d['races']}R・{d['axis_share_mean']:.0%}・{d['all_axis_top3']}・{d['wipeout']}R・{d['wipeout_points']}点・{d['co_failure']}R"
             for k, d in sorted(s['axis_dependency'].items())))
+    if s.get('market_drift'):
+        m = s['market_drift']
+        L.append(f"- 直前2時点のオッズ（見直しのあった {m['races']}R）: 売れた馬 {m['shortened']}頭のうち3着内 {m['shortened_top3']}"
+                 f"／売れなかった馬 {m['drifted']}頭のうち3着内 {m['drifted_top3']}／勝ち馬の動き {m['winner_move']}／◎の動き {m['honmei_move']}")
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
