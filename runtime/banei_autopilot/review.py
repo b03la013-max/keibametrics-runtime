@@ -287,6 +287,7 @@ def race_review(out, key, r):
                                                                if str(n) == str(ev.get('honmei'))), None),
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
+            'info_coverage': info_coverage(ev['rows']),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
 
@@ -425,6 +426,40 @@ def by_honmei_pop_band(revs):
     return out or None
 
 
+def info_coverage(rows):
+    """レースの情報充足（各馬の DCR の平均・最小、TPI が欠けて中立で埋めた頭数）。証拠のみ。
+    出典：Drive「JRA Complete Audit Brief」（q448 Base13 構成充足 61.90%、欠測を中立で埋めた値を能力と読まない）の読み替え。"""
+    d = [x['dcr'] for x in (rows or []) if x.get('dcr') is not None]
+    if not rows:
+        return None
+    return {'dcr_mean': round(sum(d) / len(d), 1) if d else None, 'dcr_min': min(d) if d else None,
+            'tpi_unknown': sum(1 for x in rows if x.get('tpi') is None), 'field': len(rows)}
+
+
+DCR_BANDS = (('<70', 0, 70), ('70-84', 70, 85), ('85+', 85, 101))
+
+
+def by_info_coverage(revs):
+    """情報充足帯（レースの DCR 平均 <70・70-84・85+）ごとの本番の成績：R・◎1着・◎3着内・勝ち馬∈W・PFS（証拠のみ、閾値なし）。
+    情報が薄いレースの成績を能力評価の失敗と混同しないための物差し。本番の点数・印・券面・見送りには使わない。"""
+    out = {}
+    for x in revs:
+        m = (x.get('info_coverage') or {}).get('dcr_mean')
+        b = next((n for n, lo, hi in DCR_BANDS if m is not None and lo <= m < hi), 'UNKNOWN')
+        d = out.setdefault(b, {'races': 0, 'honmei_win': 0, 'honmei_top3': 0, 'winner_in_W': 0, 'tpi_unknown': 0,
+                               'stake': 0, 'return': 0})
+        d['races'] += 1
+        d['honmei_win'] += int(x.get('honmei_finish') == 1)
+        d['honmei_top3'] += int(bool(x.get('honmei_finish')))
+        d['winner_in_W'] += int(bool(((x.get('finishers') or {}).get('1') or {}).get('in_role')))
+        d['tpi_unknown'] += (x.get('info_coverage') or {}).get('tpi_unknown') or 0
+        d['stake'] += x.get('stake') or 0
+        d['return'] += x.get('return') or 0
+    for d in out.values():
+        d['pfs'] = _pct(d['return'], d['stake'])
+    return out or None
+
+
 def summarize(revs, missed):
     S = sum(x['stake'] for x in revs)
     B = sum(x['return'] for x in revs)
@@ -462,7 +497,7 @@ def summarize(revs, missed):
             'chain_first': dict(Counter((x.get('chain') or {}).get('first') for x in revs if x.get('chain'))),
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
-            'by_honmei_pop_band': by_honmei_pop_band(revs)}
+            'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs)}
 
 
 def _md(title, s, revs=None):
@@ -505,6 +540,11 @@ def _md(title, s, revs=None):
         L.append('- ◎の人気帯別（R・◎1着・◎3着内・PFS）: ' + '／'.join(
             f"{b}番人気 {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['pfs']}%"
             for b, d in sorted(s['by_honmei_pop_band'].items(), key=lambda kv: order.index(kv[0]))))
+    if s.get('by_info_coverage'):
+        order = [n for n, _, _ in DCR_BANDS] + ['UNKNOWN']
+        L.append('- 情報充足帯別（DCR平均：R・◎1着・◎3着内・勝ち馬∈W・TPI欠け頭数・PFS）: ' + '／'.join(
+            f"{b} {d['races']}R・{d['honmei_win']}・{d['honmei_top3']}・{d['winner_in_W']}・{d['tpi_unknown']}・{d['pfs']}%"
+            for b, d in sorted(s['by_info_coverage'].items(), key=lambda kv: order.index(kv[0]))))
     if s['rev_audit']:
         a = s['rev_audit']
         L.append(f"- 直前見直し（修正版のレース）: Rev1 {a['rev1_return']:,}/{a['rev1_stake']:,}円 → Rev2 {a['rev2_return']:,}/{a['rev2_stake']:,}円")
