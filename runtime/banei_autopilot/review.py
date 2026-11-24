@@ -561,6 +561,32 @@ def by_w_count(revs):
     return out or None
 
 
+
+def by_gap_wcount(revs):
+    """確信度（上位2頭の得点差 top2_gap、期間の中央値で上下）× W の頭数（1頭／2頭以上）の交差表：
+    R・勝ち馬∈W・投資・払戻・PFS（証拠のみ、閾値なし）。
+    出典：Drive「KeibaMetrics_JRA_20261031_Live_Status (5)」（q503 ASI>=75 の堅判定 18R は2的中、ASI<75 の 15R は7的中、
+    事後分割の仮説）の読み替え。「堅いと判定したレースほど単独 W で外す」かを見るだけで、W の頭数・券面は変えない。"""
+    g = sorted(x['top2_gap'] for x in revs if x.get('top2_gap') is not None)
+    if not g:
+        return None
+    med = g[len(g) // 2]
+    out = {}
+    for x in revs:
+        gap, n = x.get('top2_gap'), (x.get('role_counts') or {}).get('W')
+        if gap is None or not n:
+            continue
+        b = ('HIGH' if gap >= med else 'LOW') + ':' + ('W1' if n == 1 else 'W2+')
+        d = out.setdefault(b, {'races': 0, 'winner_in_W': 0, 'stake': 0, 'return': 0})
+        d['races'] += 1
+        d['winner_in_W'] += int(bool(((x.get('finishers') or {}).get('1') or {}).get('in_role')))
+        d['stake'] += x.get('stake') or 0
+        d['return'] += x.get('return') or 0
+    for d in out.values():
+        d['pfs'] = _pct(d['return'], d['stake'])
+    return {'median': med, 'cells': out} if out else None
+
+
 def rank_discrimination(revs):
     """実1〜3着馬の指数順位（win_rank・place_rank・hole_rank）の分布：着順ごとに 平均順位・1位・3位以内・5位以内の数
     （Mapping Discrimination、証拠のみ・閾値なし）。出典：Drive「Formal Post-Race Review（Prediction Utility）」§5
@@ -643,7 +669,7 @@ def summarize(revs, missed):
             'dead_heat': sum(1 for x in revs if x.get('dead_heat')),
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
-            'by_w_count': by_w_count(revs), 'rank_discrimination': rank_discrimination(revs),
+            'by_w_count': by_w_count(revs), 'by_gap_wcount': by_gap_wcount(revs), 'rank_discrimination': rank_discrimination(revs),
             'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs)}
 
 
@@ -699,6 +725,12 @@ def _md(title, s, revs=None):
         L.append('- W の頭数別（R・勝ち馬∈W・2着∈P2・PFS）: ' + '／'.join(
             f"W{b}頭 {d['races']}R・{d['winner_in_W']}・{d['second_in_P2']}・{d['pfs']}%"
             for b, d in sorted(s['by_w_count'].items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)))
+    if s.get('by_gap_wcount'):
+        g = s['by_gap_wcount']
+        nm = {'HIGH': '差が大きい', 'LOW': '差が小さい'}
+        L.append(f"- 確信度×W の頭数（上位2頭の得点差 中央値 {g['median']}：R・勝ち馬∈W・PFS）: " + '／'.join(
+            f"{nm[k.split(':')[0]]}・{k.split(':')[1]} {d['races']}R・{d['winner_in_W']}・{d['pfs']}%"
+            for k, d in sorted(g['cells'].items())))
     if s.get('rank_discrimination'):
         nm = {'win_rank': '勝', 'place_rank': '連', 'hole_rank': '穴'}
         L.append('- 実1〜3着馬の指数順位（着順：指数 平均順位・1位・3位内・5位内／件数）: ' + '／'.join(
