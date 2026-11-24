@@ -1,35 +1,35 @@
 # 29指数の台帳と役割別の効き目（P0・証拠のみ）
 
-対象：正式予想 250R（署名済み29指数の有効版、結果確定）。AUC＝同じレースで「来た馬」が「来なかった馬」より高い値を持つ確率（0.5＝情報なし）。
+対象：正式予想 251R（署名済み29指数の有効版、結果確定）。AUC＝同じレースで「来た馬」が「来なかった馬」より高い値を持つ確率（0.5＝情報なし）。
 
 | 指数 | 全頭同値の率 | AUC 1着 | AUC 2着内 | AUC 3着内 | 最上位馬の勝率 | 最上位馬の3着内率 | 式の根拠 |
 |---|---|---|---|---|---|---|---|
-| HPI-L | 0.016 | 0.752 | 0.739 | 0.719 | 0.301 | 0.569 | INITIAL_DESIGN (weights never fitted) |
-| TPI-L | 0.0 | 0.768 | 0.742 | 0.719 | 0.316 | 0.572 | INITIAL_DESIGN (weights never fitted) |
-| CFIg-L | 0.016 | 0.764 | 0.735 | 0.716 | 0.321 | 0.622 | INITIAL_DESIGN (weights never fitted) |
-| F3S-L | 0.0 | 0.763 | 0.732 | 0.711 | 0.304 | 0.58 | INITIAL_DESIGN (weights never fitted) |
-| RFIg-L | 0.016 | 0.754 | 0.733 | 0.711 | 0.297 | 0.557 | INITIAL_DESIGN (weights never fitted) |
-| ZAI-PLACE | 0.0 | 0.76 | 0.726 | 0.708 | 0.312 | 0.588 | INITIAL_DESIGN (weights never fitted) |
-| CCI | 0.972 | 0.704 | 0.737 | 0.706 | 0.143 | 0.714 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| EVI/CEV | 0.016 | 0.765 | 0.728 | 0.706 | 0.28 | 0.541 | INITIAL_DESIGN (weights never fitted) |
-| SRI-L | 0.0 | 0.752 | 0.721 | 0.706 | 0.316 | 0.584 | INITIAL_DESIGN (weights never fitted) |
-| ZAI-WIN | 0.0 | 0.753 | 0.721 | 0.705 | 0.316 | 0.58 | FORWARD_COMPARED: C17 (ZAI-PLACE for P2) |
-| HCS | 0.016 | 0.735 | 0.713 | 0.698 | 0.325 | 0.565 | INITIAL_DESIGN (weights never fitted) |
-| JTI-L | 0.008 | 0.71 | 0.697 | 0.681 | 0.278 | 0.548 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| WCI | 0.0 | 0.706 | 0.678 | 0.666 | 0.292 | 0.564 | INITIAL_DESIGN (weights never fitted) |
-| T3I-L | 0.0 | 0.642 | 0.625 | 0.628 | 0.168 | 0.432 | INITIAL_DESIGN (weights never fitted) |
-| NCI | 0.016 | 0.588 | 0.576 | 0.572 | 0.171 | 0.407 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| BWI-L | 0.0 | 0.525 | 0.539 | 0.545 | 0.096 | 0.324 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| TRI | 0.976 | 0.567 | 0.513 | 0.534 | 0.333 | 0.667 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| ASI | 0.0 | 0.528 | 0.535 | 0.532 | 0.124 | 0.376 | INITIAL_DESIGN (weights never fitted) |
-| URP | 0.264 | 0.549 | 0.542 | 0.53 | 0.141 | 0.375 | INITIAL_DESIGN (weights never fitted) |
-| P2-AKI | 0.0 | 0.471 | 0.502 | 0.512 | 0.124 | 0.348 | INITIAL_DESIGN (weights never fitted) |
-| P3-AKI | 0.0 | 0.471 | 0.502 | 0.512 | 0.124 | 0.348 | INITIAL_DESIGN (weights never fitted) |
-| PRI | 0.004 | 0.567 | 0.525 | 0.51 | 0.161 | 0.293 | INITIAL_DESIGN (weights never fitted) |
-| W-AKI | 0.0 | 0.488 | 0.499 | 0.509 | 0.104 | 0.356 | INITIAL_DESIGN (weights never fitted) |
-| CSI-L | 0.008 | 0.476 | 0.478 | 0.499 | 0.081 | 0.258 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| BVIg-L | 0.66 | 0.52 | 0.5 | 0.492 | 0.129 | 0.282 | FORWARD_COMPARED: C21 (BVI-L-R2 tertile) |
-| DCR | 0.024 | 0.465 | 0.479 | 0.475 | 0.111 | 0.275 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
-| DRS | 0.264 | 0.451 | 0.458 | 0.47 | 0.092 | 0.293 | INITIAL_DESIGN (weights never fitted) |
-| RSI | 0.0 | 0.421 | 0.45 | 0.467 | 0.092 | 0.3 | INITIAL_DESIGN (weights never fitted) |
-| OPI-V | 0.004 | 0.409 | 0.41 | 0.426 | 0.044 | 0.197 | INITIAL_DESIGN (weights never fitted) |
+| HPI-L | 0.016 | 0.753 | 0.738 | 0.719 | 0.304 | 0.571 | INITIAL_DESIGN (weights never fitted) |
+| TPI-L | 0.0 | 0.769 | 0.741 | 0.719 | 0.319 | 0.574 | INITIAL_DESIGN (weights never fitted) |
+| CFIg-L | 0.016 | 0.765 | 0.735 | 0.716 | 0.324 | 0.623 | INITIAL_DESIGN (weights never fitted) |
+| F3S-L | 0.0 | 0.764 | 0.732 | 0.711 | 0.307 | 0.582 | INITIAL_DESIGN (weights never fitted) |
+| RFIg-L | 0.016 | 0.755 | 0.733 | 0.711 | 0.3 | 0.559 | INITIAL_DESIGN (weights never fitted) |
+| ZAI-PLACE | 0.0 | 0.761 | 0.726 | 0.708 | 0.315 | 0.59 | INITIAL_DESIGN (weights never fitted) |
+| SRI-L | 0.0 | 0.753 | 0.721 | 0.706 | 0.319 | 0.586 | INITIAL_DESIGN (weights never fitted) |
+| EVI/CEV | 0.016 | 0.766 | 0.727 | 0.705 | 0.283 | 0.543 | INITIAL_DESIGN (weights never fitted) |
+| ZAI-WIN | 0.0 | 0.754 | 0.721 | 0.705 | 0.319 | 0.582 | FORWARD_COMPARED: C17 (ZAI-PLACE for P2) |
+| HCS | 0.016 | 0.737 | 0.713 | 0.699 | 0.328 | 0.567 | INITIAL_DESIGN (weights never fitted) |
+| CCI | 0.968 | 0.741 | 0.711 | 0.683 | 0.25 | 0.75 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| JTI-L | 0.008 | 0.711 | 0.697 | 0.68 | 0.277 | 0.546 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| WCI | 0.0 | 0.707 | 0.678 | 0.667 | 0.295 | 0.566 | INITIAL_DESIGN (weights never fitted) |
+| T3I-L | 0.0 | 0.644 | 0.625 | 0.627 | 0.171 | 0.434 | INITIAL_DESIGN (weights never fitted) |
+| NCI | 0.016 | 0.59 | 0.577 | 0.573 | 0.174 | 0.409 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| TRI | 0.972 | 0.558 | 0.511 | 0.556 | 0.286 | 0.714 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| BWI-L | 0.0 | 0.524 | 0.538 | 0.544 | 0.096 | 0.323 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| ASI | 0.0 | 0.53 | 0.535 | 0.532 | 0.127 | 0.378 | INITIAL_DESIGN (weights never fitted) |
+| URP | 0.267 | 0.549 | 0.542 | 0.53 | 0.141 | 0.375 | INITIAL_DESIGN (weights never fitted) |
+| P2-AKI | 0.0 | 0.47 | 0.501 | 0.512 | 0.124 | 0.347 | INITIAL_DESIGN (weights never fitted) |
+| P3-AKI | 0.0 | 0.47 | 0.501 | 0.512 | 0.124 | 0.347 | INITIAL_DESIGN (weights never fitted) |
+| PRI | 0.004 | 0.569 | 0.526 | 0.51 | 0.164 | 0.296 | INITIAL_DESIGN (weights never fitted) |
+| W-AKI | 0.0 | 0.487 | 0.499 | 0.509 | 0.104 | 0.355 | INITIAL_DESIGN (weights never fitted) |
+| CSI-L | 0.008 | 0.477 | 0.478 | 0.498 | 0.08 | 0.257 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| BVIg-L | 0.657 | 0.52 | 0.498 | 0.492 | 0.128 | 0.279 | FORWARD_COMPARED: C21 (BVI-L-R2 tertile) |
+| DCR | 0.024 | 0.466 | 0.48 | 0.475 | 0.11 | 0.273 | EXTERNAL_MEASURED (from 2026-11-22) + INITIAL_DESIGN weights |
+| DRS | 0.267 | 0.451 | 0.458 | 0.47 | 0.092 | 0.293 | INITIAL_DESIGN (weights never fitted) |
+| RSI | 0.0 | 0.42 | 0.45 | 0.467 | 0.092 | 0.299 | INITIAL_DESIGN (weights never fitted) |
+| OPI-V | 0.004 | 0.409 | 0.41 | 0.425 | 0.044 | 0.196 | INITIAL_DESIGN (weights never fitted) |
