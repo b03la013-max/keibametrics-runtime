@@ -330,3 +330,60 @@ def labels5(cur, hist):
         return []
     kind = 'SHINBA' if cur.get('shinba') else '2YO'
     return [('BMONTH', f'{kind}|{mb}|{pb}')]
+
+
+# ---------------------------------------------------------------- B3 sixth part (pre-registered 2026-11-25 18時台)
+"""
+  危険な人気馬の細目（Drive n7『地方競馬版・危険な1番人気の見抜き方』／n79『ちょっと待て 怪しくないか？中央馬』）。
+  1・2番人気の馬にだけ付ける。どれも主張・未検証で、強さは NAR データの A/E で測る。
+  FAVAWAY  その場での出走経験: FIRST（過去走にこの場が無い＝初遠征・転入初戦）/ SEEN。過去走が無い馬には付けない
+  FAVWET   馬場 WET（重・不良）/ DAMP（稍重）/ DRY（良）x 直近3走の初角の平均位置 CLOSER（後ろ4割以降）/ OTHER
+           （n7『重不良での人気差し馬』）
+  FAVLIGHT メンバー内の馬体重の相対位置: LIGHT（軽い方から1/3）/ MID / HEAVY（重い方から1/3）。
+           当日馬体重のある出走馬が4頭以上のときだけ（n79『メンバー内で相対的に軽い馬体重』）
+  未接続：楽逃げ圧勝→同型出現・同じ相手との比較（メンバー間の対戦表が要る）、中央でダート経験なし（中央の芝ダ履歴が要る）、
+          斤量減の人気馬（ext_model の行に斤量が無い）
+"""
+PREREG6 = {'registered': '2026-11-25T18', 'bundle': 'B3', 'labels': ['FAVAWAY', 'FAVWET', 'FAVLIGHT'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS6 = {'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT'}
+
+
+def bw_rel(bw, field_bws):
+    """bw: this horse; field_bws: body weights of the runners in the race (this horse included)."""
+    ws = [w for w in (field_bws or []) if w]
+    if not bw or len(ws) < 4:
+        return None
+    lighter = sum(1 for w in ws if w < bw)
+    heavier = sum(1 for w in ws if w > bw)
+    n = len(ws)
+    if lighter < n / 3.0 and heavier >= n / 3.0:
+        return 'LIGHT'
+    if heavier < n / 3.0 and lighter >= n / 3.0:
+        return 'HEAVY'
+    return 'MID'
+
+
+def _going3(g):
+    g = str(g or '')
+    if ('不' in g or '重' in g) and '稍' not in g:
+        return 'WET'
+    return 'DAMP' if '稍' in g else 'DRY' if '良' in g else None
+
+
+def labels6(cur, hist):
+    """Sixth B3 part (1・2番人気だけ). cur['field_bws']: 当日のメンバーの馬体重. -> [(name, value)]"""
+    pop = cur.get('pop')
+    if not pop or pop > 2:
+        return []
+    out = []
+    if hist and cur.get('venue'):
+        out.append(('FAVAWAY', 'SEEN' if any(p.get('venue') == cur['venue'] for p in hist) else 'FIRST'))
+    g = _going3(cur.get('going'))
+    ear = [p['early'] for p in (hist or [])[-3:] if p.get('early') is not None]
+    if g and ear:
+        out.append(('FAVWET', f"{g}|{'CLOSER' if sum(ear) / len(ear) >= 0.6 else 'OTHER'}"))
+    rel = bw_rel(cur.get('bw'), cur.get('field_bws'))
+    if rel:
+        out.append(('FAVLIGHT', rel))
+    return out

@@ -183,6 +183,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels5(cur, hist)  # B3 fifth part (2026-11-25 15): BMONTH（生まれ月×新馬戦/2歳戦）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels6(cur, hist)  # B3 sixth part (2026-11-25 18): FAVAWAY / FAVWET / FAVLIGHT（危険な人気馬の細目）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -214,7 +218,8 @@ def _kame3(cur, hist):
 
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
-                   'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO'}
+                   'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO',
+                   'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT'}
 
 
 def labels(cur, hist):
@@ -342,6 +347,7 @@ def _rows(races, std=None):
         _ran = [key(x.get('name')) or x.get('horse_key') for x in race['runners']
                 if x['status'] == 'RAN' and x.get('no') and x.get('pop')]
         cur0['field_hist_share'], cur0['field_has_debut'] = b3i.field_info(sum(1 for h in _ran if hist.get(h)), len(_ran))
+        cur0['field_bws'] = [x.get('bw') for x in race['runners'] if x['status'] == 'RAN' and x.get('no') and x.get('bw')]
         done, rr = [], []
         for x in race['runners']:
             if x['status'] == 'SCRATCH' or not x.get('no'):
