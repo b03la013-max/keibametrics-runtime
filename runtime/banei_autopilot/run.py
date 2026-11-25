@@ -264,7 +264,15 @@ def deliver(q, key, out, rev=1, reasons=None):
     text = (out / f'R{key}{sfx}.md').read_text()
     head = '' if rev == 1 else ('【修正版 Rev2' + ('・ペーパー（馬場水分の変化）' if r.get('paper') else '') + '】'
                                 + '／'.join(reasons or []) + '\n\n')
-    body = (f"### 🐴 帯広{r['no']}R {r['post'][11:16]}発走｜{r['formality']}{'｜修正版' if rev == 2 else ''}\n\n{head}```\n{text}```\n"
+    img = ''
+    try:   # Owner 2026-11-25 15:58: ばんえいも画像カード（黄）。失敗しても文字だけで配信
+        from runtime.local_autopilot import mail_card
+        rec = json.loads((out / f'R{key}{sfx}.json').read_text())
+        img = mail_card.card_line(mail_card.ban_card(rec, 'Revision 2' if rev == 2 else ''),
+                                  f"output_ban/{out.name}/cards/R{key}{sfx}.png", REPO)
+    except Exception:
+        img = ''
+    body = (f"### 🐴 帯広{r['no']}R {r['post'][11:16]}発走｜{r['formality']}{'｜修正版' if rev == 2 else ''}\n\n{img}{head}```\n{text}```\n"
             f"<sub>ケイバメトリクスばんえい v4.0-BAN 自動予想。凍結 {(r.get('frozen_at_rev2') if rev == 2 else r['frozen_at'])[11:19]}／券面SHA `{r['ticket_sha256'][:12]}`"
             f"／未較正（確率・EVではありません）</sub>")
     try:

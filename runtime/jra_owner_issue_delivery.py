@@ -34,6 +34,21 @@ def deliver(race_id, post_at, body, *, now=None, post=None):
             "comment_url": resp.get("html_url"), "accepted_at": now.isoformat(), "user_ack": "ACK_UNVERIFIED"}
 
 
+def card(race_id, final_path, source_path=None):
+    """Image card (緑) at the top of the mail (Owner 2026-11-25 15:58). '' on any failure: never blocks delivery."""
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from runtime.local_autopilot import mail_card
+        final = json.loads(Path(final_path).read_text())
+        env = json.loads(Path(source_path).read_text()) if source_path and Path(source_path).exists() else {}
+        date = race_id.split("-")[3]
+        return mail_card.card_line(mail_card.jra_card(final, env),
+                                   f"output_jra/{date[:4]}-{date[4:6]}-{date[6:]}/cards/{race_id}.png")
+    except Exception:
+        return ""
+
+
 def _post_comment(issue, body):
     repo, token = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"]
     req = urllib.request.Request(f"https://api.github.com/repos/{repo}/issues/{issue}/comments",
@@ -47,9 +62,13 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--race-id", required=True); ap.add_argument("--post-at", required=True)
     ap.add_argument("--tree"); ap.add_argument("--no-bet-reason"); ap.add_argument("--receipt")
+    ap.add_argument("--final"); ap.add_argument("--source")
     a = ap.parse_args()
     tree = Path(a.tree).read_text() if a.tree else None
-    out = deliver(a.race_id, a.post_at, compose(a.race_id, a.post_at, tree, a.no_bet_reason))
+    body = compose(a.race_id, a.post_at, tree, a.no_bet_reason)
+    if tree is not None and a.final:
+        body = card(a.race_id, a.final, a.source) + body
+    out = deliver(a.race_id, a.post_at, body)
     if a.receipt:
         Path(a.receipt).write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n")
     print(json.dumps(out, ensure_ascii=False))

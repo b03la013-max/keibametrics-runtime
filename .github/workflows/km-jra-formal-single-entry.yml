@@ -759,8 +759,13 @@ jobs:
           set -euo pipefail
           RACE_ID="$(jq -r .race_id runtime_out/jra_single_entry_formal_request.json)"
           POST_AT="$(jq -r .scheduled_post_at runtime_out/jra_immutable_final.json)"
+          # mail card image (Owner 2026-11-25 15:58, 緑). Optional: without font/Pillow the text mail is unchanged.
+          timeout 90 sudo apt-get install -y -qq fonts-noto-cjk >/dev/null 2>&1 || echo "CJK font install skipped"
+          python -m pip install -q pillow || echo "pillow install skipped"
           python runtime/jra_owner_issue_delivery.py --race-id "$RACE_ID" --post-at "$POST_AT" \
-            --tree runtime_out/jra_ticket_tree.txt --receipt runtime_out/jra_owner_issue_delivery.json
+            --tree runtime_out/jra_ticket_tree.txt --receipt runtime_out/jra_owner_issue_delivery.json \
+            --final runtime_out/jra_immutable_final.json \
+            --source runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
 
 
       - name: Persist single-entry execution report

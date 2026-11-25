@@ -73,7 +73,7 @@ def render(card, out_path):
     d.rectangle([0, 0, W, 236], fill=th['band'])
     d.rectangle([0, 236, W, 244], fill=th['accent'])
     d.text((PAD, 34), card['title'], font=_font(64), fill=th['ink'])
-    d.text((PAD, 122), f"{card.get('post', '')}発走　締切 {card.get('cutoff', '')}", font=_font(36, False), fill=th['sub'])
+    d.text((PAD, 122), f"{card.get('post', '')}発走" + (f"　締切 {card['cutoff']}" if card.get('cutoff') else ''), font=_font(36, False), fill=th['sub'])
     lab = th['label'] + (f"・{card['edition']}" if card.get('edition') else '')
     lf = _font(30)
     tw = d.textlength(lab, font=lf)
@@ -83,6 +83,8 @@ def render(card, out_path):
     y = 270
     # marks row
     x = PAD
+    if not card.get('marks'):
+        y -= 86
     for mk, no in (card.get('marks') or [])[:8]:
         d.text((x, y), mk, font=_font(46), fill=INK)
         d.text((x + 50, y + 2), str(no), font=_font(44), fill=INK)
@@ -93,8 +95,11 @@ def render(card, out_path):
     field = max([h['no'] for h in horses] + [len(horses)] or [8])
     pmax = max([h.get('pct') or 0 for h in horses] + [1])
     for h in horses[:rows]:
-        fr = h.get('frame') or _frame_of(h['no'], field)
-        bg, fg = FRAME.get(fr, ('#999999', '#ffffff'))
+        if card.get('frames', True):
+            fr = h.get('frame') or _frame_of(h['no'], field)
+            bg, fg = FRAME.get(fr, ('#999999', '#ffffff'))
+        else:
+            bg, fg = '#ffffff', INK
         d.text((PAD, y + 6), h.get('mark') or '', font=_font(40), fill=INK)
         d.rounded_rectangle([PAD + 56, y, PAD + 56 + 62, y + 58], radius=10, fill=bg, outline='#9aa39e', width=2)
         nf = _font(36)
@@ -197,3 +202,70 @@ def publish(png_path, repo_path, token, repo, branch='local-autopilot-data'):
     except Exception:
         return None
     return f'https://raw.githubusercontent.com/{repo}/{branch}/{repo_path}'
+
+
+def jra_card(final, envelope, edition=''):
+    """中央版 Signed FINAL (runtime/final_artifacts/<race_id>.json) + its source envelope (names, frames, course).
+    中央版 has no 印 in the delivery, so only roles are drawn."""
+    art = (envelope or {}).get('artifact') or {}
+    det = art.get('jra_official_race_card_detail') or {}
+    ctx = det.get('race_context') or {}
+    names = {int(r['horse_no']): {'name': r.get('horse_name', ''), 'frame': r.get('frame_no')}
+             for r in det.get('runners') or [] if r.get('horse_no')}
+    fp = final.get('final_prediction_package') or {}
+    ft = final.get('final_ticket') or {}
+    sm = {'marks': {}, 'roles': fp.get('roles') or {}, 'ranking': fp.get('ranking') or [], 'tickets': ft.get('tickets') or []}
+    post = str(final.get('scheduled_post_at') or '')[11:16]
+    cut = str(final.get('prediction_cutoff') or '')[11:16]
+    title = f"{ctx.get('venue_name', '')}{ctx.get('race_no', '')}R"
+    cond = '　'.join(str(x) for x in (ctx.get('surface') and ctx.get('distance_m') and f"{ctx['surface']}{ctx['distance_m']}m",
+                                      ctx.get('going'), ctx.get('race_class')) if x)
+    c = formal_card(sm, names, title, post, cut, cond, edition)
+    c.update(system='JRA', invest=int(ft.get('total_investment') or c['invest']), note='推薦試算・実購入なし／確率は未較正')
+    return c
+
+
+def ban_card(rec, edition=''):
+    """ばんえい v4.0-BAN record (output_ban/<day>/R<no>[.rev2].json)."""
+    ev = rec.get('evaluation') or {}
+    marks = ev.get('marks') or {}
+    tk = rec.get('tickets') or {}
+    hd = rec.get('header') or {}
+    rows = sorted(ev.get('rows') or [], key=lambda r: r.get('win_rank') or 99)
+
+    def role(r):
+        if r.get('role_w') in ('STRONG', 'BUY', 'CONDITIONAL'):
+            return '1着候補'
+        if r.get('role_p2') == 'BUY':
+            return '2着候補'
+        if r.get('role_p3') == 'BUY':
+            return '3着候補'
+        return ''
+    horses = [{'no': r['no'], 'name': r.get('name', ''), 'mark': marks.get(str(r['no']), ''), 'role': role(r)}
+              for r in rows if role(r) or marks.get(str(r['no']))]
+    order = ['◎', '○', '▲', '△', '穴']
+    mk = sorted(((m, int(n)) for n, m in marks.items()), key=lambda x: (order.index(x[0]) if x[0] in order else 9, x[1]))
+    tickets = [(k, len(tk.get(f) or [])) for k, f in (('三連複', 'trio'), ('三連単', 'exact')) if tk.get(f)]
+    cond = '　'.join(x for x in (hd.get('race_name'), hd.get('going') and f"馬場水分 {hd['going']}") if x)
+    post = str((rec.get('race') or {}).get('post') or '')[11:16]
+    kind = 'FORMAL' if tk.get('formality', 'FORMAL') == 'FORMAL' else 'PAPER'
+    return {'kind': kind, 'system': 'BAN', 'frames': False, 'title': f"帯広{hd.get('race_no') or (rec.get('race') or {}).get('no')}R",
+            'post': post, 'cutoff': '', 'edition': edition, 'cond': cond, 'marks': mk, 'horses': horses,
+            'tickets': tickets, 'invest': int(tk.get('stake') or 100 * sum(n for _, n in tickets)),
+            'note': 'ばんえい v4.0-BAN・1点100円・実購入なし／確率・EVではありません'}
+
+
+def card_line(card, repo_path, repo=None, token=None):
+    """Draw + upload; returns a markdown image line or '' (never raises)."""
+    import os
+    import tempfile
+    if os.environ.get('KM_LOCAL_MAIL_CARD', '1') == '0':
+        return ''
+    try:
+        tmp = Path(tempfile.mkdtemp()) / repo_path.rsplit('/', 1)[-1]
+        render(card, tmp)
+        u = publish(tmp, repo_path, token or os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN'),
+                    repo or os.environ.get('GITHUB_REPOSITORY') or 'b03la013-max/keibametrics-runtime')
+        return f'![{card.get("title", "")}]({u})\n' if u else ''
+    except Exception:
+        return ''
