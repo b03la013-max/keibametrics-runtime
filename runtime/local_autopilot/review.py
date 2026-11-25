@@ -310,6 +310,20 @@ def build(day_dir, key, r):
              for t in sm.get('tickets') or []],
             order, off_pay, effective_invest=formal['settlement']['effective_invest'], payout=formal['settlement']['payout'], fav_odds=fav_odds,
             mirror=formal_mirror)
+    # B1 非購入理由と経路の記録（Drive 精読 gap_tracker B1、証拠のみ・券面は変えない）
+    from runtime.local_autopilot import nonbuy_trace
+    try:
+        runners = None   # 第3部 INVALID_RUNNER の出走表照合：締切前に固定した PAPER の出馬表の馬番
+        if pf:
+            runners = [int(x['no']) for x in pf['prediction'].get('ranking') or [] if x.get('no') is not None] or None
+        if paper:
+            paper['nonbuy_trace'] = nonbuy_trace.race(order, proles, [], _paper_tickets(pf['prediction']),
+                                                      runners=runners, key=key)
+        if formal:
+            formal['nonbuy_trace'] = nonbuy_trace.race(order, froles, sm.get('signed_final_tickets') or [], sm.get('tickets') or [],
+                                                       runners=runners, key=key)
+    except Exception as exc:  # the trace never blocks the review
+        (formal or paper or {})['nonbuy_trace'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
 
     # layer analysis
     layers = {}
@@ -566,7 +580,12 @@ def _aggregate(reviews):
     from runtime.local_autopilot import robustness
     rob = {tk: robustness.aggregate([(b.get(tk) or {}).get('robustness') for b in reviews])
            for tk in ('paper', 'formal_recommendation')}
+    from runtime.local_autopilot import nonbuy_trace
+    nbt = {tk: nonbuy_trace.aggregate([(b.get(tk) or {}).get('nonbuy_trace') for b in reviews
+                                       if 'error' not in ((b.get(tk) or {}).get('nonbuy_trace') or {})])
+           for tk in ('paper', 'formal_recommendation')}
     return {'races': len(reviews), 'by_venue': venues, 'accuracy': _accuracy(reviews), 'robustness': rob,
+            'nonbuy_trace': nbt,
             'all_local': {'paper_pfs': round(100 * tot('paper_payout') / tot('paper_effective_invest'), 1) if tot('paper_effective_invest') else None,
                           'formal_pfs': round(100 * tot('formal_payout') / tot('formal_effective_invest'), 1) if tot('formal_effective_invest') else None,
                           'first_failure': dict(sum((Counter(v['first_failure']) for v in venues.values()), Counter()))},
@@ -624,6 +643,11 @@ def write_daily(day_dir, q):
         s['daily_audit'] = _audit(day_dir, q)
     except Exception as exc:  # the audit never blocks the review summary
         s['daily_audit'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    # 11/25 反省 P0-2：daily_audit.4_pfs が null のまま集計 PFS だけ出ていた表示不整合を、同じ集計値で埋める
+    pf4 = (s.get('daily_audit') or {}).get('4_pfs')
+    if isinstance(pf4, dict):
+        pf4['paper_pfs'] = s['all_local']['paper_pfs']
+        pf4['formal_pfs'] = s['all_local']['formal_pfs']
     s['sha256'] = _sha(s)
     (day_dir / 'review' / 'daily_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
     (day_dir / 'review' / 'daily_summary.md').write_text(_summary_md(f"{day_dir.name} 日次総括" + ('' if terminal else '（途中）'), s))
@@ -672,6 +696,13 @@ def _summary_md(title, s):
         ra = (s.get('robustness') or {}).get(track)
         if ra:
             L.append(f"- {label} " + robustness.line(ra)[2:])
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        nb = (s.get('nonbuy_trace') or {}).get(track)
+        if nb and nb.get('races'):
+            ax = nb.get('axis') or {}
+            L.append(f"- {label} 実着順の組の行き先（B1・証拠のみ、{nb['races']}R×3券種）：購入 {ax.get('PURCHASED', 0)}"
+                     f"／予算で削除 {ax.get('CAPITAL', 0)}／予想で除外 {ax.get('SEMANTIC', 0)}／未生成・券種なし {ax.get('STRUCTURE', 0)}"
+                     f"／役割馬の行き先 {nb.get('role_horse_terminal')}")
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")

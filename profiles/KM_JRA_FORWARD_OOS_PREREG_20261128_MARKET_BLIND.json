@@ -1,0 +1,17 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-MARKET-BLIND-v1",
+  "registered_at": "2026-11-25T22:30:00+09:00",
+  "task": "ChatGPT 11/25 ideal-reality gap plan; Owner approval 2026-11-25 (「登録してよい（推奨）」: オッズを使わない『純粋な能力予想』を本番と並べて記録)",
+  "production_effect": "NONE",
+  "first_eligible_card": "2026-11-28",
+  "tracker": "runtime/analysis/jra_conversion_challenger.py (freeze runs in km-jra-index-research.yml)",
+  "arm": {"MARKET_BLIND": "ZAI_WIN of the race's formula version without VMI; remaining weights divided by (1 - w_VMI) = 0.95 for v1.1, ratios kept. Fixed now, never re-fit inside the evaluation"},
+  "baseline": {"MARKET_VMI": "runners ordered by the pre-race VMI value alone (market only); compared, never promoted"},
+  "primary": "paired top-3 mean rank (MARKET_BLIND - PROD), lower is better",
+  "secondary": ["paired top-3 mean rank (MARKET_BLIND - MARKET_VMI) and (PROD - MARKET_VMI)", "winner rank", "top-3 capture inside the top 5", "venue x surface (jra_oos_strata)"],
+  "brier_logloss": "not applicable (no probabilities)",
+  "stages": [30, 100, 300],
+  "promotion_eligible": ">= 100 forward races, 95% bootstrap CI upper < 0 on the primary, venue_rule not CONSISTENT_DEGRADATION; Owner decision only",
+  "reject": ">= 30 forward races with CI lower > 0",
+  "known_result_replay_context_only": {"since": "2026-11-15", "races": 86, "top3_mean_rank": {"PROD": 5.062, "MARKET_BLIND": 5.24, "MARKET_VMI": 4.329}, "note": "v1.1 races only; known results, context only, not evidence"}
+}
