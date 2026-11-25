@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-26（21:15時点）
+# 地方版 配送台帳 2026-11-26（21:24時点）
 
 - 管理Race 48／発走済み 0
-- PAPER：凍結 12・Push検証 4・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 20・Push検証 12・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -11,9 +11,9 @@
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
-| KNZ_01 | 14:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KNZ_02 | 14:45 | DISCOVERED |  | … | - | - | - |  |
-| KNZ_03 | 15:20 | DISCOVERED |  | … | - | - | - |  |
+| KNZ_01 | 14:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_02 | 14:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KNZ_03 | 15:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KNZ_04 | 15:55 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_05 | 16:30 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_06 | 17:05 | DISCOVERED |  | … | - | - | - |  |
@@ -23,8 +23,8 @@
 | KNZ_10 | 19:25 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_11 | 20:00 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_12 | 20:35 | DISCOVERED |  | … | - | - | - |  |
-| NGY_01 | 14:40 | DISCOVERED |  | … | - | - | - |  |
-| NGY_02 | 15:15 | DISCOVERED |  | … | - | - | - |  |
+| NGY_01 | 14:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| NGY_02 | 15:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | NGY_03 | 15:50 | DISCOVERED |  | … | - | - | - |  |
 | NGY_04 | 16:25 | DISCOVERED |  | … | - | - | - |  |
 | NGY_05 | 17:00 | DISCOVERED |  | … | - | - | - |  |
@@ -39,20 +39,20 @@
 | SON_02 | 11:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_03 | 11:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_04 | 12:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SON_05 | 12:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_06 | 13:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_07 | 13:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_08 | 14:30 | DISCOVERED |  | … | - | - | - |  |
-| SON_09 | 15:05 | DISCOVERED |  | … | - | - | - |  |
+| SON_05 | 12:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_06 | 13:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_07 | 13:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_08 | 14:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_09 | 15:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SON_10 | 15:40 | DISCOVERED |  | … | - | - | - |  |
 | SON_11 | 16:15 | DISCOVERED |  | … | - | - | - |  |
 | SON_12 | 16:45 | DISCOVERED |  | … | - | - | - |  |
-| URW_01 | 12:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_02 | 12:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_03 | 13:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_04 | 13:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_05 | 14:20 | DISCOVERED |  | … | - | - | - |  |
-| URW_06 | 14:50 | DISCOVERED |  | … | - | - | - |  |
+| URW_01 | 12:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_02 | 12:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_03 | 13:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_04 | 13:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_05 | 14:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| URW_06 | 14:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | URW_07 | 15:25 | DISCOVERED |  | … | - | - | - |  |
 | URW_08 | 16:00 | DISCOVERED |  | … | - | - | - |  |
 | URW_09 | 16:35 | DISCOVERED |  | … | - | - | - |  |
