@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-26（21:32時点）
+# 地方版 配送台帳 2026-11-26（21:40時点）
 
 - 管理Race 48／発走済み 0
-- PAPER：凍結 28・Push検証 20・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 36・Push検証 28・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -14,10 +14,10 @@
 | KNZ_01 | 14:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_02 | 14:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_03 | 15:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KNZ_04 | 15:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KNZ_05 | 16:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KNZ_06 | 17:05 | DISCOVERED |  | … | - | - | - |  |
-| KNZ_07 | 17:40 | DISCOVERED |  | … | - | - | - |  |
+| KNZ_04 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_05 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_06 | 17:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KNZ_07 | 17:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KNZ_08 | 18:15 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_09 | 18:50 | DISCOVERED |  | … | - | - | - |  |
 | KNZ_10 | 19:25 | DISCOVERED |  | … | - | - | - |  |
@@ -25,10 +25,10 @@
 | KNZ_12 | 20:35 | DISCOVERED |  | … | - | - | - |  |
 | NGY_01 | 14:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_02 | 15:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| NGY_03 | 15:50 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| NGY_04 | 16:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| NGY_05 | 17:00 | DISCOVERED |  | … | - | - | - |  |
-| NGY_06 | 17:30 | DISCOVERED |  | … | - | - | - |  |
+| NGY_03 | 15:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| NGY_04 | 16:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| NGY_05 | 17:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| NGY_06 | 17:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | NGY_07 | 18:05 | DISCOVERED |  | … | - | - | - |  |
 | NGY_08 | 18:35 | DISCOVERED |  | … | - | - | - |  |
 | NGY_09 | 19:05 | DISCOVERED |  | … | - | - | - |  |
@@ -44,20 +44,20 @@
 | SON_07 | 13:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_08 | 14:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_09 | 15:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SON_10 | 15:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_11 | 16:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_12 | 16:45 | DISCOVERED |  | … | - | - | - |  |
+| SON_10 | 15:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_11 | 16:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_12 | 16:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | URW_01 | 12:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_02 | 12:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_03 | 13:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_04 | 13:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_05 | 14:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_06 | 14:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| URW_07 | 15:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_08 | 16:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| URW_09 | 16:35 | DISCOVERED |  | … | - | - | - |  |
-| URW_10 | 17:10 | DISCOVERED |  | … | - | - | - |  |
-| URW_11 | 17:45 | DISCOVERED |  | … | - | - | - |  |
+| URW_07 | 15:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_08 | 16:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_09 | 16:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| URW_10 | 17:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| URW_11 | 17:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | URW_12 | 18:20 | DISCOVERED |  | … | - | - | - |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
