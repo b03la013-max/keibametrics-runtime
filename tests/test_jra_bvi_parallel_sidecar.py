@@ -297,6 +297,27 @@ def _reverse_r55_oidc_witness(prefix):
     return prefix.replace(R55_NO_BET_WITNESS, R55_NO_BET_ORIGINAL, 1).replace(R55_UPLOAD_NEW, R55_UPLOAD_OLD, 1)
 
 
+MAILCARD_NEW = (
+    "          # mail card image (Owner 2026-11-25 15:58, 緑). Optional: without font/Pillow the text mail is unchanged.\n"
+    "          timeout 90 sudo apt-get install -y -qq fonts-noto-cjk >/dev/null 2>&1 || echo \"CJK font install skipped\"\n"
+    "          python -m pip install -q pillow || echo \"pillow install skipped\"\n"
+    "          python runtime/jra_owner_issue_delivery.py --race-id \"$RACE_ID\" --post-at \"$POST_AT\" \\\n"
+    "            --tree runtime_out/jra_ticket_tree.txt --receipt runtime_out/jra_owner_issue_delivery.json \\\n"
+    "            --final runtime_out/jra_immutable_final.json \\\n"
+    "            --source runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json\n")
+MAILCARD_OLD = (
+    "          python runtime/jra_owner_issue_delivery.py --race-id \"$RACE_ID\" --post-at \"$POST_AT\" \\\n"
+    "            --tree runtime_out/jra_ticket_tree.txt --receipt runtime_out/jra_owner_issue_delivery.json\n")
+
+
+def _reverse_mail_card(prefix):
+    """Owner 2026-11-25 15:58 (mail card image, commit 91ec6f262): exact FINAL delivery delta only."""
+    if MAILCARD_NEW not in prefix:
+        return prefix
+    assert prefix.count(MAILCARD_NEW) == 1
+    return prefix.replace(MAILCARD_NEW, MAILCARD_OLD, 1)
+
+
 def _assert_production_prefix_boundary(workflow,original):
     """Only reviewed SOURCE and Delivery steps may extend the original prefix.
 
@@ -308,6 +329,7 @@ def _assert_production_prefix_boundary(workflow,original):
     assert workflow.count(marker)==1
     prefix=workflow.split(marker)[0];baseline=original.split(marker)[0]
     prefix=_reverse_r55_oidc_witness(prefix)
+    prefix=_reverse_mail_card(prefix)
     prefix=_reverse_owner_issue_delivery(prefix)
     if prefix==baseline:return
     wait_marker='      - name: Wait for canonical Signed SOURCE\n'
