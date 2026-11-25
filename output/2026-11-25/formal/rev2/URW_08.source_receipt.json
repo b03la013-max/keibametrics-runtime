@@ -1,0 +1,711 @@
+{
+ "receipt": {
+  "schema": "KM-LOCAL-SIGNED-RECEIPT-v1",
+  "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+  "family": "LOCAL",
+  "phase": "SOURCE",
+  "race_id": "KM-LOCAL-URW-20261125-R08-RKT",
+  "status": "SOURCE_FROZEN",
+  "errors": [],
+  "artifact_sha256": "6878e84ebd76516dcba5a45998d10915080e5512df36ad15947f190b0eeec574",
+  "timestamp": "2026-11-25T06:52:09.915907+00:00",
+  "engine_version": "1.1.0",
+  "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+  "parameter_map_version": "0.1-provisional",
+  "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+  "calibration_status": "PROVISIONAL_UNCALIBRATED",
+  "github_revision": "b26e49c356749f5ada6d065ab0b615c3675648ab",
+  "runtime_hashes": {
+   "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+   "runtime_wrapper_sha256": "2d4f32ef2ad8d17ac9b0ab8b11581bb5791f96615cc4bb579ae673bc45daa6f1",
+   "source_acquisition_sha256": "ef05cf8bfad137b04b2c21e9dede20b9a5502e60cb9abd2cc13e68c0c33b90a9",
+   "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+   "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+   "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+   "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+   "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+   "sbo_public_shadow_evidence_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53"
+  }
+ },
+ "receipt_sha256": "06b6d16e164753fea03e3c16e8ead5781c00700340ad567a0a78d281da120923",
+ "signature": "bGSu3GM+uCq/84KQ/EcEY6KwkDB5vNrvZO9lP5sjwGw3DXncavmvM64U06nMQ0FH/XVxbfiHxBVQ+VGanyUACA==",
+ "signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+ "signature_alg": "Ed25519",
+ "artifact": {
+  "schema": "KM-SOURCE-SNAPSHOT-v1",
+  "profile": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
+  "race_id": "KM-LOCAL-URW-20261125-R08-RKT",
+  "prediction_cutoff": "2026-11-25T15:57:00+09:00",
+  "source_freeze_at": "2026-11-25T06:52:09.908193+00:00",
+  "source_fetch_execution": {
+   "mode": "SERIAL",
+   "worker_limit": 6,
+   "workers_used": 1,
+   "source_count": 1,
+   "manifest_order_restored_before_merge": true,
+   "prediction_authority": false
+  },
+  "required_source_manifest": [
+   {
+    "source_id": "RAKUTEN_RACE_CARD",
+    "url": "https://keiba.rakuten.co.jp/race_card/list/RACEID/202611251813080208",
+    "source_class": "RAKUTEN_RACE_CARD_CURRENT_STATE",
+    "authority": "RAKUTEN_KEIBA_PUBLIC_CARD",
+    "priority": 90,
+    "official": false,
+    "required": true,
+    "extract": []
+   }
+  ],
+  "required_source_manifest_sha256": "6d3d72e48a6b8e0fbd35ba5247e449638a1a2c9d5229ca4c6d41361633e13ca6",
+  "sources": [
+   {
+    "schema": "KM-SOURCE-SNAPSHOT-v1",
+    "source_id": "RAKUTEN_RACE_CARD",
+    "source_class": "RAKUTEN_RACE_CARD_CURRENT_STATE",
+    "authority": "RAKUTEN_KEIBA_PUBLIC_CARD",
+    "authority_priority": 90,
+    "official": false,
+    "required": true,
+    "requested_url": "https://keiba.rakuten.co.jp/race_card/list/RACEID/202611251813080208",
+    "final_url": "https://keiba.rakuten.co.jp/race_card/list/RACEID/202611251813080208",
+    "http_status": 200,
+    "content_type": "text/html; charset=UTF-8",
+    "etag": null,
+    "last_modified": null,
+    "last_modified_age_seconds": null,
+    "fetched_at": "2026-11-25T06:52:09.663847+00:00",
+    "cutoff_relation": "PRE_CUTOFF",
+    "current": true,
+    "stale": false,
+    "raw_sha256": "a683991695ead3fdd188f09fa0370b80f47aac810451f9f5739f6f875250d47a",
+    "byte_count": 186623,
+    "raw_encoding": "gzip+base64",
+    "raw_gzip_b64": "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",
+    "extracted_evidence": {},
+    "extraction_errors": [],
+    "snapshot_sha256": "56c87208899fb29904b9f288cb552db95d7659c67d4ca08b3ddf3e28a61eadbd",
+    "source_access_policy": {
+     "robots_url": "https://keiba.rakuten.co.jp/robots.txt",
+     "robots_status": "POLICY_READ",
+     "robots_sha256": "6f9346b23d28e4fb6b00298546bc30e463a4925a8248e9112018a04ab56641c0",
+     "user_agent": "KeibaMetrics-SourceAcquisition/1.0 (+formal evidence capture)",
+     "automatic_access_allowed": true,
+     "data_licence_granted": false,
+     "redirect_policies": []
+    }
+   }
+  ],
+  "raw_source_bundle_sha256": "0b56fbef5a82a317a15b3f0ca5c974d1662e9a9dbfbb6ad36ae15e7dfd893c06",
+  "normalized_evidence": {},
+  "normalized_evidence_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "conflicts": [],
+  "missing_required_sources": [],
+  "stale_sources": [],
+  "post_cutoff_sources": [],
+  "formal_ready": true,
+  "errors": [],
+  "source_snapshot_sha256": "e5b2957c4e6e02b62f91385bfbe80c8b94d0e307a930db71be5fa3062e8dd23d",
+  "source_manifest_profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+  "source_race_context": {
+   "venue_id": "URW",
+   "race_date": "2026-11-25",
+   "race_no": 8,
+   "rakuten_race_id": "202611251813080208"
+  },
+  "rakuten_card_header": {
+   "venue_name_page": "浦和",
+   "race_no": 8,
+   "surface": "DIRT",
+   "distance": 1400,
+   "going": "良",
+   "post": "16:00",
+   "race_name": "近いがうまい 埼玉の豚肉賞特別 C1一"
+  },
+  "declared_runner_universe": {
+   "profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+   "universe_type": "DECLARED",
+   "source_id": "RAKUTEN_RACE_CARD",
+   "source_snapshot_sha256": "56c87208899fb29904b9f288cb552db95d7659c67d4ca08b3ddf3e28a61eadbd",
+   "runner_count": 14,
+   "runners": [
+    {
+     "runner_id": "1",
+     "horse_no": 1,
+     "name": "コパノマデリン",
+     "frame_no": 1,
+     "jockey": "木間龍",
+     "load": 54.0,
+     "body_weight": 454,
+     "win_odds": 77.0
+    },
+    {
+     "runner_id": "2",
+     "horse_no": 2,
+     "name": "エレガントジュエリ",
+     "frame_no": 2,
+     "jockey": "保園翔",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 76.0
+    },
+    {
+     "runner_id": "3",
+     "horse_no": 3,
+     "name": "ビコーズウイキャン",
+     "frame_no": 3,
+     "jockey": "七夕裕",
+     "load": 56.0,
+     "body_weight": 463,
+     "win_odds": 78.4
+    },
+    {
+     "runner_id": "4",
+     "horse_no": 4,
+     "name": "フェルナンダ",
+     "frame_no": 3,
+     "jockey": "落合玄",
+     "load": 54.0,
+     "body_weight": 496,
+     "win_odds": 3.5
+    },
+    {
+     "runner_id": "5",
+     "horse_no": 5,
+     "name": "サノノタルマエ",
+     "frame_no": 4,
+     "jockey": "見越彬",
+     "load": 54.0,
+     "body_weight": 479,
+     "win_odds": 87.7
+    },
+    {
+     "runner_id": "6",
+     "horse_no": 6,
+     "name": "レイナバローズ",
+     "frame_no": 4,
+     "jockey": "笹川翼",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 2.4
+    },
+    {
+     "runner_id": "7",
+     "horse_no": 7,
+     "name": "カラフルロケット",
+     "frame_no": 5,
+     "jockey": "西啓太",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 8.5
+    },
+    {
+     "runner_id": "8",
+     "horse_no": 8,
+     "name": "ネイビーシンデレラ",
+     "frame_no": 5,
+     "jockey": "中山遥",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 13.8
+    },
+    {
+     "runner_id": "9",
+     "horse_no": 9,
+     "name": "エイシンゾディアク",
+     "frame_no": 6,
+     "jockey": "室陽一",
+     "load": 56.0,
+     "body_weight": 446,
+     "win_odds": 8.1
+    },
+    {
+     "runner_id": "10",
+     "horse_no": 10,
+     "name": "モンバイト",
+     "frame_no": 6,
+     "jockey": "吉留孝",
+     "load": 56.0,
+     "body_weight": 496,
+     "win_odds": 15.2
+    },
+    {
+     "runner_id": "11",
+     "horse_no": 11,
+     "name": "ウィンザーバローズ",
+     "frame_no": 7,
+     "jockey": "岡村健",
+     "load": 56.0,
+     "body_weight": 487,
+     "win_odds": 21.4
+    },
+    {
+     "runner_id": "12",
+     "horse_no": 12,
+     "name": "フィラメント",
+     "frame_no": 7,
+     "jockey": "町田直",
+     "load": 56.0,
+     "body_weight": 449,
+     "win_odds": 29.9
+    },
+    {
+     "runner_id": "13",
+     "horse_no": 13,
+     "name": "パロサント",
+     "frame_no": 8,
+     "jockey": "藤本現",
+     "load": 54.0,
+     "body_weight": 438,
+     "win_odds": 26.8
+    },
+    {
+     "runner_id": "14",
+     "horse_no": 14,
+     "name": "キクノルタ",
+     "frame_no": 8,
+     "jockey": "岡村裕",
+     "load": 54.0,
+     "body_weight": 421,
+     "win_odds": 83.0
+    }
+   ],
+   "runner_universe_sha256": "0b4dba8d4ec348b3d7f35e5bec0335b987f36de99ad2fe16efed86f46e58ab98"
+  },
+  "active_runner_universe": {
+   "profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+   "universe_type": "ACTIVE",
+   "source_id": "RAKUTEN_RACE_CARD",
+   "source_snapshot_sha256": "56c87208899fb29904b9f288cb552db95d7659c67d4ca08b3ddf3e28a61eadbd",
+   "runner_count": 14,
+   "runners": [
+    {
+     "runner_id": "1",
+     "horse_no": 1,
+     "name": "コパノマデリン",
+     "frame_no": 1,
+     "jockey": "木間龍",
+     "load": 54.0,
+     "body_weight": 454,
+     "win_odds": 77.0
+    },
+    {
+     "runner_id": "2",
+     "horse_no": 2,
+     "name": "エレガントジュエリ",
+     "frame_no": 2,
+     "jockey": "保園翔",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 76.0
+    },
+    {
+     "runner_id": "3",
+     "horse_no": 3,
+     "name": "ビコーズウイキャン",
+     "frame_no": 3,
+     "jockey": "七夕裕",
+     "load": 56.0,
+     "body_weight": 463,
+     "win_odds": 78.4
+    },
+    {
+     "runner_id": "4",
+     "horse_no": 4,
+     "name": "フェルナンダ",
+     "frame_no": 3,
+     "jockey": "落合玄",
+     "load": 54.0,
+     "body_weight": 496,
+     "win_odds": 3.5
+    },
+    {
+     "runner_id": "5",
+     "horse_no": 5,
+     "name": "サノノタルマエ",
+     "frame_no": 4,
+     "jockey": "見越彬",
+     "load": 54.0,
+     "body_weight": 479,
+     "win_odds": 87.7
+    },
+    {
+     "runner_id": "6",
+     "horse_no": 6,
+     "name": "レイナバローズ",
+     "frame_no": 4,
+     "jockey": "笹川翼",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 2.4
+    },
+    {
+     "runner_id": "7",
+     "horse_no": 7,
+     "name": "カラフルロケット",
+     "frame_no": 5,
+     "jockey": "西啓太",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 8.5
+    },
+    {
+     "runner_id": "8",
+     "horse_no": 8,
+     "name": "ネイビーシンデレラ",
+     "frame_no": 5,
+     "jockey": "中山遥",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 13.8
+    },
+    {
+     "runner_id": "9",
+     "horse_no": 9,
+     "name": "エイシンゾディアク",
+     "frame_no": 6,
+     "jockey": "室陽一",
+     "load": 56.0,
+     "body_weight": 446,
+     "win_odds": 8.1
+    },
+    {
+     "runner_id": "10",
+     "horse_no": 10,
+     "name": "モンバイト",
+     "frame_no": 6,
+     "jockey": "吉留孝",
+     "load": 56.0,
+     "body_weight": 496,
+     "win_odds": 15.2
+    },
+    {
+     "runner_id": "11",
+     "horse_no": 11,
+     "name": "ウィンザーバローズ",
+     "frame_no": 7,
+     "jockey": "岡村健",
+     "load": 56.0,
+     "body_weight": 487,
+     "win_odds": 21.4
+    },
+    {
+     "runner_id": "12",
+     "horse_no": 12,
+     "name": "フィラメント",
+     "frame_no": 7,
+     "jockey": "町田直",
+     "load": 56.0,
+     "body_weight": 449,
+     "win_odds": 29.9
+    },
+    {
+     "runner_id": "13",
+     "horse_no": 13,
+     "name": "パロサント",
+     "frame_no": 8,
+     "jockey": "藤本現",
+     "load": 54.0,
+     "body_weight": 438,
+     "win_odds": 26.8
+    },
+    {
+     "runner_id": "14",
+     "horse_no": 14,
+     "name": "キクノルタ",
+     "frame_no": 8,
+     "jockey": "岡村裕",
+     "load": 54.0,
+     "body_weight": 421,
+     "win_odds": 83.0
+    }
+   ],
+   "status_registry_sha256": "daa731282ccc4019446d7983710c3a7318d405dbdbda75b924a505282c6249de",
+   "runner_universe_sha256": "e383f13aef5c5ea707a4d27a95512ccb5dbb11242a176ddf6900306ead14c0c8"
+  },
+  "runner_status_registry": [
+   {
+    "runner_id": "1",
+    "name": "コパノマデリン",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "2",
+    "name": "エレガントジュエリ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "3",
+    "name": "ビコーズウイキャン",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "4",
+    "name": "フェルナンダ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "5",
+    "name": "サノノタルマエ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "6",
+    "name": "レイナバローズ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "7",
+    "name": "カラフルロケット",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "8",
+    "name": "ネイビーシンデレラ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "9",
+    "name": "エイシンゾディアク",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "10",
+    "name": "モンバイト",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "11",
+    "name": "ウィンザーバローズ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "12",
+    "name": "フィラメント",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "13",
+    "name": "パロサント",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   },
+   {
+    "runner_id": "14",
+    "name": "キクノルタ",
+    "status": "ACTIVE_DECLARED",
+    "reason": "PRESENT_ON_CURRENT_RACE_CARD",
+    "evidence_sources": [
+     "RAKUTEN_RACE_CARD"
+    ]
+   }
+  ],
+  "runner_status_registry_sha256": "daa731282ccc4019446d7983710c3a7318d405dbdbda75b924a505282c6249de",
+  "official_runner_universe": {
+   "profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+   "universe_type": "ACTIVE",
+   "source_id": "RAKUTEN_RACE_CARD",
+   "source_snapshot_sha256": "56c87208899fb29904b9f288cb552db95d7659c67d4ca08b3ddf3e28a61eadbd",
+   "runner_count": 14,
+   "runners": [
+    {
+     "runner_id": "1",
+     "horse_no": 1,
+     "name": "コパノマデリン",
+     "frame_no": 1,
+     "jockey": "木間龍",
+     "load": 54.0,
+     "body_weight": 454,
+     "win_odds": 77.0
+    },
+    {
+     "runner_id": "2",
+     "horse_no": 2,
+     "name": "エレガントジュエリ",
+     "frame_no": 2,
+     "jockey": "保園翔",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 76.0
+    },
+    {
+     "runner_id": "3",
+     "horse_no": 3,
+     "name": "ビコーズウイキャン",
+     "frame_no": 3,
+     "jockey": "七夕裕",
+     "load": 56.0,
+     "body_weight": 463,
+     "win_odds": 78.4
+    },
+    {
+     "runner_id": "4",
+     "horse_no": 4,
+     "name": "フェルナンダ",
+     "frame_no": 3,
+     "jockey": "落合玄",
+     "load": 54.0,
+     "body_weight": 496,
+     "win_odds": 3.5
+    },
+    {
+     "runner_id": "5",
+     "horse_no": 5,
+     "name": "サノノタルマエ",
+     "frame_no": 4,
+     "jockey": "見越彬",
+     "load": 54.0,
+     "body_weight": 479,
+     "win_odds": 87.7
+    },
+    {
+     "runner_id": "6",
+     "horse_no": 6,
+     "name": "レイナバローズ",
+     "frame_no": 4,
+     "jockey": "笹川翼",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 2.4
+    },
+    {
+     "runner_id": "7",
+     "horse_no": 7,
+     "name": "カラフルロケット",
+     "frame_no": 5,
+     "jockey": "西啓太",
+     "load": 54.0,
+     "body_weight": 427,
+     "win_odds": 8.5
+    },
+    {
+     "runner_id": "8",
+     "horse_no": 8,
+     "name": "ネイビーシンデレラ",
+     "frame_no": 5,
+     "jockey": "中山遥",
+     "load": 54.0,
+     "body_weight": 470,
+     "win_odds": 13.8
+    },
+    {
+     "runner_id": "9",
+     "horse_no": 9,
+     "name": "エイシンゾディアク",
+     "frame_no": 6,
+     "jockey": "室陽一",
+     "load": 56.0,
+     "body_weight": 446,
+     "win_odds": 8.1
+    },
+    {
+     "runner_id": "10",
+     "horse_no": 10,
+     "name": "モンバイト",
+     "frame_no": 6,
+     "jockey": "吉留孝",
+     "load": 56.0,
+     "body_weight": 496,
+     "win_odds": 15.2
+    },
+    {
+     "runner_id": "11",
+     "horse_no": 11,
+     "name": "ウィンザーバローズ",
+     "frame_no": 7,
+     "jockey": "岡村健",
+     "load": 56.0,
+     "body_weight": 487,
+     "win_odds": 21.4
+    },
+    {
+     "runner_id": "12",
+     "horse_no": 12,
+     "name": "フィラメント",
+     "frame_no": 7,
+     "jockey": "町田直",
+     "load": 56.0,
+     "body_weight": 449,
+     "win_odds": 29.9
+    },
+    {
+     "runner_id": "13",
+     "horse_no": 13,
+     "name": "パロサント",
+     "frame_no": 8,
+     "jockey": "藤本現",
+     "load": 54.0,
+     "body_weight": 438,
+     "win_odds": 26.8
+    },
+    {
+     "runner_id": "14",
+     "horse_no": 14,
+     "name": "キクノルタ",
+     "frame_no": 8,
+     "jockey": "岡村裕",
+     "load": 54.0,
+     "body_weight": 421,
+     "win_odds": 83.0
+    }
+   ],
+   "status_registry_sha256": "daa731282ccc4019446d7983710c3a7318d405dbdbda75b924a505282c6249de",
+   "runner_universe_sha256": "e383f13aef5c5ea707a4d27a95512ccb5dbb11242a176ddf6900306ead14c0c8"
+  },
+  "official_runner_universe_sha256": "e383f13aef5c5ea707a4d27a95512ccb5dbb11242a176ddf6900306ead14c0c8",
+  "official_declared_runner_universe_sha256": "0b4dba8d4ec348b3d7f35e5bec0335b987f36de99ad2fe16efed86f46e58ab98",
+  "source_authority_basis": "OWNER_INSTRUCTION_20261116_RAKUTEN_FORMAL_SOURCE",
+  "runtime_extension": "KM-LOCAL-PHYSICAL-RUNTIME-v1.6-REV.2-20261116-RAKUTEN-SOURCE"
+ }
+}
