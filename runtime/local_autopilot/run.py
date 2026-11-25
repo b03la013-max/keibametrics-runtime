@@ -614,6 +614,16 @@ def auto_promotion_daily(q, out):
         log('AUTO_CANDIDATES', 'new', ','.join(gen['new']) or '-', 'retired', ','.join(gen['retired']) or '-')
     except Exception as exc:
         log('AUTO_CANDIDATES_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    try:   # weekly 29-index health check (diagnosis only; Owner 2026-11-25 21:54)
+        from runtime.local_autopilot import index_health
+        ih = index_health.weekly(ROOT, out.name)
+        if ih:
+            log('INDEX_HEALTH', out.name)
+            issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+            if issue:
+                _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': ih})
+    except Exception as exc:
+        log('INDEX_HEALTH_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
     (rv / 'auto_promotion.md').write_text(text)
     log('AUTO_PROMOTION', rec['action'], rec.get('candidate'), rec.get('effective_from'))
     if rec['action'] in ('PROMOTE', 'DEMOTE'):
