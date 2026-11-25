@@ -9,6 +9,11 @@ most two conversion challengers. Both were fixed from the TRAIN window only
                  unobserved features apply unchanged).
   CV2_ISO_SCALE  replace the shared category scale with the train-window empirical top-3
                  log-odds per category, rescaled linearly to the same 24..94 range.
+  MARKET_BLIND   (ChatGPT 11/25 gap plan, Owner approval 2026-11-25 21:5x) "予想ファースト・オッズセカンド":
+                 ZAI_WIN v1.1 without the market index VMI, the other weights rescaled by 1/0.95 so
+                 their ratios are kept. v1.0 races have no VMI weight, so the arm equals PROD there.
+                 Replays and freezes also record MARKET_VMI, the runners ordered by the pre-race
+                 market index VMI alone (a market baseline the arm is compared against, not an arm).
 Ranking = ZAI_WIN (Production composite), so only the conversion stage differs.
 Metrics: paired top-3 mean rank, winner rank, top-3 capture inside the top 5 (same candidate
 count for every arm). No arm outputs probabilities, so Brier / LogLoss are not applicable.
@@ -41,7 +46,14 @@ TRAIN = ("20261011", "20261109")
 CV1_DROP = ["market_mismatch", "opponent_strength", "weight_load_fit"]
 CV2_SCALE = {"EXCEPTIONAL": 94.0, "VERY_STRONG": 85.1, "STRONG": 78.0, "POSITIVE": 73.4, "NEUTRAL": 68.0,
              "MIXED": 62.8, "CAUTION": 61.7, "WEAK": 44.8, "VERY_WEAK": 24.0}
-ARMS = ["PROD", "CV1_SIGN_FIX", "CV2_ISO_SCALE"]
+ARMS = ["PROD", "CV1_SIGN_FIX", "CV2_ISO_SCALE", "MARKET_BLIND"]
+BASELINES = ["MARKET_VMI"]
+
+
+def _market_blind_weights(ver):
+    w = dict(B.ZAI_WIN_WEIGHTS[ver])
+    vmi = w.pop("VMI", 0.0)
+    return {k: v / (1.0 - vmi) for k, v in w.items()} if vmi else w
 
 
 def ranking(req, mapping, arm):
@@ -59,7 +71,12 @@ def ranking(req, mapping, arm):
         vals = {idx: P._weighted_index(idx, prof, feats, m,
                                        acquisition_failure=r.get("bvi_acquisition_failure") if idx == "BVI" else None)["value"]
                 for idx in B.BASE}
-        z[str(r["runner_id"])] = B.zai_win_value(vals, ver)
+        if arm == "MARKET_VMI":
+            z[str(r["runner_id"])] = vals["VMI"]
+        elif arm == "MARKET_BLIND":
+            z[str(r["runner_id"])] = B._weighted_left_sum(vals, _market_blind_weights(ver))
+        else:
+            z[str(r["runner_id"])] = B.zai_win_value(vals, ver)
     return sorted(z, key=lambda k: (-z[k], int(k) if k.isdigit() else k))
 
 
@@ -68,7 +85,7 @@ def race(rid, mapping):
     if not p.exists():
         return None
     req = json.loads(p.read_text())
-    out = {"race_id": rid, "rankings": {a: ranking(req, mapping, a) for a in ARMS},
+    out = {"race_id": rid, "rankings": {a: ranking(req, mapping, a) for a in ARMS + BASELINES},
            "source_request_sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
     frozen = [str(x) for x in ((req.get("static_prediction") or {}).get("ranking") or [])]
     out["prod_replay_matches_frozen"] = (not frozen) or frozen == out["rankings"]["PROD"]
@@ -77,7 +94,7 @@ def race(rid, mapping):
 
 def score(row, top3):
     res = {}
-    for a in ARMS:
+    for a in ARMS + BASELINES:
         rk = row["rankings"][a]
         res[a] = {"top3_mean_rank": sum(rk.index(x) + 1 for x in top3 if x in rk) / 3,
                   "winner_rank": rk.index(top3[0]) + 1 if top3[0] in rk else None,
@@ -102,7 +119,7 @@ def cmd_replay(a, mapping):
     n = len(rows)
     summ = {"kind": "KNOWN_RESULT_REPLAY_CONTEXT_ONLY", "since": a.since, "races": n,
             "prod_replay_mismatch": sum(1 for r in rows if not r["prod_replay_matches_frozen"])}
-    for arm in ARMS:
+    for arm in ARMS + BASELINES:
         summ[arm] = {"top3_mean_rank": round(sum(r["metrics"][arm]["top3_mean_rank"] for r in rows) / max(1, n), 3),
                      "winner_mean_rank": round(sum(r["metrics"][arm]["winner_rank"] or 0 for r in rows) / max(1, n), 3),
                      "top3_in_top5_pct": round(100 * sum(r["metrics"][arm]["top3_in_top5"] for r in rows) / max(1, 3 * n), 1)}
