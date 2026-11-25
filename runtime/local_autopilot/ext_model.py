@@ -175,6 +175,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels3(cur, hist)  # B3 third part (2026-11-25 06): CLSFIN（組×着順）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels4(cur, hist)  # B3 fourth part (2026-11-25 09): DEBINF（新馬の情報量区分）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -206,7 +210,7 @@ def _kame3(cur, hist):
 
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
-                   'CLSFIN': 'CLF'}
+                   'CLSFIN': 'CLF', 'DEBINF': 'DBI'}
 
 
 def labels(cur, hist):
@@ -311,6 +315,7 @@ def _standards(races):
 def _rows(races, std=None):
     """One row per start (horse ran, popularity known) with pre-race labels / speed; and the horse histories."""
     from runtime.local_autopilot import hist_stats as hs
+    from runtime.local_autopilot import b3_labels as b3i
     std = std if std is not None else _standards(races)
     hist = defaultdict(list)
     winners_style = defaultdict(list)
@@ -329,6 +334,9 @@ def _rows(races, std=None):
         cur0 = {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'), 'going': race.get('going'),
                 'cls': hs.class_code(race.get('cond')), 'lvl': _lvl(race.get('cond')), 'weather': race.get('weather'),
                 'special': hs.special_flag(race['venue'], race.get('cond')), 'daybias': bias}
+        _ran = [key(x.get('name')) or x.get('horse_key') for x in race['runners']
+                if x['status'] == 'RAN' and x.get('no') and x.get('pop')]
+        cur0['field_hist_share'], cur0['field_has_debut'] = b3i.field_info(sum(1 for h in _ran if hist.get(h)), len(_ran))
         done, rr = [], []
         for x in race['runners']:
             if x['status'] == 'SCRATCH' or not x.get('no'):

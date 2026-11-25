@@ -240,3 +240,42 @@ def label_pop_table(rows, exp, names=None):
             d['exp'] = round(d['exp'], 3)
             d['ae'] = round(d['top3'] / d['exp'], 3) if d['exp'] else None
     return out
+
+
+# ---------------------------------------------------------------- B3 fourth part (pre-registered 2026-11-25T09)
+"""
+  DEBINF  新馬・初出走馬を含むレースの「情報量区分」（第374条、n10）x その馬に過去走があるか x 人気帯
+          区分は結果前に決まる：同じレースの出走馬のうち過去走のある馬の割合 0 → TIEBREAK_ONLY（全頭が初出走で
+          事前の差は市場オッズのタイブレークだけ）/ 0超〜0.5未満 → PARTIAL（一部だけ比較できる）/
+          0.5以上 → EVIDENCE（過去走のある馬が多数で比較できる）。初出走馬が1頭もいないレースには付けない。
+          値 = '<TB|PC|ED>|<H|N>|<人気帯>'（H = 過去走あり、N = 初出走）。
+          (Drive: 精度スコアリング規格 第374条 EVIDENCE_DISCRIMINATIVE / PARTIAL_COMPARABLE /
+          TIEBREAK_ONLY_NONINFORMATIVE。engine.py は全頭 UNKNOWN の同点を市場オッズで割るが区分ラベルが無かった)
+          cur に 'field_hist_share'（過去走のある出走馬の割合）と 'field_has_debut'（初出走馬がいるか）が要る。
+"""
+PREREG4 = {'registered': '2026-11-25T09', 'bundle': 'B3', 'labels': ['DEBINF'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS4 = {'DEBINF': 'DBI'}
+
+
+def info_class(share):
+    if share is None:
+        return None
+    return 'TB' if share <= 0.0 else 'PC' if share < 0.5 else 'ED'
+
+
+def field_info(n_with_hist, n_runners):
+    """-> (field_hist_share, field_has_debut) for a race; (None, False) when the field is empty."""
+    if not n_runners:
+        return None, False
+    return round(n_with_hist / n_runners, 3), n_with_hist < n_runners
+
+
+def labels4(cur, hist):
+    """Fourth B3 part. -> [(name, value)]"""
+    if not cur.get('field_has_debut'):
+        return []
+    ic, pb = info_class(cur.get('field_hist_share')), pop_band(cur.get('pop'))
+    if not ic or not pb:
+        return []
+    return [('DEBINF', f"{ic}|{'H' if hist else 'N'}|{pb}")]
