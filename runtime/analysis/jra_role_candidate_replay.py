@@ -37,6 +37,16 @@ Candidates
   winners left out of W were width losses, not a different ordering.
 - EXACTA_ONLY (11/22 review P1, ticket shape): keep only the frozen Production EXACTA tickets (drop TRIFECTA
   and TRIO, no MEC rebuild). Separates "TRIFECTA is the drag" from "the whole trio/trifecta layer is".
+- DRIVE01 (Drive 精読 2026-11-22, 中央フォルダ 07_攻略・情報源; recorded challengers, NON-PRODUCTION):
+  P3_SHORTEN_SPRINT_FRONT (q552 短距離戦・高配当捕捉資料): today <= 1400m, last run >= 1600m, no
+  recent run <= 1400m, and a last-run corner position within the first half of the field -> add to P3.
+  P3_FIRST_DIRT_BIG_OUTER_FRONT (q554 複勝軸選定と穴馬激走パターン): dirt today, every recent run on
+  turf, declared body weight >= 460kg, horse_no in the outer half, and some recent first-corner position
+  within the first 40% of the field -> add to P3.
+  W_WIND8_MARKET_TOP3 (q565 風の強い日の競馬): pre-cutoff JMA wind >= 8.0 m/s -> add the market top-3
+  missing from W (no single-favourite axis on windy days).
+  Each has a same-count control (P3 by market order / W by Static rank) in the same firing races.
+  Race-card facts come only from the signed request snapshot frozen at or before prediction_cutoff.
 """
 import argparse, copy, glob, json, sys
 from pathlib import Path
@@ -325,6 +335,133 @@ def _filtered_tickets(f):
     return tk, sum(int(t.get('stake', 100)) for t in tk)
 
 
+# ---- DRIVE01 recorded challengers (Drive 精読 2026-11-22) ----
+def _dt(x):
+    import datetime as dt
+    return dt.datetime.fromisoformat(str(x).replace('Z', '+00:00'))
+
+
+def _request_snapshot(f, root=ROOT):
+    rq = root / 'runtime/requests' / f"{f['race_id']}-LIVE-R1-FORMAL.json"
+    if not rq.exists():
+        return None
+    ss = json.loads(rq.read_text()).get('source_snapshot') or {}
+    try:
+        if _dt(ss['source_freeze_at']) > _dt(f['prediction_cutoff']):
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    return ss
+
+
+def race_card(f, root=ROOT):
+    """(race_context, {runner_id: runner}) from the official card frozen before the cutoff, else None."""
+    ss = _request_snapshot(f, root)
+    card = (ss or {}).get('jra_official_race_card_detail') or {}
+    if not card.get('runners'):
+        return None
+    return card.get('race_context') or {}, {str(r['horse_no']): r for r in card['runners'] if r.get('horse_no') is not None}
+
+
+def jma_wind(f, root=ROOT):
+    """JMA wind speed (m/s) observed at or before the prediction cutoff, else None."""
+    ss = _request_snapshot(f, root)
+    o = ((ss or {}).get('jma_weather_evidence') or {}).get('observation') or {}
+    try:
+        if o.get('wind_speed_ms') is None or _dt(o['observed_at_jst']) > _dt(f['prediction_cutoff']):
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    return float(o['wind_speed_ms'])
+
+
+def _field(run):
+    return run.get('field_size') or 0
+
+
+def shorten_sprint_front(ctx, r):
+    runs = r.get('recent_runs') or []
+    if not runs or not ctx.get('distance_m') or ctx['distance_m'] > 1400:
+        return False
+    last = runs[0]
+    if (last.get('distance_m') or 0) < 1600 or any((x.get('distance_m') or 9999) <= 1400 for x in runs):
+        return False
+    pp, n = last.get('passing_positions') or [], _field(last)
+    return bool(pp and n and min(pp) <= 0.5 * n)
+
+
+def first_dirt_big_outer_front(ctx, r, field_n):
+    runs = r.get('recent_runs') or []
+    if ctx.get('surface') != 'ダ' or not runs or any(x.get('surface') != '芝' for x in runs):
+        return False
+    if (r.get('current_body_weight') or 0) < 460 or not field_n or (r.get('horse_no') or 0) <= field_n / 2:
+        return False
+    return any((x.get('passing_positions') or [None])[0] is not None and _field(x)
+               and x['passing_positions'][0] <= 0.4 * _field(x) for x in runs)
+
+
+def _drive_p3_picks(f, rule):
+    rc = race_card(f)
+    if rc is None:
+        return None
+    ctx, runners = rc
+    taken = set(_live(f, 'P3'))
+    if rule == 'SHORTEN':
+        hits = [k for k, r in runners.items() if shorten_sprint_front(ctx, r)]
+    else:
+        hits = [k for k, r in runners.items() if first_dirt_big_outer_front(ctx, r, len(runners))]
+    return [k for k in sorted(hits, key=int) if k not in taken]
+
+
+def _p3_same_count_market(f, n, tag):
+    order = market_ranking(f) or [str(x) for x in f['static_prediction']['ranking']]
+    taken = set(_live(f, 'P3'))
+    return _add_thirds(f, [r for r in order if r not in taken][:n], tag)
+
+
+def p3_shorten_sprint_front(f):
+    picks = _drive_p3_picks(f, 'SHORTEN')
+    return bool(picks) and _add_thirds(f, picks, 'P3_SHORTEN_SPRINT_FRONT')
+
+
+def p3_shorten_same_count_control(f):
+    picks = _drive_p3_picks(f, 'SHORTEN')
+    return bool(picks) and _p3_same_count_market(f, len(picks), 'P3_SHORTEN_SAME_COUNT_CONTROL')
+
+
+def p3_first_dirt_big_outer_front(f):
+    picks = _drive_p3_picks(f, 'FIRST_DIRT')
+    return bool(picks) and _add_thirds(f, picks, 'P3_FIRST_DIRT_BIG_OUTER_FRONT')
+
+
+def p3_first_dirt_same_count_control(f):
+    picks = _drive_p3_picks(f, 'FIRST_DIRT')
+    return bool(picks) and _p3_same_count_market(f, len(picks), 'P3_FIRST_DIRT_SAME_COUNT_CONTROL')
+
+
+WIND_MS = 8.0
+
+
+def w_wind8_market_top3(f):
+    w = jma_wind(f)
+    if w is None or w < WIND_MS:
+        return False
+    miss = _market_missing(f, 3)
+    return bool(miss) and _add_heads(f, miss, 'W_WIND8_MARKET_TOP3')
+
+
+def w_wind8_static_same_count_control(f):
+    w = jma_wind(f)
+    if w is None or w < WIND_MS:
+        return False
+    miss = _market_missing(f, 3)
+    if not miss:
+        return False
+    W = _live(f, 'W')
+    picks = [r for r in (str(x) for x in f['static_prediction']['ranking']) if r not in W][:len(miss)]
+    return _add_heads(f, picks, 'W_WIND8_STATIC_SAME_COUNT_CONTROL')
+
+
 CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head_local,
               'P2_STATIC_NEXT_CONTROL': p2_static_next_control, 'W_PLUS_MARKET1': w_plus_market1,
               'W_PLUS_MARKET_TOP3': w_plus_market_top3,
@@ -333,7 +470,14 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'SKIP_HEAVY_GOING': skip_heavy_going,
               'P2_MARKET_TOP3': p2_market_top3, 'P2_STATIC_SAME_COUNT_CONTROL': p2_static_same_count_control,
               'DROP_TRIFECTA': drop_trifecta, 'EXACTA_ONLY': exacta_only, 'CAP30': cap30,
-              'W_PLUS_STATIC2_SAME_BUDGET': w_plus_static2_same_budget}
+              'W_PLUS_STATIC2_SAME_BUDGET': w_plus_static2_same_budget,
+              # DRIVE01 (Drive 精読 2026-11-22, recorded challengers; profiles/KM_JRA_FORWARD_OOS_PREREG_20261128_DRIVE01.json)
+              'P3_SHORTEN_SPRINT_FRONT': p3_shorten_sprint_front,
+              'P3_SHORTEN_SAME_COUNT_CONTROL': p3_shorten_same_count_control,
+              'P3_FIRST_DIRT_BIG_OUTER_FRONT': p3_first_dirt_big_outer_front,
+              'P3_FIRST_DIRT_SAME_COUNT_CONTROL': p3_first_dirt_same_count_control,
+              'W_WIND8_MARKET_TOP3': w_wind8_market_top3,
+              'W_WIND8_STATIC_SAME_COUNT_CONTROL': w_wind8_static_same_count_control}
 
 
 def _settle(f, official):
