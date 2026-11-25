@@ -125,6 +125,7 @@ jobs:
           # python.org builds do not use the macOS keychain: use certifi's CA bundle for urllib (no Owner step needed)
           python -m pip install -q certifi && export SSL_CERT_FILE="$(python -m certifi)"
           python -m pip install -q cryptography || echo "cryptography install failed (formal signature checks will HOLD)"
+          python -m pip install -q pillow || echo "pillow install failed (mail card image skipped, text mail unchanged)"
           python -m pip install -q pdfplumber || echo "pdfplumber install failed (ばんえい キンタロー feed -> REFERENCE)"
           export KM_LOCAL_AUTOPILOT_OUT="$GITHUB_WORKSPACE/data/output"
           # NAR official CSVs (Owner-downloaded ZIPs, extracted on the Mac; not in Git) and the private cache for

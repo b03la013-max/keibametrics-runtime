@@ -515,6 +515,25 @@ def _gh(method, path, body=None):
         return json.loads(resp.read().decode())
 
 
+def _mail_card(card, day, name):
+    """Draw the race card and put it on the data branch; returns a markdown image line or ''. Never blocks the
+    delivery (Owner 2026-11-25 10:46: カード画像をメールに)."""
+    if os.environ.get('KM_LOCAL_MAIL_CARD', '1') == '0':
+        return ''
+    try:
+        import tempfile
+        from runtime.local_autopilot import mail_card
+        tmp = Path(tempfile.mkdtemp()) / f'{name}.png'
+        mail_card.render(card, tmp)
+        token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+        repo = os.environ.get('GITHUB_REPOSITORY') or DELIVERY_REPO
+        u = mail_card.publish(tmp, f'output/{day}/cards/{name}.png', token, repo)
+        return f'![{card.get("title", "")}]({u})\n' if u else ''
+    except Exception as exc:
+        log('MAIL_CARD_FAIL', name, f'{type(exc).__name__}:{str(exc)[:120]}')
+        return ''
+
+
 def delivery_body(q, r, e, out):
     md = (out / 'rev' / f"{e['rev']}.md").read_text()
     fr = json.loads((out / 'rev' / f"{e['rev']}.json").read_text())
@@ -523,6 +542,10 @@ def delivery_body(q, r, e, out):
     tree = [f"W {fr['roles']['W']}", f"└ P2 {fr['roles']['P2']}", f"   └ P3 {fr['roles']['P3']}"]
     head = (f"### 🏇 {r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走｜PAPER {e['edition']}\n"
             f"予測締切 {cutoff(r).strftime('%H:%M')}／印 {marks}\n")
+    from runtime.local_autopilot import mail_card
+    img = _mail_card(mail_card.paper_card(fr, f"{r['venue_name']}{r['race_no']}R", r['post_current'][11:16],
+                                          cutoff(r).strftime('%H:%M'), e['edition']), out.name, f"{e['rev']}.paper")
+    head = head + ('\n' + img if img else '')
     foot = (f"\n---\n<sub>Claude v4.3 PAPER（研究実装・毎レース購入方針の推薦試算）。正式Signed FINALではありません。"
             f"実購入なし。凍結 {e['frozen_at'][11:19]}／券面SHA `{e['ticket_sha256'][:12]}`／SOURCE SHA `{e['source_sha256'][:12]}`"
             f"／原本 {e['delivery'].get('LINK_AVAILABLE') or ''}</sub>")
@@ -816,7 +839,22 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
                   '- 役割 ' + '；'.join(f"{k} +{v['in']} -{v['out']}" for k, v in d['role_diff'].items()) if d['role_diff'] else '- 役割変化なし',
                   f"- 券面 追加{d['tickets']['added_count']}・削除{d['tickets']['removed_count']}／投資 "
                   f"{d['investment'][0]:,}円→{d['investment'][1]:,}円", '']
-    from runtime.local_autopilot import ticket_tree
+    from runtime.local_autopilot import ticket_tree, mail_card
+    try:
+        dd = Path(ROOT) / r['race_date']
+        prev = sorted((dd / 'rev').glob(f'{key}.r*.json'))
+        rv = json.loads(prev[-1].read_text()) if prev else {}
+        names = {x['no']: {'name': x.get('name'), 'frame': x.get('frame')} for x in (rv.get('prediction') or {}).get('ranking') or []}
+        rc = (rv.get('prediction') or {}).get('race_cond') or {}
+        cond = '　'.join(str(x) for x in (rc.get('distance') and f"{rc['distance']}m", rc.get('going')) if x)
+        img = _mail_card(mail_card.formal_card(sm, names, f"{r['venue_name']}{r['race_no']}R", r['post_current'][11:16],
+                                               cutoff(r).strftime('%H:%M'), cond, 'Revision 2' if revision_diff else ''),
+                         r['race_date'], f"{key}.formal{'.rev2' if revision_diff else ''}")
+    except Exception as exc:
+        log('MAIL_CARD_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')
+        img = ''
+    if img:
+        lines.insert(2, img)
     lines += [
               '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
              '**役割** ' + '／'.join(f"{c} " + '・'.join(x for x in sm['ranking'] if c in sm['roles'][x])
@@ -830,7 +868,7 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
     odd = [t for t in sm.get('tickets') or [] if int(t.get('stake') or 100) != 100]
     pos = {int(x): i for i, x in enumerate(sm['ranking'])}           # 買い目表記規格 2.4: evaluation order
     tree, _ = ticket_tree.block([(k, sorted(v, key=lambda c: [pos.get(h, 99) for h in c]), None) for k, v in by.items()])
-    lines += ['```', tree, '```']
+    lines += ['<details><summary>買い目の全組合せ</summary>', '', '```', tree, '```', '', '</details>']
     if odd:
         lines.append('（100円以外の点：' + '、'.join(f"{FORMAL_KIND.get(t['bet_type'], t['bet_type'])} "
                                               + '・'.join(map(str, t['selection'])) + f" {t['stake']}円" for t in odd) + '）')

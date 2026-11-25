@@ -22,7 +22,7 @@ FRAME = {1: ('#ffffff', '#222222'), 2: ('#222222', '#ffffff'), 3: ('#e53935', '#
 ROLE = {'1着候補': ('#f2b705', '#3b2c00'), '2着候補': ('#4c8bf5', '#ffffff'), '3着候補': ('#c9ced6', '#2b2f36'),
         'W': ('#f2b705', '#3b2c00'), 'P2': ('#4c8bf5', '#ffffff'), 'P3': ('#c9ced6', '#2b2f36')}
 THEME = {'FORMAL': {'band': '#0f3d2e', 'accent': '#36b37e', 'label': '正式 Signed FINAL'},
-         'PAPER': {'band': '#2d3446', 'accent': '#8fa3c7', 'label': 'PAPER（研究）'}}
+         'PAPER': {'band': '#1f5240', 'accent': '#8fd1ae', 'label': 'PAPER（研究）'}}   # Owner 10:46 緑が良さげ
 BG, INK, SUB, LINE = '#f6f7f4', '#1d2420', '#5f6a64', '#dde2de'
 
 
@@ -33,7 +33,7 @@ def _font(size, bold=True):
                 return ImageFont.truetype(p, size)
             except OSError:
                 continue
-    return ImageFont.load_default()
+    raise OSError('NO_CJK_FONT')   # no Japanese font: the mail goes out without the image
 
 
 def _frame_of(no, field):
@@ -64,7 +64,7 @@ def render(card, out_path):
     lf = _font(30)
     tw = d.textlength(lab, font=lf)
     d.rounded_rectangle([W - PAD - tw - 36, 40, W - PAD, 92], radius=26, fill=th['accent'])
-    d.text((W - PAD - tw - 18, 49), lab, font=lf, fill='#0b1f17' if card.get('kind') == 'FORMAL' else '#ffffff')
+    d.text((W - PAD - tw - 18, 49), lab, font=lf, fill='#0b1f17')
     d.text((PAD, 178), card.get('cond', ''), font=_font(30, False), fill='#c6d3cc')
     y = 270
     # marks row
@@ -158,3 +158,28 @@ def formal_card(summary, names, title, post, cutoff, cond='', edition=''):
     return {'kind': 'FORMAL', 'title': title, 'post': post, 'cutoff': cutoff, 'edition': edition, 'cond': cond,
             'marks': top, 'horses': horses, 'tickets': tickets, 'invest': 100 * sum(cnt.values()),
             'note': '推薦試算・1点100円・実購入なし／KRS 5,000回は未較正'}
+
+
+def publish(png_path, repo_path, token, repo, branch='local-autopilot-data'):
+    """Upload the PNG to the public data branch with one Contents API call (no git push from the delivery path)
+    and return its raw URL for the mail. None on any failure (the mail is then sent without the image)."""
+    import base64
+    import json
+    import urllib.request
+    url = f'https://api.github.com/repos/{repo}/contents/{repo_path}'
+    hdr = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json', 'User-Agent': 'km-local-autopilot'}
+    body = {'message': f'LOCAL mail card {repo_path.rsplit("/", 1)[-1]} [skip ci]', 'branch': branch,
+            'content': base64.b64encode(Path(png_path).read_bytes()).decode()}
+    try:   # an existing file (same name) needs its sha
+        with urllib.request.urlopen(urllib.request.Request(url + f'?ref={branch}', headers=hdr), timeout=15) as r:
+            body['sha'] = json.loads(r.read().decode())['sha']
+    except Exception:
+        pass
+    try:
+        req = urllib.request.Request(url, method='PUT', data=json.dumps(body).encode(),
+                                     headers=dict(hdr, **{'Content-Type': 'application/json'}))
+        with urllib.request.urlopen(req, timeout=20):
+            pass
+    except Exception:
+        return None
+    return f'https://raw.githubusercontent.com/{repo}/{branch}/{repo_path}'
