@@ -3,11 +3,19 @@
   "note": "Owner-controlled Production switches. Change 'enabled' only with an explicit Owner decision recorded in 'decision'.",
   "switches": {
     "foreign_history_profile": {
-      "enabled": false,
+      "enabled": true,
       "rule_id": "KM-JRA-FOREIGN-HISTORY-PROFILE-v1-20261122",
       "effect": "A runner whose JRA race card shows 0 starts but which has dated official pre-race runs (foreign-trained) is profiled by that run count instead of NEWCOMER. Classification only; no weight change.",
       "case": "KM-JRA-KYO-20261122-R11",
-      "decision": null
+      "decision": {
+        "decided_by": "Owner (上濵さん)",
+        "decided_at": "2026-11-25T19:53:21+09:00",
+        "channel": "Claude session AskUserQuestion (scheduled JC decision material, 2026-11-25 19:00 JST)",
+        "question": "ジャパンカップ（11/29）で、外国馬の補正C1を本番で有効にしますか？",
+        "answer": "有効にする",
+        "evidence": "jra_info_gap_challenger replay since 20261011: 352 settled races, only KYO-20261122-R11 changes (winner Static rank 18 -> 12); weights unchanged",
+        "rollback": "set enabled=false (or env KM_JRA_FOREIGN_HISTORY_PROFILE=0); classification only"
+      }
     }
   }
 }
