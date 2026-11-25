@@ -44,6 +44,9 @@ Tables
   T18_FAV_FRAME  popularity 1-2: venue x distance x 枠 (浦和 第28条12「1500m・1600mの外枠人気馬」; every venue so the
                claim can be compared with other courses). With A/E.
 T6-T9 are YouTube-claim checks (2026-11-19 Drive reading, q39-q55): unverified claims, evidence only.
+Discovery / validation split (Drive 精読 q273, 2026-11-25): split_check() builds every A/E table twice (before /
+on-or-after SPLIT_CUT, history always from all races), BH q-values on the discovery side only, HOLDS / FAILS /
+UNTESTED per discovery lead -> hist_stats_split.json / .md (write_split, at most once per 20 h, NAR CSVs if present).
 Pre-race inputs only for the "candidate" / "change" definitions: a horse's earlier starts (strictly earlier date).
 Rates are never multiplied together; a horse's matching cells are listed side by side (no additive score).
 """
@@ -371,8 +374,11 @@ def _period(rows):
     return [ds[0], ds[-1]] if ds else None
 
 
-def build(races, source):
-    rows = starts(races)
+def build(races, source, date_range=None):
+    rows = starts(races)                           # history always from every race (a validation start still sees
+    if date_range:                                 # its discovery-period previous starts); only the cells are cut
+        lo, hi = date_range
+        rows = [r for r in rows if (lo is None or r['date'] >= lo) and (hi is None or r['date'] < hi)]
     exp = expected_top3(rows)
     per = _period(rows)
     tables = defaultdict(list)
@@ -549,6 +555,77 @@ def time_split(races, cut):
     return a, b
 
 
+SPLIT_CUT = '2025-07-01'                           # discovery = before, validation = on/after (Drive q273, 2026-11-25)
+SPLIT_Q = 0.10
+
+
+def _ckey(table, cond):
+    return table + '|' + json.dumps(cond, ensure_ascii=False, sort_keys=True)
+
+
+def split_check(races, source, cut=SPLIT_CUT, q_max=SPLIT_Q):
+    """Discovery / validation split for every A/E table (Drive 精読 q273「発見と検証の期間分割」, B3, 2026-11-25).
+
+    The cells are built twice from the same pre-race history: discovery (date < cut) and validation (date >= cut).
+    BH q-values are computed on the discovery cells only (per table). A discovery lead (not small sample, q <= q_max)
+    is HOLDS when the validation A/E is on the same side of 1.0 with a validation cell of MIN_N starts or more,
+    FAILS when it is on the other side, UNTESTED when the validation cell is missing or small. Everything else is
+    NOT_A_LEAD. Evidence only (HISTORICAL_BACKFILL_LEARNING): never changes Production, roles or tickets, and a
+    HOLDS cell is still only a candidate for an Owner pre-registration."""
+    disc = build(races, source, (None, cut))
+    val = build(races, source, (cut, None))
+    vmap = {_ckey(t, c['conditions']): c for t, cs in val['tables'].items() for c in cs if c.get('ae_top3') is not None}
+    out, summary = [], {}
+    for t, cs in sorted(disc['tables'].items()):
+        cs = [c for c in cs if c.get('ae_top3') is not None]
+        if not cs:
+            continue
+        q = bh_qvalues(cs)
+        sm = summary.setdefault(t, {'cells': 0, 'leads': 0, 'HOLDS': 0, 'FAILS': 0, 'UNTESTED': 0})
+        for i, c in enumerate(cs):
+            v = vmap.get(_ckey(t, c['conditions']))
+            lead = not c['small_sample'] and q.get(i) is not None and q[i] <= q_max and c['ae_top3'] != 1
+            if not lead:
+                verdict = 'NOT_A_LEAD'
+            elif v is None or v['small_sample'] or not v.get('ae_top3'):
+                verdict = 'UNTESTED'
+            else:
+                verdict = 'HOLDS' if (c['ae_top3'] > 1) == (v['ae_top3'] > 1) and v['ae_top3'] != 1 else 'FAILS'
+            sm['cells'] += 1
+            if lead:
+                sm['leads'] += 1
+                sm[verdict] += 1
+            out.append({'table': t, 'conditions': c['conditions'], 'verdict': verdict,
+                        'discovery': {'starts': c['starts'], 'top3': c['top3'], 'ae_top3': c['ae_top3'], 'q': q.get(i),
+                                      'small_sample': c['small_sample']},
+                        'validation': None if v is None else {'starts': v['starts'], 'top3': v['top3'],
+                                                              'ae_top3': v['ae_top3'], 'small_sample': v['small_sample']}})
+    return {'profile': PROFILE + '+SPLIT', 'class': CLASS, 'source': source, 'cut': cut, 'q_max': q_max, 'min_n': MIN_N,
+            'discovery_period': disc['period'], 'validation_period': val['period'],
+            'discovery_starts': disc['starts'], 'validation_starts': val['starts'],
+            'summary': summary, 'cells': out}
+
+
+def split_md(sp, top=30):
+    L = [f"# 地方 統計表の期間分割（{sp['class']}）", '',
+         f"発見 {sp['discovery_period']}（{sp['discovery_starts']}出走）／ 検証 {sp['validation_period']}（{sp['validation_starts']}出走）。"
+         f"境目 {sp['cut']}。BH の q 値は発見側だけ（q≤{sp['q_max']}、{sp['min_n']}出走以上を「手がかり」）。"
+         '検証側で A/E が同じ向きなら HOLDS、逆なら FAILS、検証側が少数・無しなら UNTESTED。証拠のみ。', '',
+         '| 表 | 区分 | 手がかり | HOLDS | FAILS | UNTESTED |', '|---|---|---|---|---|---|']
+    for t, s in sp['summary'].items():
+        L.append(f"| {t} | {s['cells']} | {s['leads']} | {s['HOLDS']} | {s['FAILS']} | {s['UNTESTED']} |")
+    held = [c for c in sp['cells'] if c['verdict'] == 'HOLDS']
+    held.sort(key=lambda c: c['discovery']['q'])
+    if held:
+        L += ['', f'## 検証期間でも同じ向きだった手がかり（q の小さい順、上位{top}）', '',
+              '| 表 | 条件 | 発見 出走 / A/E / q | 検証 出走 / A/E |', '|---|---|---|---|']
+        for c in held[:top]:
+            d, v = c['discovery'], c['validation']
+            L.append(f"| {c['table']} | {' / '.join(f'{k}={x}' for k, x in c['conditions'].items())} | "
+                     f"{d['starts']} / {d['ae_top3']:.2f} / {d['q']} | {v['starts']} / {v['ae_top3']:.2f} |")
+    return '\n'.join(L) + '\n'
+
+
 def runner_cells(stats, venue, distance, going, field, frame, pop=None):
     """Cells that match one runner today (listed side by side, never multiplied). UNKNOWN stays UNKNOWN."""
     out = []
@@ -634,4 +711,27 @@ def write(root, name='hist_stats'):
     st = build(races, src)
     dump(st, Path(root) / f'{name}.json')
     Path(root, f'{name}.md').write_text(md(st))
+    write_split(root, name, races, src)
     return st
+
+
+def write_split(root, name='hist_stats', races=None, src=None, min_age_h=20):
+    """Discovery / validation split files (evidence only, never raises). Uses the NAR official CSVs when the runner
+    has them (KM_NAR_ROOT, as ext_connect does) so the discovery side (before SPLIT_CUT) is not empty; rebuilt at
+    most once per `min_age_h` hours because it builds the tables twice."""
+    import os
+    import time
+    from pathlib import Path
+    out = Path(root) / f'{name}_split.json'
+    try:
+        if out.exists() and time.time() - out.stat().st_mtime < min_age_h * 3600:
+            return None
+        nar = os.environ.get('KM_NAR_ROOT')
+        if nar or races is None:
+            races, src = load_sources(root, nar)
+        sp = split_check(races, src)
+        dump(sp, out)
+        Path(root, f'{name}_split.md').write_text(split_md(sp))
+        return sp
+    except Exception:
+        return None
