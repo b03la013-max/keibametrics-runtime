@@ -32,6 +32,39 @@ def timestamp(value):
         return None
 
 
+def read_saved_forecast_reference(root, race_id, scheduled_post_at, gap, now):
+    """Read a frozen PAPER brief and check its stored hash and identity bindings."""
+    directory = root / 'runtime/source_candidate_oos' / race_id
+    path = directory / 'candidate_forecast_brief.json'
+    try:
+        brief = json.loads(path.read_text())
+        pre = json.loads((directory / 'pre_result.json').read_text())
+        final = json.loads((directory / 'candidate_final.json').read_text())
+        displayed_at = timestamp(brief['display_time'])
+        post = timestamp(scheduled_post_at)
+        frozen = timestamp(pre['frozen_at'])
+        prepared = gap['prepared_numerical_request']
+        checkpoint = gap['source_checkpoint_manifest']
+        active = {str(r['runner_id']) for r in prepared['runners']}
+        if (not displayed_at or not post or not frozen
+                or not frozen < displayed_at < post or displayed_at > now
+                or timestamp(brief['scheduled_post_at']) != post or brief['race_id'] != race_id
+                or gap['race_id'] != race_id or prepared['race_id'] != race_id
+                or checkpoint['race_id'] != race_id
+                or checkpoint['sha256'] != digest({k: v for k, v in checkpoint.items() if k != 'sha256'})
+                or len(active) != len(prepared['runners'])
+                or set(brief['ranking']) != active
+                or brief['source_snapshot_sha256'] != checkpoint['source_snapshot_sha256']
+                or brief != make_forecast_brief(pre, final, generated_at=brief['display_time'])):
+            return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return {'path': path.relative_to(root).as_posix(), 'brief_sha256': brief['sha256'],
+            'temporal_class': 'PRE_START_PREVIEW' if now < post else 'HISTORICAL_REPRINT_ONLY',
+            'scope': 'PAPER_REFERENCE_ONLY', 'signature_validation_performed': False,
+            'user_delivery_verified': False}
+
+
 def make_forecast_brief(pre, final, *, generated_at=None,
                         maximum_paper_budget_yen=2000, max_heads=2):
     """Show selected tickets only if each existed in the frozen Candidate MEC.
