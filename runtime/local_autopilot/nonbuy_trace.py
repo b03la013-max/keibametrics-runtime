@@ -15,7 +15,15 @@
   NOT_GENERATED                役割には全員いたが組として生成されていない（FPP→Candidate の欠落）
 役割馬ごと（NSD：評価馬の無言削除の検出）：
   PURCHASED / BUDGET_COMPRESSED（全MECには居たが配信に無い）/ NOT_GENERATED（役割はあるが全MECにも無い）
+
+第2部（2026-11-26 03時台、gap n19・n24・n27・n51・n137 の残り。証拠のみ）：
+  role_horses[*] に段ごとの券数と投資額（tickets_full / tickets_kept / stake_kept）
+  order_uncertainty：実着順の3頭（馬単は1-2着の2頭）が、実際の向きで残ったか・別の向きだけ残ったか
+      （園田 v2.8 第292条 Order-Uncertainty。ACTUAL_AND_OTHER / ACTUAL_ONLY / OTHER_ONLY / NONE）
+  head_continuity：W の各馬が頭（馬単・三連単の1着）として 全MEC→配信 のどこまで残ったか
+      （Daily Formal Review Rev6 Alternative Winner Continuity。HEAD_PURCHASED / HEAD_BUDGET_COMPRESSED / HEAD_NOT_GENERATED）
 """
+from itertools import permutations
 from collections import Counter
 
 BET_TYPES = ('EXACTA', 'TRIO', 'TRIFECTA')
@@ -33,6 +41,59 @@ def _norm(tickets):
             out.append((bt, tuple(int(x) for x in sel)))
         except (TypeError, ValueError):
             continue
+    return out
+
+
+def _stakes(tickets):
+    out = []
+    for t in tickets or []:
+        st = 100
+        if isinstance(t, dict):
+            try:
+                st = int(t.get('stake') or 100)
+            except (TypeError, ValueError):
+                st = 100
+        out.append(st)
+    return out
+
+
+def _with_stake(tickets):
+    n = _norm(tickets)
+    if len(n) != len(tickets or []):   # 読めない券があった：投資額は 100 円/点で数える
+        return [(b, sel, 100) for b, sel in n]
+    return [(b, sel, st) for (b, sel), st in zip(n, _stakes(tickets))]
+
+
+def _order_uncertainty(order, full, kept):
+    w, s, t = order[:3]
+    out = {}
+    for bt, horses in (('EXACTA', (w, s)), ('TRIFECTA', (w, s, t))):
+        actual = tuple(horses)
+        others = {p for p in permutations(horses) if p != actual}
+        def look(tks):
+            sels = {tuple(sel) for b, sel in tks if b == bt}
+            return actual in sels, sorted(list(p) for p in others & sels)
+        a_k, o_k = look(kept)
+        a_f, o_f = look(full)
+        code = ('ACTUAL_AND_OTHER' if a_k and o_k else 'ACTUAL_ONLY' if a_k else
+                'OTHER_ONLY' if o_k else 'NONE')
+        out[bt] = {'kept': code, 'actual_in_full': a_f, 'other_orders_full': len(o_f),
+                   'other_orders_kept': o_k}
+    return out
+
+
+def _head_continuity(order, roles, full, kept):
+    out = {}
+    for h, rs in sorted(roles.items()):
+        if 'W' not in rs:
+            continue
+        def cnt(tks, bt):
+            return sum(1 for b, sel in tks if b == bt and sel and sel[0] == h)
+        pf, pk = cnt(full, 'EXACTA'), cnt(kept, 'EXACTA')
+        tf, tk = cnt(full, 'TRIFECTA'), cnt(kept, 'TRIFECTA')
+        term = ('HEAD_PURCHASED' if pk + tk else 'HEAD_BUDGET_COMPRESSED' if pf + tf else 'HEAD_NOT_GENERATED')
+        out[str(h)] = {'is_winner': bool(order) and order[0] == h, 'exacta_full': pf, 'exacta_kept': pk,
+                       'trifecta_full': tf, 'trifecta_kept': tk, 'terminal': term}
     return out
 
 
@@ -100,9 +161,17 @@ def race(order, roles, full_mec, delivered):
             continue
         horses[str(h)] = {'roles': rs, 'finish': order.index(h) + 1 if h in order else None,
                           'terminal': 'PURCHASED' if h in in_kept else 'BUDGET_COMPRESSED' if h in in_full else 'NOT_GENERATED'}
+    kept_st = _with_stake(delivered)
+    for k, v in horses.items():
+        h = int(k)
+        v['tickets_full'] = sum(1 for _, sel in full if h in sel)
+        v['tickets_kept'] = sum(1 for _, sel in kept if h in sel)
+        v['stake_kept'] = sum(st for _, sel, st in kept_st if h in sel)
     silent = sorted(int(h) for h, v in horses.items() if v['terminal'] != 'PURCHASED')
     return {'profile': PROFILE, 'actual_combination': per_bt,
             'role_horses': horses, 'role_horses_not_purchased': silent,
+            'order_uncertainty': _order_uncertainty(order, full, kept),
+            'head_continuity': _head_continuity(order, roles, full, kept),
             'full_mec_observed': bool(_norm(full_mec)),
             'note': 'CAPITAL（予算で落ちた）と SEMANTIC（予想で外した）を分けた記録。正式券面・点数・閾値は変えない'}
 
@@ -129,6 +198,17 @@ def aggregate(traces):
         out['role_horse_terminal'].update(v['terminal'] for v in t['role_horses'].values())
         if any(v['terminal'] == 'BUDGET_COMPRESSED' for v in t['actual_combination'].values()):
             out['races_with_budget_compressed_hit'] += 1
+    ou = {bt: Counter() for bt in ('EXACTA', 'TRIFECTA')}
+    hc, hc_win = Counter(), Counter()
+    for t in traces:
+        for bt, v in (t.get('order_uncertainty') or {}).items():
+            ou[bt][v['kept']] += 1
+        for v in (t.get('head_continuity') or {}).values():
+            hc[v['terminal']] += 1
+            if v['is_winner']:
+                hc_win[v['terminal']] += 1
+    out['order_uncertainty'] = {bt: dict(c) for bt, c in ou.items()}
+    out['head_continuity'] = {'all_w': dict(hc), 'winner_w': dict(hc_win)}
     out['axis'] = dict(out['axis'])
     out['role_horse_terminal'] = dict(out['role_horse_terminal'])
     return out
