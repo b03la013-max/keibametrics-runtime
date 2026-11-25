@@ -25,6 +25,7 @@ BRS_BACK = -2.0
 SCORE = {'win_brs': 0.5, 'win_bta': 0.5, 'unconfirmed_pen': 2.0,         # 1着・3着内・穴の合成（実装時の仮置き）
          'place_stable': 2.0, 'hole_longshot': 3.0, 'longshot_pop': 7,
          'isv': {'VERY_STABLE': 4, 'STABLE': 2, 'STANDARD': 0, 'UNSTABLE': -2, 'UNKNOWN': 0}}
+MARKET_FREE = False      # production False; shadow NOMKT: 第1段階（競走予測）で人気・オッズを一切使わない（予想ファースト・オッズセカンドの検証）
 MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
 RULESET = 'KM-BAN-v4.0-static-r1'
@@ -224,7 +225,8 @@ def evaluate(race):
         lis = (2.0 if d is not None and d <= 1 else 1.0 if d is not None and d <= 3 else 0.0)
         tpi = None if b is None else round(b + (bta_adj or 0) + (h['mpa'] or 0) + (h['brs'] or 0) + wda
                                            + front_bonus + jbr + adf_adj + bwl_adj + cci + cpu, 2)
-        rows.append({'no': h['no'], 'name': h.get('name'), 'pop': h.get('pop'), 'odds': h.get('odds'),
+        rows.append({'no': h['no'], 'name': h.get('name'),
+                     'pop': None if MARKET_FREE else h.get('pop'), 'odds': None if MARKET_FREE else h.get('odds'),
                      'idx': idx, 'idx_src': prov, 'bsi': b, 'isv': d, 'isv_label': isv_lab, 'lis': lis,
                      'bta': bta_adj, 'bta_evidence': bta_ev, 'barrier_mean_sec': bta_mean,
                      'mpa': h['mpa'], 'brs': h['brs'], 'wda': wda, 'front_bonus': front_bonus,

@@ -104,3 +104,8 @@ def test_exact_rule_by_w_follows_ban_tag():
         assert len({e[0] for e in tk2['exact']}) in (0, 2) and tk2['points'] <= 30
     finally:
         T.EXACT_RULE = old
+
+
+def test_shadow_switches_default_off():
+    import engine, tickets
+    assert engine.MARKET_FREE is False and tickets.EXACT_PICK is None

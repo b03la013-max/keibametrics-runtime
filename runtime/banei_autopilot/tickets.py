@@ -10,6 +10,7 @@ from itertools import combinations, permutations
 
 CAP_TOTAL = 30
 EXACT_RULE = None               # production None（1着固定）; shadow: 'BY_W'（正本 BAN-TAG: W1頭→1-3-5、2頭→2-3-4、3頭以上→三連単なし）/'2HEAD'（常に上位W2頭を頭に 2-3-4）
+EXACT_PICK = None               # production None; shadow 'UNIVERSE': 同じ点数のまま三連単を W×P2×P3 の全組合せから強い順に選ぶ（◎頭固定をやめる）
 FORCE_TRIO_AXIS = None          # production None; challengers AXIS2 sets 2 (◎○2頭軸＋◎抜き○ライン)                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
 UNIT = 100
 
@@ -84,6 +85,10 @@ def compile_race(ev):
         seconds = _col(place, e2 + len(heads), ())
         thirds = _col(place + hole, e3 + len(heads) + 1, ())
         exact = [(a, b, c) for a in heads for b in seconds for c in thirds if len({a, b, c}) == 3]
+        if EXACT_PICK == 'UNIVERSE' and exact:                    # shadow only: same point count, chosen from the universe
+            strength = lambda c: (rows[c[0]]['win_rank'] + rows[c[1]]['place_rank'] + rows[c[2]]['place_rank'],
+                                  rows[c[0]]['win_rank'], c)
+            exact = sorted(universe_exact, key=strength)[:len(exact)] or exact
 
     # 8: bidirectional closure — every bought exact's trio is in 三連複 (BAN-EPRC / CTFP),
     #    and Pair+Trio -> Exact candidates are marked PESS-U when the trio is unique for that head.

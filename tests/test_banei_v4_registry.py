@@ -30,7 +30,9 @@ def test_step_does_not_promote_below_min_races_and_adds_neighbors(tmp_path):
     ev = registry.step(tmp_path)
     reg = registry.load(tmp_path)
     assert reg['production']['id'] == 'BASE' and 'PROMOTED' not in [e[0] for e in ev]
-    assert sum(1 for v in reg['candidates'].values() if v['status'] == 'SHADOW') <= max(registry.MAX_ACTIVE, 12)
+    # 自動の近傍候補は MAX_ACTIVE まで。毎晩の反省が積む候補（candidates_queue.json）はその上に乗る（多重比較の補正に含まれる）
+    n_queue = len(json.loads(registry.QUEUE.read_text())['candidates'])
+    assert sum(1 for v in reg['candidates'].values() if v['status'] == 'SHADOW') <= registry.MAX_ACTIVE + n_queue
 
 
 def test_compare_needs_significance():
