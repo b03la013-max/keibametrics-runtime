@@ -1,0 +1,52 @@
+name: KeibaMetrics JRA Official Results Backfill (night, Mac)
+# Owner decision 2026-11-20 02:03 JST (confirmed 2026-11-21 13:11): bulk past results from the JRA
+# official result pages for the central statistical tables. HISTORICAL_BACKFILL_LEARNING, not Forward OOS;
+# Production effect NONE. Facts only (no raw HTML). >= 3 s between requests; 403/429/503 -> stop,
+# 30 min hold, no retry (runtime/jra_results_history/state.json keeps the refusals).
+permissions:
+  contents: write
+on:
+  schedule:
+    - cron: "15 13 * * *"   # 22:15 JST every night; the job stops itself after 290 minutes (~03:05 JST)
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Run budget in minutes"
+        required: false
+        default: "290"
+      until:
+        description: "Oldest date to collect (YYYY-MM-DD)"
+        required: false
+        default: "2023-12-01"
+concurrency:
+  group: km-jra-results-backfill
+  cancel-in-progress: false
+jobs:
+  backfill:
+    runs-on: [self-hosted, km-jra]
+    timeout-minutes: 310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/km-python
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Collect official results (newest first, resumes from the cursor)
+        id: run
+        env:
+          MINUTES: ${{ inputs.minutes || '290' }}
+          UNTIL: ${{ inputs.until || '2023-12-01' }}
+        run: |
+          set -euo pipefail
+          python runtime/jra_source_runtime/jra_results_backfill.py run --until "$UNTIL" --minutes "$MINUTES" | tee backfill_result.json
+          python runtime/jra_source_runtime/jra_results_backfill.py status | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Persist collected days
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_results_history
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "data(jra): official results backfill $(TZ=Asia/Tokyo date +%F) [skip ci]"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && exit 0; sleep 10; done
+          exit 1
