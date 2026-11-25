@@ -179,6 +179,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels4(cur, hist)  # B3 fourth part (2026-11-25 09): DEBINF（新馬の情報量区分）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels5(cur, hist)  # B3 fifth part (2026-11-25 15): BMONTH（生まれ月×新馬戦/2歳戦）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -210,7 +214,7 @@ def _kame3(cur, hist):
 
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
-                   'CLSFIN': 'CLF', 'DEBINF': 'DBI'}
+                   'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO'}
 
 
 def labels(cur, hist):
@@ -333,7 +337,8 @@ def _rows(races, std=None):
             bias = 'FRONT' if fr >= 0.6 else 'BACK' if fr <= 0.15 else 'NEUTRAL'
         cur0 = {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'), 'going': race.get('going'),
                 'cls': hs.class_code(race.get('cond')), 'lvl': _lvl(race.get('cond')), 'weather': race.get('weather'),
-                'special': hs.special_flag(race['venue'], race.get('cond')), 'daybias': bias}
+                'special': hs.special_flag(race['venue'], race.get('cond')), 'daybias': bias,
+                'shinba': '新馬' in str(race.get('cond') or '')}
         _ran = [key(x.get('name')) or x.get('horse_key') for x in race['runners']
                 if x['status'] == 'RAN' and x.get('no') and x.get('pop')]
         cur0['field_hist_share'], cur0['field_has_debut'] = b3i.field_info(sum(1 for h in _ran if hist.get(h)), len(_ran))
@@ -351,7 +356,8 @@ def _rows(races, std=None):
                    if s0 and x['status'] == 'RAN' and x.get('time') else None)
             if x['status'] == 'RAN' and x.get('pop'):
                 cur = dict(cur0, age=x.get('age'), sex=x.get('sex'), pop=x['pop'], frame_no=x.get('frame'), bw=x.get('bw'),
-                           jockey=x.get('jockey'), sire=x.get('sire'), damsire=x.get('damsire'))
+                           jockey=x.get('jockey'), sire=x.get('sire'), damsire=x.get('damsire'),
+                           birth=x.get('birth') or x.get('horse_key'))
                 rr.append({'race_id': race['race_id'], 'date': race['date'], 'venue': race['venue'],
                            'distance': race.get('distance'), 'band': dist_band(race.get('distance')), 'going': g,
                            'fband': field_band(field), 'pop': x['pop'], 'top3': bool(x.get('finish') and x['finish'] <= 3),

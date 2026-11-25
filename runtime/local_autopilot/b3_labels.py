@@ -279,3 +279,54 @@ def labels4(cur, hist):
     if not ic or not pb:
         return []
     return [('DEBINF', f"{ic}|{'H' if hist else 'N'}|{pb}")]
+
+
+"""B3 fifth part (2026-11-25 15): BMONTH（生まれ月 × 新馬戦/2歳戦）
+
+  BMONTH  2歳馬（齢=2）のレースだけ。生まれ月の帯 M1_3（1〜3月）/ M4_5（4〜5月）/ M6P（6月以降）
+          × レース区分 SHINBA（条件に「新馬」）/ 2YO（それ以外の2歳戦）× 人気帯。
+          値 = '<SHINBA|2YO>|<M1_3|M4_5|M6P>|<人気帯>'。生年月日が無い馬・3歳以上には付けない。
+          (Drive: YouTube『【完全攻略】新馬戦にこそお宝が眠っています』— 2歳戦の勝率 1月生まれ 11.3% → 6月以降 5.4%、
+          複勝率 約1/3 → 約1/6、人気に織り込まれにくいとする主張・未検証、JRA の研究の出典は未確認。
+          q313 の修正どおり新馬戦と2歳戦全体を別セルにし、人気帯で人気補正後の差を測る）
+          生年月日は NAR 公式 CSV の horselist『生年月日』（hist_stats.from_nar_csv の horse_key に入っている）。
+          楽天の出馬表には生年月日が無いので、当日の行では付かない（学習側の実測のみ。採用されても当日の値は中立）。
+"""
+PREREG5 = {'registered': '2026-11-25T15', 'bundle': 'B3', 'labels': ['BMONTH'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS5 = {'BMONTH': 'BMO'}
+
+
+def birth_month(birth):
+    """'2024-03-15' / '2024/3/15' / '20240315' / 'name|2024/03/15' -> 3 (None when unreadable)."""
+    import re
+    s = str(birth or '')
+    if '|' in s:
+        s = s.rsplit('|', 1)[1]
+    s = s.strip()
+    m = re.fullmatch(r'(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?', s) or re.fullmatch(r'(\d{4})(\d{2})(\d{2})', s)
+    if not m:
+        return None
+    mo = int(m[2])
+    return mo if 1 <= mo <= 12 else None
+
+
+def month_band(mo):
+    if not mo:
+        return None
+    return 'M1_3' if mo <= 3 else 'M4_5' if mo <= 5 else 'M6P'
+
+
+def labels5(cur, hist):
+    """Fifth B3 part. -> [(name, value)]"""
+    try:
+        age = int(cur.get('age') or 0)
+    except (TypeError, ValueError):
+        return []
+    if age != 2:
+        return []
+    mb, pb = month_band(birth_month(cur.get('birth'))), pop_band(cur.get('pop'))
+    if not mb or not pb:
+        return []
+    kind = 'SHINBA' if cur.get('shinba') else '2YO'
+    return [('BMONTH', f'{kind}|{mb}|{pb}')]

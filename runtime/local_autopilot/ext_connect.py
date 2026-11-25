@@ -32,7 +32,7 @@ EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
 MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3', 'ITV', 'BWS', 'BWP', 'SHF', 'FRS',
-            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI']
+            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI', 'BMO']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
 DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
@@ -41,7 +41,8 @@ DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
                 'ITV': 0.0, 'BWS': 0.0, 'BWP': 0.0, 'SHF': 0.0, 'FRS': 0.0,
                 'LDX': 0.0, 'SSX': 0.0, 'RS2': 0.0, 'FSL': 0.0, 'DBX': 0.0,   # B3 second part, same rule
                 'CLF': 0.0,   # B3 third part (組×着順), same rule
-                'DBI': 0.0}   # B3 fourth part (新馬の情報量区分), same rule
+                'DBI': 0.0,   # B3 fourth part (新馬の情報量区分), same rule
+                'BMO': 0.0}   # B3 fifth part (生まれ月×新馬戦/2歳戦, 2026-11-25 15), same rule
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
@@ -218,7 +219,8 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                'bw': x.get('current_body_weight'),
                'special': hs.special_flag(v, race.get('race_name')), 'daybias': daybias,
                'sire': x.get('sire'), 'damsire': x.get('damsire'),
-               'field_hist_share': fshare, 'field_has_debut': fdebut}
+               'field_hist_share': fshare, 'field_has_debut': fdebut,
+               'shinba': '新馬' in str(race.get('race_name') or ''), 'birth': x.get('birth_date')}
         rows[x['horse_no']] = {'venue': v, 'band': em.dist_band(d), 'going': em.going_class(race.get('going')),
                                'distance': d, 'fband': em.field_band(field), 'sire': em.key(x.get('sire')),
                                'damsire': em.key(x.get('damsire')), 'jockey': em.key(x.get('current_jockey')),
