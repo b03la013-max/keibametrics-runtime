@@ -313,10 +313,15 @@ def build(day_dir, key, r):
     # B1 非購入理由と経路の記録（Drive 精読 gap_tracker B1、証拠のみ・券面は変えない）
     from runtime.local_autopilot import nonbuy_trace
     try:
+        runners = None   # 第3部 INVALID_RUNNER の出走表照合：締切前に固定した PAPER の出馬表の馬番
+        if pf:
+            runners = [int(x['no']) for x in pf['prediction'].get('ranking') or [] if x.get('no') is not None] or None
         if paper:
-            paper['nonbuy_trace'] = nonbuy_trace.race(order, proles, [], _paper_tickets(pf['prediction']))
+            paper['nonbuy_trace'] = nonbuy_trace.race(order, proles, [], _paper_tickets(pf['prediction']),
+                                                      runners=runners, key=key)
         if formal:
-            formal['nonbuy_trace'] = nonbuy_trace.race(order, froles, sm.get('signed_final_tickets') or [], sm.get('tickets') or [])
+            formal['nonbuy_trace'] = nonbuy_trace.race(order, froles, sm.get('signed_final_tickets') or [], sm.get('tickets') or [],
+                                                       runners=runners, key=key)
     except Exception as exc:  # the trace never blocks the review
         (formal or paper or {})['nonbuy_trace'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
 

@@ -22,11 +22,22 @@
       （園田 v2.8 第292条 Order-Uncertainty。ACTUAL_AND_OTHER / ACTUAL_ONLY / OTHER_ONLY / NONE）
   head_continuity：W の各馬が頭（馬単・三連単の1着）として 全MEC→配信 のどこまで残ったか
       （Daily Formal Review Rev6 Alternative Winner Continuity。HEAD_PURCHASED / HEAD_BUDGET_COMPRESSED / HEAD_NOT_GENERATED）
+
+第3部（2026-11-26 06時台、gap n51・n70 の残り。証拠のみ）：
+  ticket_hygiene：全MEC・配信の各券を正規化して、R2 完全統合仕様の非購入理由のうち
+      DUPLICATE_NORMALIZED（券種＋正規化した組〔三連複は順不同〕が同じ券の2枚目以降）と
+      INVALID_RUNNER（出走表に無い馬番・同じ馬が2回・頭数違い・読めない券）を数える。
+      runners（出走馬番）が無いときは出走表照合を UNTESTED とし、重複・頭数だけを見る。
+  width：幅の事前根（中央 v2.3 第399・414・366条 capital_width_precommit／Anti-Whiplash）の記録。
+      役割の頭数（W/P2/P3）・券種ごとの点数と投資額を、全MEC（事前に署名された幅）と配信の両方で残し、
+      aggregate で同じ場の前のレースが外れ／当たりだった後の配信点数の変化（whiplash）を比べる。
+      幅は事前に決まっているはずなので、前走の当否で幅が揺れていれば記録に出る（券面は変えない）。
 """
 from itertools import permutations
 from collections import Counter
 
 BET_TYPES = ('EXACTA', 'TRIO', 'TRIFECTA')
+SIZE = {'EXACTA': 2, 'TRIO': 3, 'TRIFECTA': 3}
 PROFILE = 'KM-LOCAL-B1-NONBUY-TRACE-v1 (evidence only; tickets unchanged)'
 
 
@@ -97,6 +108,59 @@ def _head_continuity(order, roles, full, kept):
     return out
 
 
+def _hygiene(tickets, runners):
+    """券の並び（正規化前）を見て、重複と無効な馬番を数える。"""
+    rs = {int(x) for x in runners} if runners else None
+    seen, dup, inv, kinds = set(), 0, 0, Counter()
+    for t in tickets or []:
+        if isinstance(t, dict):
+            bt, sel = t.get('bet_type'), t.get('selection') or []
+        else:
+            bt, sel = (list(t) + [None, None])[:2]
+        try:
+            sel = [int(x) for x in sel or []]
+        except (TypeError, ValueError):
+            inv += 1
+            kinds['UNPARSEABLE'] += 1
+            continue
+        bad = None
+        if bt in SIZE and len(sel) != SIZE[bt]:
+            bad = 'WRONG_SIZE'
+        elif len(set(sel)) != len(sel):
+            bad = 'REPEATED_HORSE'
+        elif rs is not None and any(h not in rs for h in sel):
+            bad = 'NOT_IN_FIELD'
+        if bad:
+            inv += 1
+            kinds[bad] += 1
+            continue
+        key = (bt, tuple(sorted(sel)) if bt == 'TRIO' else tuple(sel))
+        if key in seen:
+            dup += 1
+        seen.add(key)
+    return {'tickets': len(tickets or []), 'unique_valid': len(seen), 'DUPLICATE_NORMALIZED': dup,
+            'INVALID_RUNNER': inv, 'invalid_kinds': dict(kinds),
+            'field_check': 'TESTED' if rs is not None else 'UNTESTED'}
+
+
+def _width(roles, full, kept, kept_st):
+    def side(tks, st=None):
+        d = {bt: sum(1 for b, _ in tks if b == bt) for bt in BET_TYPES}
+        d['total'] = len(tks)
+        if st is not None:
+            d['stake'] = sum(x for _, _, x in st)
+        return d
+    return {'roles': {r: sum(1 for v in roles.values() if r in v) for r in ('W', 'P2', 'P3')},
+            'full_mec': side(full), 'delivered': side(kept, kept_st)}
+
+
+def _race_no(key):
+    try:
+        return str(key).rsplit('_', 1)[0], int(str(key).rsplit('_R', 1)[1])
+    except (IndexError, ValueError):
+        return None, None
+
+
 def _target(bt, order):
     w, s, t = order[:3]
     if bt == 'EXACTA':
@@ -132,8 +196,9 @@ def _semantic(bt, order, roles):
     return None
 
 
-def race(order, roles, full_mec, delivered):
-    """order: 実着順 [1着,2着,3着,...]、roles: {馬番: ['W','P2',...]}、full_mec / delivered: 券のリスト。"""
+def race(order, roles, full_mec, delivered, runners=None, key=None):
+    """order: 実着順 [1着,2着,3着,...]、roles: {馬番: ['W','P2',...]}、full_mec / delivered: 券のリスト。
+    runners: 出走馬番（任意。INVALID_RUNNER の出走表照合）、key: レースキー（任意。whiplash の並び）。"""
     order = [int(x) for x in order or []]
     if len(order) < 3:
         return None
@@ -173,6 +238,9 @@ def race(order, roles, full_mec, delivered):
             'order_uncertainty': _order_uncertainty(order, full, kept),
             'head_continuity': _head_continuity(order, roles, full, kept),
             'full_mec_observed': bool(_norm(full_mec)),
+            'ticket_hygiene': {'full_mec': _hygiene(full_mec, runners) if _norm(full_mec) else None,
+                               'delivered': _hygiene(delivered, runners)},
+            'width': dict(_width(roles, full, kept, kept_st), key=key),
             'note': 'CAPITAL（予算で落ちた）と SEMANTIC（予想で外した）を分けた記録。正式券面・点数・閾値は変えない'}
 
 
@@ -209,6 +277,44 @@ def aggregate(traces):
                 hc_win[v['terminal']] += 1
     out['order_uncertainty'] = {bt: dict(c) for bt, c in ou.items()}
     out['head_continuity'] = {'all_w': dict(hc), 'winner_w': dict(hc_win)}
+    hy = Counter()
+    for t in traces:
+        for side, v in (t.get('ticket_hygiene') or {}).items():
+            if v:
+                hy[f'{side}.DUPLICATE_NORMALIZED'] += v['DUPLICATE_NORMALIZED']
+                hy[f'{side}.INVALID_RUNNER'] += v['INVALID_RUNNER']
+                hy[f'{side}.races_with_issue'] += int(bool(v['DUPLICATE_NORMALIZED'] or v['INVALID_RUNNER']))
+    out['ticket_hygiene'] = dict(hy)
+    out['width_whiplash'] = whiplash(traces)
     out['axis'] = dict(out['axis'])
     out['role_horse_terminal'] = dict(out['role_horse_terminal'])
+    return out
+
+
+def _hit(t):
+    return any(v['terminal'] == 'PURCHASED' for v in (t.get('actual_combination') or {}).values())
+
+
+def whiplash(traces):
+    """同じ場で連続する2レース（R番号が1つ違い）について、前のレースの当否ごとに配信点数・全MEC点数の変化を集計。"""
+    rows = []
+    for t in traces:
+        w = t.get('width') or {}
+        v, n = _race_no(w.get('key'))
+        if v is None:
+            continue
+        rows.append((v, n, _hit(t), w['delivered']['total'], w['full_mec']['total']))
+    rows.sort()
+    agg = {'AFTER_HIT': [], 'AFTER_MISS': []}
+    for a, b in zip(rows, rows[1:]):
+        if a[0] != b[0] or b[1] != a[1] + 1:
+            continue
+        agg['AFTER_HIT' if a[2] else 'AFTER_MISS'].append((b[3] - a[3], b[4] - a[4]))
+    out = {'pairs': sum(len(x) for x in agg.values())}
+    for k, xs in agg.items():
+        out[k] = {'n': len(xs),
+                  'mean_delivered_change': round(sum(d for d, _ in xs) / len(xs), 2) if xs else None,
+                  'mean_abs_delivered_change': round(sum(abs(d) for d, _ in xs) / len(xs), 2) if xs else None,
+                  'mean_full_mec_change': round(sum(f for _, f in xs) / len(xs), 2) if xs else None}
+    out['note'] = '幅は事前に決まるはず（capital_width_precommit）。AFTER_MISS で点数が大きく動けば Anti-Whiplash の確認対象。件数が少ないうちは判断しない'
     return out
