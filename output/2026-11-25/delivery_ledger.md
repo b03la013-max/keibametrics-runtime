@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-25（11:40時点）
+# 地方版 配送台帳 2026-11-25（12:02時点）
 
 - 管理Race 36／発走済み 3
-- PAPER：凍結 36・Push検証 36・送信 5（発走前 5）・読み戻し一致 5・本人確認 0
+- PAPER：凍結 36・Push検証 35・送信 5（発走前 5）・読み戻し一致 5・本人確認 0
 - 正式：試行 5・Signed FINAL 5（NO-BET 0）・発走前送信 5・読み戻し一致 5・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 3／重要変更 2／Revision 2署名 2
+- 10分前チェック：確認 4／重要変更 3／Revision 2署名 3
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -25,9 +25,9 @@
 | NGY_12 | 20:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_01 | 10:40 | POSTRESULT_DIAGNOSTIC | 09:58 | ○ | SIGNED_FINAL | 09:59 | ○ |  |
 | SON_02 | 11:10 | POSTRESULT_DIAGNOSTIC | 10:25 | ○ | SIGNED_FINAL | 11:00 | ○ |  |
-| SON_03 | 11:40 | PRESTART_PUSH_VERIFIED | 10:55 | ○ | SIGNED_FINAL | 11:30 | ○ |  |
-| SON_04 | 12:10 | PRESTART_PUSH_VERIFIED | 11:25 | ○ | SIGNED_FINAL | 11:26 | ○ |  |
-| SON_05 | 12:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_03 | 11:40 | POSTRESULT_DIAGNOSTIC | 10:55 | ○ | SIGNED_FINAL | 11:30 | ○ |  |
+| SON_04 | 12:10 | PRESTART_PUSH_VERIFIED | 11:25 | ○ | SIGNED_FINAL | 12:02 | ○ |  |
+| SON_05 | 12:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SON_06 | 13:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_07 | 14:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_08 | 14:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
