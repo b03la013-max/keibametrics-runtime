@@ -361,6 +361,7 @@ def race_review(out, key, r):
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
             'info_coverage': info_coverage(ev['rows']), 'role_counts': role_counts(ev['rows']),
+            'flat_components': flat_components(ev['rows']),
             'market_drift': market_drift((r.get('check10') or {}).get('changes'), res['order'], ev.get('honmei')),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
@@ -534,6 +535,45 @@ def by_info_coverage(revs):
     return out or None
 
 
+FLAT_KEYS = ('idx', 'bsi', 'isv', 'lis', 'bta', 'mpa', 'brs', 'wda', 'front_bonus', 'jbr', 'adf', 'bwl', 'cci', 'cpu',
+             'tpi', 'dcr')
+
+
+def flat_components(rows, keys=FLAT_KEYS):
+    """レース内で全頭が同じ値（分散ゼロ）の指数の成分を挙げる。そのレースでは識別力ゼロなのに指数の1枠として
+    並んでいる成分を見えるようにする（証拠のみ、点数・印・券面には使わない）。
+    出典：Drive「JRA_20261101 11R」（q516：全18頭で TRI=53.92・VMI=50.00 と同値、中立値の定数化を検出する仕組みが無い）の読み替え。
+    値が None の馬は除いて比べ、値のある馬が3頭未満の成分は判定しない（UNJUDGED）。"""
+    if not rows:
+        return None
+    flat, unjudged = [], []
+    for k in keys:
+        v = [x.get(k) for x in rows if isinstance(x.get(k), (int, float)) and not isinstance(x.get(k), bool)]
+        if len(v) < 3:
+            unjudged.append(k)
+        elif max(v) - min(v) < 1e-9:
+            flat.append(k)
+    return {'flat': flat, 'unjudged': unjudged, 'field': len(rows)}
+
+
+def flat_components_summary(revs):
+    """成分ごとに、全頭同値だったレース数・値が3頭未満で判定しなかったレース数・判定したレース数（証拠のみ）。"""
+    out = {}
+    for x in revs:
+        fc = x.get('flat_components')
+        if not fc:
+            continue
+        for k in FLAT_KEYS:
+            d = out.setdefault(k, {'flat': 0, 'unjudged': 0, 'judged': 0})
+            if k in fc.get('unjudged', []):
+                d['unjudged'] += 1
+            else:
+                d['judged'] += 1
+                d['flat'] += int(k in fc.get('flat', []))
+    out = {k: d for k, d in out.items() if d['flat'] or d['unjudged']}
+    return out or None
+
+
 def role_counts(rows):
     """役割ごとの頭数（W・P2・P3）。証拠のみ。"""
     if not rows:
@@ -670,7 +710,8 @@ def summarize(revs, missed):
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
             'by_w_count': by_w_count(revs), 'by_gap_wcount': by_gap_wcount(revs), 'rank_discrimination': rank_discrimination(revs),
-            'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs)}
+            'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs),
+            'flat_components': flat_components_summary(revs)}
 
 
 def _md(title, s, revs=None):
@@ -737,6 +778,9 @@ def _md(title, s, revs=None):
             f"{pos}着 " + '・'.join(f"{nm[i]} {d['mean']}・{d['top1']}・{d['top3']}・{d['top5']}/{d['n']}"
                                    for i, d in sorted(by.items(), key=lambda kv: list(nm).index(kv[0])))
             for pos, by in sorted(s['rank_discrimination'].items())))
+    if s.get('flat_components'):
+        L.append('- レース内で全頭同値だった成分（成分：同値R/判定R・未判定R）: ' + '／'.join(
+            f"{k} {d['flat']}/{d['judged']}・{d['unjudged']}" for k, d in s['flat_components'].items()))
     if s.get('axis_dependency'):
         L.append('- 軸への依存（軸の頭数：R・軸を含む券の平均割合・全軸3着内・軸依存の券が全損・その点数・二頭とも3着外）: ' + '／'.join(
             f"{k}頭軸 {d['races']}R・{d['axis_share_mean']:.0%}・{d['all_axis_top3']}・{d['wipeout']}R・{d['wipeout_points']}点・{d['co_failure']}R"
