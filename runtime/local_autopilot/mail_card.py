@@ -21,8 +21,22 @@ FRAME = {1: ('#ffffff', '#222222'), 2: ('#222222', '#ffffff'), 3: ('#e53935', '#
          5: ('#f6d31f', '#222222'), 6: ('#2e9e4f', '#ffffff'), 7: ('#f08a24', '#ffffff'), 8: ('#f48fb1', '#222222')}
 ROLE = {'1着候補': ('#f2b705', '#3b2c00'), '2着候補': ('#4c8bf5', '#ffffff'), '3着候補': ('#c9ced6', '#2b2f36'),
         'W': ('#f2b705', '#3b2c00'), 'P2': ('#4c8bf5', '#ffffff'), 'P3': ('#c9ced6', '#2b2f36')}
-THEME = {'FORMAL': {'band': '#0f3d2e', 'accent': '#36b37e', 'label': '正式 Signed FINAL'},
-         'PAPER': {'band': '#1f5240', 'accent': '#8fd1ae', 'label': 'PAPER（研究）'}}   # Owner 10:46 緑が良さげ
+PALETTE = {   # Owner 2026-11-25 15:56: 地方=茶（ダート）、中央=緑（芝）、ばんえい=黄（重し）
+    'LOCAL': {'FORMAL': ('#4a3020', '#c8925a'), 'PAPER': ('#6b4a32', '#e0b98c'), 'ink': '#ffffff', 'sub': '#ecdccb'},
+    'JRA': {'FORMAL': ('#0f3d2e', '#36b37e'), 'PAPER': ('#1f5240', '#8fd1ae'), 'ink': '#ffffff', 'sub': '#dfe7e2'},
+    'BAN': {'FORMAL': ('#e0a800', '#7a5a00'), 'PAPER': ('#f2c94c', '#9a7608'), 'ink': '#2a2000', 'sub': '#4a3c00'},
+}
+LABEL = {'FORMAL': '正式 Signed FINAL', 'PAPER': 'PAPER（研究）'}
+
+
+def _theme(card):
+    pal = PALETTE.get(card.get('system', 'LOCAL'), PALETTE['LOCAL'])
+    kind = card.get('kind', 'PAPER')
+    band, accent = pal[kind]
+    return {'band': band, 'accent': accent, 'label': LABEL[kind], 'ink': pal['ink'], 'sub': pal['sub'],
+            'badge_ink': '#ffffff' if pal['ink'] != '#ffffff' else '#1d140c'}
+
+
 BG, INK, SUB, LINE = '#f6f7f4', '#1d2420', '#5f6a64', '#dde2de'
 
 
@@ -48,7 +62,7 @@ def _frame_of(no, field):
 def render(card, out_path):
     """card = {kind: FORMAL|PAPER, title, post, cutoff, cond, edition, marks: [(mark,no)], horses: [{no,name,mark,
     role,frame?,pct?}], tickets: [(券種, 点数)], invest, note}"""
-    th = THEME[card.get('kind', 'PAPER')]
+    th = _theme(card)
     horses = card.get('horses') or []
     tickets = card.get('tickets') or []
     rows = min(len(horses), 8)
@@ -58,14 +72,14 @@ def render(card, out_path):
     # header band
     d.rectangle([0, 0, W, 236], fill=th['band'])
     d.rectangle([0, 236, W, 244], fill=th['accent'])
-    d.text((PAD, 34), card['title'], font=_font(64), fill='#ffffff')
-    d.text((PAD, 122), f"{card.get('post', '')}発走　締切 {card.get('cutoff', '')}", font=_font(36, False), fill='#dfe7e2')
+    d.text((PAD, 34), card['title'], font=_font(64), fill=th['ink'])
+    d.text((PAD, 122), f"{card.get('post', '')}発走　締切 {card.get('cutoff', '')}", font=_font(36, False), fill=th['sub'])
     lab = th['label'] + (f"・{card['edition']}" if card.get('edition') else '')
     lf = _font(30)
     tw = d.textlength(lab, font=lf)
     d.rounded_rectangle([W - PAD - tw - 36, 40, W - PAD, 92], radius=26, fill=th['accent'])
-    d.text((W - PAD - tw - 18, 49), lab, font=lf, fill='#0b1f17')
-    d.text((PAD, 178), card.get('cond', ''), font=_font(30, False), fill='#c6d3cc')
+    d.text((W - PAD - tw - 18, 49), lab, font=lf, fill=th['badge_ink'])
+    d.text((PAD, 178), card.get('cond', ''), font=_font(30, False), fill=th['sub'])
     y = 270
     # marks row
     x = PAD
