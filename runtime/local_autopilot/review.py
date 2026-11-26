@@ -324,6 +324,18 @@ def build(day_dir, key, r):
                                                        runners=runners, key=key)
     except Exception as exc:  # the trace never blocks the review
         (formal or paper or {})['nonbuy_trace'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    # B3 n92 頭別P2 の影の計測（Drive 精読 gap_tracker B3、証拠のみ・券面は変えない）
+    from runtime.local_autopilot import head_p2
+    try:
+        hfeats = ({int(x['no']): {'PACE': x.get('PACE'), 'EVI': x.get('EVI'), 'win': x.get('win')}
+                   for x in pf['prediction'].get('ranking') or [] if x.get('no') is not None} if pf else {})
+        if paper:
+            paper['head_p2'] = head_p2.race([int(x['no']) for x in pf['prediction']['ranking']], proles, order,
+                                            feats=hfeats, key=key)
+        if formal:
+            formal['head_p2'] = head_p2.race([int(x) for x in sm.get('ranking') or []], froles, order, feats=hfeats, key=key)
+    except Exception as exc:  # the measurement never blocks the review
+        (formal or paper or {})['head_p2'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
 
     # layer analysis
     layers = {}
@@ -584,8 +596,12 @@ def _aggregate(reviews):
     nbt = {tk: nonbuy_trace.aggregate([(b.get(tk) or {}).get('nonbuy_trace') for b in reviews
                                        if 'error' not in ((b.get(tk) or {}).get('nonbuy_trace') or {})])
            for tk in ('paper', 'formal_recommendation')}
+    from runtime.local_autopilot import head_p2
+    hp2 = {tk: head_p2.aggregate([(b.get(tk) or {}).get('head_p2') for b in reviews])
+           for tk in ('paper', 'formal_recommendation')}
     return {'races': len(reviews), 'by_venue': venues, 'accuracy': _accuracy(reviews), 'robustness': rob,
             'nonbuy_trace': nbt,
+            'head_p2': hp2,
             'all_local': {'paper_pfs': round(100 * tot('paper_payout') / tot('paper_effective_invest'), 1) if tot('paper_effective_invest') else None,
                           'formal_pfs': round(100 * tot('formal_payout') / tot('formal_effective_invest'), 1) if tot('formal_effective_invest') else None,
                           'first_failure': dict(sum((Counter(v['first_failure']) for v in venues.values()), Counter()))},
@@ -703,6 +719,11 @@ def _summary_md(title, s):
             L.append(f"- {label} 実着順の組の行き先（B1・証拠のみ、{nb['races']}R×3券種）：購入 {ax.get('PURCHASED', 0)}"
                      f"／予算で削除 {ax.get('CAPITAL', 0)}／予想で除外 {ax.get('SEMANTIC', 0)}／未生成・券種なし {ax.get('STRUCTURE', 0)}"
                      f"／役割馬の行き先 {nb.get('role_horse_terminal')}")
+    from runtime.local_autopilot import head_p2
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        hl = head_p2.line((s.get('head_p2') or {}).get(track))
+        if hl:
+            L.append(f"- {label} {hl}")
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")
