@@ -1,6 +1,6 @@
-# 地方版 配送台帳 2026-11-26（20:41時点）
+# 地方版 配送台帳 2026-11-26（20:56時点）
 
-- 管理Race 48／発走済み 47
+- 管理Race 48／発走済み 48
 - PAPER：凍結 48・Push検証 48・送信 48（発走前 48）・読み戻し一致 48・本人確認 0
 - 正式：試行 48・Signed FINAL 48（NO-BET 0）・発走前送信 48・読み戻し一致 48・本人確認 0
 - 発走前PAPER配送なしで発走：なし
@@ -22,7 +22,7 @@
 | KNZ_09 | 18:50 | POSTRESULT_DIAGNOSTIC | 18:08 | ○ | SIGNED_FINAL | 18:42 | ○ |  |
 | KNZ_10 | 19:25 | POSTRESULT_DIAGNOSTIC | 18:44 | ○ | SIGNED_FINAL | 19:17 | ○ |  |
 | KNZ_11 | 20:00 | POSTRESULT_DIAGNOSTIC | 19:19 | ○ | SIGNED_FINAL | 19:52 | ○ |  |
-| KNZ_12 | 20:35 | PRESTART_PUSH_VERIFIED | 19:54 | ○ | SIGNED_FINAL | 20:26 | ○ |  |
+| KNZ_12 | 20:35 | POSTRESULT_DIAGNOSTIC | 19:54 | ○ | SIGNED_FINAL | 20:26 | ○ |  |
 | NGY_01 | 14:40 | POSTRESULT_DIAGNOSTIC | 13:55 | ○ | SIGNED_FINAL | 14:32 | ○ |  |
 | NGY_02 | 15:15 | POSTRESULT_DIAGNOSTIC | 14:33 | ○ | SIGNED_FINAL | 15:07 | ○ |  |
 | NGY_03 | 15:50 | POSTRESULT_DIAGNOSTIC | 15:07 | ○ | SIGNED_FINAL | 15:42 | ○ |  |
