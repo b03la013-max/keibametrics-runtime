@@ -356,6 +356,9 @@ def race_review(out, key, r):
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
             'rev_audit': res.get('rev_audit'), 'paper': res.get('paper'), 'finishers': fin,
             'component_auc': component_auc(_full_rows(out, key, eff, ev['rows']), res['order']),
+            'component_health': component_health(_full_rows(out, key, eff, ev['rows']), res['order']),
+            'component_corr': component_corr(_full_rows(out, key, eff, ev['rows'])),
+            'feeds_present': rec.get('feeds_present'),
             'honmei': ev.get('honmei'), 'honmei_pop': (rows.get(str(ev.get('honmei'))) or {}).get('pop'),
             'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
@@ -619,6 +622,97 @@ def component_auc_summary(revs):
             for k, a in sorted(acc.items())} or None
 
 
+# KIEP-BAN（Owner 2026-11-26 21:43「KIEP を永続的に実施」）: 成分の健康診断を AUC 以外にも広げる。
+# 単調性（レース内で上位・中位・下位の3群に分けた3着内率）、欠損率（値の無い馬の割合）、重複（成分どうしの
+# レース内順位相関）、情報源の取得率。どれも証拠のみ・閾値なし。外す候補の自動登録は registry.KCP が行う。
+REDUNDANCY_KEYS = ('bsi', 'bta', 'mpa', 'brs', 'wda', 'front_bonus', 'jbr', 'cci', 'bwl', 'pop')
+
+
+def _ranks(vals):
+    order = sorted(vals, key=lambda kv: kv[1])
+    out, i = {}, 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and order[j + 1][1] == order[i][1]:
+            j += 1
+        for k in range(i, j + 1):
+            out[order[k][0]] = (i + j) / 2.0 + 1
+        i = j + 1
+    return out
+
+
+def component_health(rows, order, keys=COMPONENT_KEYS):
+    """1レース分：成分ごとの 欠損数・頭数と、上位/中位/下位の3群それぞれの 3着内の頭数・頭数。"""
+    top3 = {str(n) for n in order[:3]}
+    out = {}
+    for k in keys:
+        v = [(str(x['no']), x.get(k)) for x in rows]
+        have = [(n, (-1 if k in LOWER_IS_BETTER else 1) * x) for n, x in v
+                if isinstance(x, (int, float)) and not isinstance(x, bool)]
+        d = {'field': len(v), 'missing': len(v) - len(have)}
+        if len(have) >= 6 and max(x for _, x in have) - min(x for _, x in have) > 1e-9:
+            r = _ranks(have)                                # 1 = 最小、len = 最大
+            n = len(have)
+            for g, lo, hi in (('high', 2 * n / 3, n + 1), ('mid', n / 3, 2 * n / 3), ('low', 0, n / 3)):
+                mem = [h for h, rk in r.items() if lo < rk <= hi] if g != 'low' else [h for h, rk in r.items() if rk <= hi]
+                d[g] = [sum(1 for h in mem if h in top3), len(mem)]
+        out[k] = d
+    return out
+
+
+def component_corr(rows, keys=REDUNDANCY_KEYS):
+    """1レース分：成分どうしのレース内順位相関（Spearman）。値のある馬が5頭未満・全頭同値の組は None。"""
+    vals = {k: [(str(x['no']), (-1 if k in LOWER_IS_BETTER else 1) * x[k]) for x in rows
+                if isinstance(x.get(k), (int, float)) and not isinstance(x.get(k), bool)] for k in keys}
+    out = {}
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            ra, rb = dict(vals[a]), dict(vals[b])
+            common = sorted(set(ra) & set(rb))
+            if len(common) < 5:
+                continue
+            xa, xb = _ranks([(n, ra[n]) for n in common]), _ranks([(n, rb[n]) for n in common])
+            ma, mb = sum(xa.values()) / len(common), sum(xb.values()) / len(common)
+            va = sum((xa[n] - ma) ** 2 for n in common)
+            vb = sum((xb[n] - mb) ** 2 for n in common)
+            if va < 1e-9 or vb < 1e-9:
+                continue
+            out[f'{a}~{b}'] = round(sum((xa[n] - ma) * (xb[n] - mb) for n in common) / (va * vb) ** 0.5, 3)
+    return out
+
+
+def kiep_summary(revs):
+    """KIEP-BAN の期間集計：成分の単調性・欠損率、重複（平均順位相関が |0.6| 以上の組）、情報源の取得率。"""
+    health, corr, feeds, n = {}, {}, {}, 0
+    for x in revs:
+        n += 1
+        for f in x.get('feeds_present') or []:
+            feeds[f] = feeds.get(f, 0) + 1
+        for k, d in (x.get('component_health') or {}).items():
+            h = health.setdefault(k, {'field': 0, 'missing': 0, 'high': [0, 0], 'mid': [0, 0], 'low': [0, 0], 'races': 0})
+            h['field'] += d['field']
+            h['missing'] += d['missing']
+            if 'high' in d:
+                h['races'] += 1
+                for g in ('high', 'mid', 'low'):
+                    h[g][0] += d[g][0]
+                    h[g][1] += d[g][1]
+        for pair, r in (x.get('component_corr') or {}).items():
+            c = corr.setdefault(pair, [0.0, 0])
+            c[0] += r
+            c[1] += 1
+    comp = {}
+    for k, h in health.items():
+        comp[k] = {'missing_rate': round(h['missing'] / h['field'], 3) if h['field'] else None, 'races': h['races'],
+                   **{f'top3_rate_{g}': round(h[g][0] / h[g][1], 3) if h[g][1] else None for g in ('high', 'mid', 'low')}}
+        hi, mi, lo = (comp[k][f'top3_rate_{g}'] for g in ('high', 'mid', 'low'))
+        comp[k]['monotonic'] = None if None in (hi, mi, lo) else bool(hi >= mi >= lo)
+    red = {p: round(c[0] / c[1], 3) for p, c in corr.items() if c[1] >= 5}
+    return {'races': n, 'components': comp, 'redundant_pairs': {p: r for p, r in sorted(red.items(), key=lambda kv: -abs(kv[1]))
+                                                              if abs(r) >= 0.6},
+            'mean_rank_corr': red, 'feed_rate': {f: round(c / n, 3) for f, c in sorted(feeds.items())} if n else {}}
+
+
 def flat_components_summary(revs):
     """成分ごとに、全頭同値だったレース数・値が3頭未満で判定しなかったレース数・判定したレース数（証拠のみ）。"""
     out = {}
@@ -773,7 +867,7 @@ def summarize(revs, missed):
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
             'by_w_count': by_w_count(revs), 'by_gap_wcount': by_gap_wcount(revs), 'rank_discrimination': rank_discrimination(revs),
-            'component_auc': component_auc_summary(revs),
+            'component_auc': component_auc_summary(revs), 'kiep': kiep_summary(revs),
             'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs),
             'flat_components': flat_components_summary(revs)}
 
