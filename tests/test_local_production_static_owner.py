@@ -240,3 +240,16 @@ def test_oct15_r02_signed_cancelled_two_runners_reconciled_result_blind():
     with pytest.raises(StaticOwnerError, match="OFFICIAL_CANCELLATION_NOT_VERIFIED"):
         build_formal_static(req, signed, numeric, policy=policy,
                             now=datetime.fromisoformat("2026-10-15T15:01:00+09:00"))
+
+def test_numeric_runner_multiplicity_cannot_claim_closed_active_universe():
+    """A 29-index result with a repeated active horse is not one row per horse.
+
+    The archived signed KAW R02 SOURCE has eight declared but six Active
+    runners. No new SOURCE, numerical policy or future OOS is implied.
+    """
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+    assert len(source["artifact"]["declared_runner_universe"]["runners"]) == 12
+    assert len(source["artifact"]["active_runner_universe"]["runners"]) == 10
+    numeric["runners"].append(copy.deepcopy(numeric["runners"][0]))
+    with pytest.raises(StaticOwnerError, match="FULL_RUNNER_UNIVERSE_MISMATCH"):
+        build_formal_static(req, source, numeric, policy=policy, now=now)
