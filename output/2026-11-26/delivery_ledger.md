@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-26（13:48時点）
+# 地方版 配送台帳 2026-11-26（13:55時点）
 
-- 管理Race 48／発走済み 9
-- PAPER：凍結 48・Push検証 48・送信 14（発走前 14）・読み戻し一致 14・本人確認 0
+- 管理Race 48／発走済み 11
+- PAPER：凍結 48・Push検証 47・送信 14（発走前 14）・読み戻し一致 14・本人確認 0
 - 正式：試行 14・Signed FINAL 14（NO-BET 0）・発走前送信 14・読み戻し一致 14・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -23,7 +23,7 @@
 | KNZ_10 | 19:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_11 | 20:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_12 | 20:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| NGY_01 | 14:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| NGY_01 | 14:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | NGY_02 | 15:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_03 | 15:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_04 | 16:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
