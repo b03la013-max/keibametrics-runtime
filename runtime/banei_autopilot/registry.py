@@ -152,6 +152,37 @@ def compare(revs, cid, since, n_active):
     return res
 
 
+# KCP-BAN（Owner 2026-11-26 21:25「KCP は永続的に実施」）: 指数の成分の識別力（review.component_auc）を毎晩集計し、
+# 事前に固定した条件を満たした成分について「その成分の重みを0にする」影の候補を自動で登録する。比較・昇格・戻す・
+# 引退はほかの候補と同じ PROMOTE の条件で行う（本番の数値は手で変えない）。
+KCP = {'registered_at': '2026-11-26T21:40:00+09:00', 'min_races': 100, 'auc_top3_below': 0.55, 'max_active': 3,
+       'components': {'bta': 'bta', 'mpa': 'mpa', 'brs': 'brs', 'wda': 'wda', 'front_bonus': 'front', 'jbr': 'jbr',
+                      'adf': 'adf', 'bwl': 'bwl', 'cci': 'cci', 'cpu': 'cpu'}}
+
+
+def kcp_candidates(revs, prod_cfg):
+    """条件を満たした成分 → 影の候補 {cid: (what, config)}。成分の AUC は全期間の発走前凍結の記録から。"""
+    import review, engine
+    s = review.component_auc_summary(revs) or {}
+    out = {}
+    base_w = dict(engine.COMP_W, **(((prod_cfg or {}).get('patch') or {}).get('COMP_W') or {}))
+    for comp, knob in KCP['components'].items():
+        d = s.get(comp) or {}
+        if (d.get('races') or 0) < KCP['min_races'] or d.get('auc_top3') is None or d['auc_top3'] >= KCP['auc_top3_below']:
+            continue
+        if base_w.get(knob) == 0.0:
+            continue
+        cfg = copy.deepcopy(prod_cfg or {})
+        cfg.setdefault('patch', {})['COMP_W'] = dict(base_w, **{knob: 0.0})
+        out[f'KCP_ABLATE_{knob}'] = (f"KCP-BAN: 成分 {comp} の重みを0（{d['races']}R で 3着内 AUC {d['auc_top3']}）", cfg)
+    return out
+
+
+def kcp_table(revs):
+    import review
+    return review.component_auc_summary(revs) or {}
+
+
 def _all_reviews(root):
     revs = []
     for d in sorted(p for p in Path(root).iterdir() if (p / 'review').is_dir()):
@@ -222,6 +253,18 @@ def step(root, log=lambda *a: None):
                 n_active += 1
                 if n_active >= MAX_ACTIVE:
                     break
+    # KCP-BAN: 識別力の低い成分を外す候補（近傍とは別枠で最大 KCP['max_active'] 本）
+    try:
+        kcp_active = sum(1 for k, v in reg['candidates'].items() if k.startswith('KCP_') and v['status'] == 'SHADOW')
+        for cid, (what, cfg) in kcp_candidates(revs, reg['production'].get('config') or {}).items():
+            if kcp_active >= KCP['max_active']:
+                break
+            if add(reg, cid, what, cfg, 'kcp-ban'):
+                events.append(('REGISTERED', cid, {}))
+                kcp_active += 1
+        reg['kcp'] = {'at': _now(), 'rule': KCP, 'component_auc': kcp_table(revs)}
+    except Exception as e:                                        # 較正の集計は本処理を止めない
+        reg['kcp'] = {'at': _now(), 'error': f'{type(e).__name__}:{str(e)[:120]}'}
     reg['history'] += [{'at': _now(), 'event': e, 'candidate': c, 'evidence': t} for e, c, t in events]
     reg['last_step'] = {'at': _now(), 'table': table}
     save(root, reg)
@@ -246,6 +289,14 @@ def _status_md(root, reg, table):
         L.append(f"| {cid} | {c.get('what', '')} | {t.get('n', 0)} | {t.get('mean_rank_diff', '')} | {t.get('upper', '')} | "
                  f"{t.get('top3_diff', '')} | {t.get('pfs_ex_top1_base', '')}→{t.get('pfs_ex_top1_cand', '')} | "
                  f"{'満たす' if t.get('promote') else ''} |")
+    k = reg.get('kcp') or {}
+    if k.get('component_auc'):
+        L += ['', '## KCP-BAN 指数の成分の識別力（毎晩更新）', '',
+              f"0.5＝識別なし。{KCP['min_races']}R 以上で 3着内 AUC が {KCP['auc_top3_below']} 未満の成分は、"
+              f"重みを0にする影の候補（KCP_ABLATE_*）を自動登録（同時に最大{KCP['max_active']}本）。pop は人気の基準線。", '',
+              '| 成分 | R | 3着内 AUC | 1着 AUC |', '|---|---|---|---|']
+        L += [f"| {c} | {d['races']} | {d['auc_top3']} | {d['auc_win']} |"
+              for c, d in sorted(k['component_auc'].items(), key=lambda kv: -(kv[1].get('auc_top3') or 0))]
     L += ['', '## 履歴', ''] + [f"- {h['at']} {h['event']} {h['candidate']}" for h in reg['history'][-30:]]
     L += ['', '引退・不採用の候補も registry に残す。新しい候補は本番の近傍から自動で、P1仮説からは毎晩の作業で登録する。']
     (Path(root) / 'improvement_status.md').write_text('\n'.join(L) + '\n')

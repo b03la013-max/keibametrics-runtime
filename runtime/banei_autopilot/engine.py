@@ -25,6 +25,8 @@ BRS_BACK = -2.0
 SCORE = {'win_brs': 0.5, 'win_bta': 0.5, 'unconfirmed_pen': 2.0,         # 1着・3着内・穴の合成（実装時の仮置き）
          'place_stable': 2.0, 'hole_longshot': 3.0, 'longshot_pop': 7,
          'isv': {'VERY_STABLE': 4, 'STABLE': 2, 'STANDARD': 0, 'UNSTABLE': -2, 'UNKNOWN': 0}}
+COMP_W = {'bta': 1.0, 'mpa': 1.0, 'brs': 1.0, 'wda': 1.0, 'front': 1.0, 'jbr': 1.0,   # production all 1.0 (TPI 不変)。
+          'adf': 1.0, 'bwl': 1.0, 'cci': 1.0, 'cpu': 1.0}                        # KCP-BAN: 識別力の低い成分を0にする影の候補用
 MARKET_FREE = False      # production False; shadow NOMKT: 第1段階（競走予測）で人気・オッズを一切使わない（予想ファースト・オッズセカンドの検証）
 MARKET_W = 0.0                                                # production 0 (market not blended); shadow challengers only
 
@@ -223,8 +225,11 @@ def evaluate(race):
         cci = {'VERY_STRONG': 3.0, 'STRONG': 1.5, 'NEUTRAL': 0.0, 'CAUTION': -1.5}.get(h.get('cci'), 0.0)
         cpu = -1.5 if h.get('promoted') and not h.get('win_streak') else 0.0
         lis = (2.0 if d is not None and d <= 1 else 1.0 if d is not None and d <= 3 else 0.0)
-        tpi = None if b is None else round(b + (bta_adj or 0) + (h['mpa'] or 0) + (h['brs'] or 0) + wda
-                                           + front_bonus + jbr + adf_adj + bwl_adj + cci + cpu, 2)
+        cw = COMP_W
+        tpi = None if b is None else round(b + cw['bta'] * (bta_adj or 0) + cw['mpa'] * (h['mpa'] or 0)
+                                           + cw['brs'] * (h['brs'] or 0) + cw['wda'] * wda + cw['front'] * front_bonus
+                                           + cw['jbr'] * jbr + cw['adf'] * adf_adj + cw['bwl'] * bwl_adj + cw['cci'] * cci
+                                           + cw['cpu'] * cpu, 2)
         rows.append({'no': h['no'], 'name': h.get('name'),
                      'pop': None if MARKET_FREE else h.get('pop'), 'odds': None if MARKET_FREE else h.get('odds'),
                      'idx': idx, 'idx_src': prov, 'bsi': b, 'isv': d, 'isv_label': isv_lab, 'lis': lis,
