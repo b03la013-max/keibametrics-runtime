@@ -41,14 +41,14 @@
 
 # 地方版 週次 2026-W48（自動・推薦試算・実購入なし）
 
-- 反省済みRace 146／PAPER PFS 68.4%／正式推薦 PFS 40.7%
-- 第一失敗：{'PREDICTION_ROLE_P2': 25, 'CAPITAL_EFFICIENCY': 54, 'PREDICTION_ROLE_W': 56, 'NONE': 11}
+- 反省済みRace 147／PAPER PFS 68.0%／正式推薦 PFS 40.8%
+- 第一失敗：{'PREDICTION_ROLE_P2': 25, 'CAPITAL_EFFICIENCY': 55, 'PREDICTION_ROLE_W': 56, 'NONE': 11}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
 | KNZ | 19 | 61.6 | 65.8 | {'PREDICTION_ROLE_P2': 2, 'CAPITAL_EFFICIENCY': 11, 'PREDICTION_ROLE_W': 5, 'NONE': 1} |
 | MIZ | 24 | 46.2 | 36.3 | {'PREDICTION_ROLE_W': 8, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 2} |
-| NGY | 32 | 73.4 | 44.3 | {'PREDICTION_ROLE_W': 12, 'CAPITAL_EFFICIENCY': 9, 'NONE': 5, 'PREDICTION_ROLE_P2': 6} |
+| NGY | 33 | 71.6 | 44.9 | {'PREDICTION_ROLE_W': 12, 'CAPITAL_EFFICIENCY': 10, 'NONE': 5, 'PREDICTION_ROLE_P2': 6} |
 | SAG | 11 | 24.0 | 16.3 | {'PREDICTION_ROLE_W': 3, 'CAPITAL_EFFICIENCY': 5, 'PREDICTION_ROLE_P2': 3} |
 | SON | 24 | 105.1 | 47.9 | {'PREDICTION_ROLE_W': 14, 'NONE': 1, 'PREDICTION_ROLE_P2': 2, 'CAPITAL_EFFICIENCY': 7} |
 | URW | 36 | 68.6 | 29.8 | {'CAPITAL_EFFICIENCY': 14, 'PREDICTION_ROLE_W': 14, 'NONE': 2, 'PREDICTION_ROLE_P2': 6} |
@@ -57,35 +57,35 @@
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 146 | 30.1% | 64.4% | 30.1% | 11.6% | 11.6% | 6.8% | 25.3% | 1.51 |
-| 正式推薦 | 146 | 29.5% | 61.6% | 61.6% | 74.0% | 100.0% | 61.6% | 43.8% | 1.47 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中30.1%（無作為9.4%、差+20.7）／P2 平均1.0頭 的中11.6%（無作為9.4%、差+2.2）／P3 平均1.0頭 的中11.6%（無作為9.4%、差+2.2）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中61.6%（無作為28.3%、差+33.3）／P2 平均6.0頭 的中74.0%（無作為56.6%、差+17.4）／P3 平均10.85頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 13.08/40（選択性補正込み）・能力順位 13.84/20（146R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.11/40（選択性補正込み）・能力順位 13.37/20（146R平均）
-- PAPER 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 7,800円（6.7%）／保護層の資金比率 None（0R）／組だけ的中（三連単は外れ）38R・着順まで的中 2R／的中 54R のうち的中赤字 25R／損益分岐の倍率 平均 8.0倍／同じ点数を無作為に選んだ場合の期待PFS 54.8%（同じ146Rの実績 68.4%）／券種別 EXACTA 55点 PFS 21.3%／TRIFECTA 104点 PFS 15.4%／TRIO 752点 PFS 65.4%／WIDE 250点 PFS 110.5%／WIN 8点 PFS 43.8%／荒れ度（発走前・1番人気オッズ）MID 75R PFS 77.4% 的中赤字 11/27／OPEN 6R PFS 57.4% 的中赤字 0/2／SOLID 63R PFS 55.5% 的中赤字 14/24／UNKNOWN 2R PFS 175.7% 的中赤字 0/1／市場ミラーとの差 144R：実績 66.2% − ミラー 42.6% = Δ 23.6pt（95%区間 -2.2〜53.4、最高1R除き 16.7pt）
-- 正式推薦 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 335,600円（38.3%）／保護層の資金比率 0.0（146R）／組だけ的中（三連単は外れ）45R・着順まで的中 24R／的中 81R のうち的中赤字 68R／損益分岐の倍率 平均 60.0倍／同じ点数を無作為に選んだ場合の期待PFS 51.5%（同じ146Rの実績 40.7%）／券種別 EXACTA 2190点 PFS 49.5%／TRIFECTA 3650点 PFS 22.2%／TRIO 2920点 PFS 57.1%／荒れ度（発走前・1番人気オッズ）MID 75R PFS 48.7% 的中赤字 32/40／OPEN 6R PFS 18.2% 的中赤字 2/2／SOLID 63R PFS 33.9% 的中赤字 32/37／UNKNOWN 2R PFS 19.8% 的中赤字 2/2／市場ミラーとの差 144R：実績 41.0% − ミラー 69.4% = Δ -28.4pt（95%区間 -57.8〜-0.6、最高1R除き -34.2pt）
-- PAPER 実着順の組の行き先（B1・証拠のみ、41R×3券種）：購入 17／予算で削除 0／予想で除外 34／未生成・券種なし 72／役割馬の行き先 {'PURCHASED': 123}
-- 正式推薦 実着順の組の行き先（B1・証拠のみ、41R×3券種）：購入 52／予算で削除 16／予想で除外 36／未生成・券種なし 19／役割馬の行き先 {'PURCHASED': 300, 'BUDGET_COMPRESSED': 151}
-- PAPER 頭別P2（B3 n92・影の計測、勝ち馬W内 15R／W外 26R、2着が P2 役割 2R）：STATIC 2/15（平均3.93位）／STYLE_COND 4/15（平均3.67位） 救済2・喪失0／MARKET_COND 3/14（平均3.21位） 救済2・喪失1
-- 正式推薦 頭別P2（B3 n92・影の計測、勝ち馬W内 29R／W外 12R、2着が P2 役割 23R）：STATIC 24/29（平均3.79位）／STYLE_COND 24/29（平均3.62位） 救済0・喪失0／MARKET_COND 26/28（平均2.89位） 救済3・喪失0
+| PAPER | 147 | 30.6% | 64.6% | 30.6% | 11.6% | 11.6% | 7.5% | 25.2% | 1.51 |
+| 正式推薦 | 147 | 29.9% | 61.9% | 61.9% | 74.1% | 100.0% | 61.9% | 44.2% | 1.48 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中30.6%（無作為9.4%、差+21.2）／P2 平均1.0頭 的中11.6%（無作為9.4%、差+2.1）／P3 平均1.0頭 的中11.6%（無作為9.4%、差+2.1）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中61.9%（無作為28.3%、差+33.6）／P2 平均6.0頭 的中74.1%（無作為56.6%、差+17.6）／P3 平均10.85頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 13.14/40（選択性補正込み）・能力順位 13.85/20（147R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.16/40（選択性補正込み）・能力順位 13.39/20（147R平均）
+- PAPER 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 7,800円（6.6%）／保護層の資金比率 None（0R）／組だけ的中（三連単は外れ）38R・着順まで的中 2R／的中 55R のうち的中赤字 26R／損益分岐の倍率 平均 8.0倍／同じ点数を無作為に選んだ場合の期待PFS 54.5%（同じ147Rの実績 68.0%）／券種別 EXACTA 57点 PFS 20.5%／TRIFECTA 104点 PFS 15.4%／TRIO 757点 PFS 65.0%／WIDE 250点 PFS 110.5%／WIN 9点 PFS 56.7%／荒れ度（発走前・1番人気オッズ）MID 76R PFS 76.6% 的中赤字 12/28／OPEN 6R PFS 57.4% 的中赤字 0/2／SOLID 63R PFS 55.5% 的中赤字 14/24／UNKNOWN 2R PFS 175.7% 的中赤字 0/1／市場ミラーとの差 145R：実績 65.9% − ミラー 43.8% = Δ 22.1pt（95%区間 -3.1〜52.3、最高1R除き 15.2pt）
+- 正式推薦 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 337,700円（38.3%）／保護層の資金比率 0.0（147R）／組だけ的中（三連単は外れ）45R・着順まで的中 25R／的中 82R のうち的中赤字 69R／損益分岐の倍率 平均 60.0倍／同じ点数を無作為に選んだ場合の期待PFS 51.2%（同じ147Rの実績 40.8%）／券種別 EXACTA 2205点 PFS 49.5%／TRIFECTA 3675点 PFS 22.7%／TRIO 2940点 PFS 57.0%／荒れ度（発走前・1番人気オッズ）MID 76R PFS 48.9% 的中赤字 33/41／OPEN 6R PFS 18.2% 的中赤字 2/2／SOLID 63R PFS 33.9% 的中赤字 32/37／UNKNOWN 2R PFS 19.8% 的中赤字 2/2／市場ミラーとの差 145R：実績 41.1% − ミラー 69.3% = Δ -28.2pt（95%区間 -56.8〜-1.8、最高1R除き -33.9pt）
+- PAPER 実着順の組の行き先（B1・証拠のみ、42R×3券種）：購入 17／予算で削除 0／予想で除外 36／未生成・券種なし 73／役割馬の行き先 {'PURCHASED': 126}
+- 正式推薦 実着順の組の行き先（B1・証拠のみ、42R×3券種）：購入 55／予算で削除 16／予想で除外 36／未生成・券種なし 19／役割馬の行き先 {'PURCHASED': 308, 'BUDGET_COMPRESSED': 154}
+- PAPER 頭別P2（B3 n92・影の計測、勝ち馬W内 16R／W外 26R、2着が P2 役割 2R）：STATIC 2/16（平均4.0位）／STYLE_COND 4/16（平均3.75位） 救済2・喪失0／MARKET_COND 4/15（平均3.07位） 救済3・喪失1
+- 正式推薦 頭別P2（B3 n92・影の計測、勝ち馬W内 30R／W外 12R、2着が P2 役割 24R）：STATIC 25/30（平均3.83位）／STYLE_COND 25/30（平均3.67位） 救済0・喪失0／MARKET_COND 27/29（平均2.83位） 救済3・喪失0
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
 | ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |
 |---|---|---|---|---|
-| P1:HIT_BUT_LOSS | P1 | 68 | 242,590 | RECURRING |
+| P1:HIT_BUT_LOSS | P1 | 69 | 244,760 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 56 | 294,370 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 25 | 150,000 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 146 | 632,590 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 147 | 634,760 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 2 | 4,140 | SINGLE_OR_FEW (過大評価しない) |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
 
 # 地方版 月次 2026-11（自動・推薦試算・実購入なし）
 
-- 反省済みRace 383／PAPER PFS 63.3%／正式推薦 PFS 72.3%
-- 第一失敗：{'NONE': 45, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 108, 'PREDICTION_ROLE_W': 131, 'PREDICTION_ROLE_P2': 62, 'EXACT_ORIENTATION': 4}
+- 反省済みRace 384／PAPER PFS 63.2%／正式推薦 PFS 72.3%
+- 第一失敗：{'NONE': 45, 'WINNER_DISCOVERED_LOW': 9, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 12, 'CAPITAL_EFFICIENCY': 109, 'PREDICTION_ROLE_W': 131, 'PREDICTION_ROLE_P2': 62, 'EXACT_ORIENTATION': 4}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -93,7 +93,7 @@
 | KOC | 23 | 60.4 | 32.5 | {'WINNER_DISCOVERED_LOW': 3, 'W_WIDTH_OR_ROLE': 1, 'PREDICTION_ROLE_P2': 2, 'NONE': 2, 'CAPITAL_EFFICIENCY': 7, 'PREDICTION_ROLE_W': 8} |
 | KSM | 36 | 50.0 | 317.6 | {'PREDICTION_ROLE_W': 15, 'PREDICTION_ROLE_P2': 6, 'CAPITAL_EFFICIENCY': 8, 'NONE': 7} |
 | MIZ | 60 | 52.1 | 36.2 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 7, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 15, 'PREDICTION_ROLE_W': 13, 'PREDICTION_ROLE_P2': 13, 'EXACT_ORIENTATION': 1} |
-| NGY | 32 | 73.4 | 44.3 | {'PREDICTION_ROLE_W': 12, 'CAPITAL_EFFICIENCY': 9, 'NONE': 5, 'PREDICTION_ROLE_P2': 6} |
+| NGY | 33 | 71.6 | 44.9 | {'PREDICTION_ROLE_W': 12, 'CAPITAL_EFFICIENCY': 10, 'NONE': 5, 'PREDICTION_ROLE_P2': 6} |
 | OHI | 60 | 73.8 | 55.4 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 10, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 8, 'PREDICTION_ROLE_W': 22, 'CAPITAL_EFFICIENCY': 11, 'EXACT_ORIENTATION': 2} |
 | SAG | 33 | 50.0 | 29.3 | {'W_WIDTH_OR_ROLE': 2, 'WINNER_DISCOVERED_LOW': 1, 'PREDICTION_ROLE_P2': 9, 'PREDICTION_ROLE_W': 8, 'CAPITAL_EFFICIENCY': 11, 'NONE': 2} |
 | SON | 60 | 57.0 | 53.3 | {'PREDICTION_ROLE_W': 30, 'CAPITAL_EFFICIENCY': 17, 'PREDICTION_ROLE_P2': 8, 'NONE': 5} |
@@ -103,18 +103,18 @@
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 383 | 32.4% | 67.4% | 32.4% | 14.6% | 13.1% | 9.4% | 24.3% | 1.54 |
-| 正式推薦 | 345 | 31.6% | 62.0% | 62.0% | 72.8% | 100.0% | 62.0% | 35.9% | 1.43 |
-- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中32.7%（無作為9.6%、差+23.2）／P2 平均1.0頭 的中14.2%（無作為9.6%、差+4.6）／P3 平均1.0頭 的中12.7%（無作為9.6%、差+3.2）
-- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中64.2%（無作為28.6%、差+35.6）／P2 平均6.0頭 的中72.8%（無作為57.2%、差+15.6）／P3 平均10.77頭 的中100.0%（無作為100.0%、差+0.0）
-- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 13.51/40（選択性補正込み）・能力順位 13.89/20（203R平均）
-- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.34/40（選択性補正込み）・能力順位 13.46/20（196R平均）
-- PAPER 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 7,800円（6.7%）／保護層の資金比率 None（0R）／組だけ的中（三連単は外れ）38R・着順まで的中 2R／的中 54R のうち的中赤字 25R／損益分岐の倍率 平均 8.0倍／同じ点数を無作為に選んだ場合の期待PFS 54.8%（同じ146Rの実績 68.4%）／券種別 EXACTA 55点 PFS 21.3%／TRIFECTA 104点 PFS 15.4%／TRIO 752点 PFS 65.4%／WIDE 250点 PFS 110.5%／WIN 8点 PFS 43.8%／荒れ度（発走前・1番人気オッズ）MID 75R PFS 77.4% 的中赤字 11/27／OPEN 6R PFS 57.4% 的中赤字 0/2／SOLID 63R PFS 55.5% 的中赤字 14/24／UNKNOWN 2R PFS 175.7% 的中赤字 0/1／市場ミラーとの差 144R：実績 66.2% − ミラー 42.6% = Δ 23.6pt（95%区間 -2.2〜53.4、最高1R除き 16.7pt）
-- 正式推薦 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 335,600円（38.3%）／保護層の資金比率 0.0（146R）／組だけ的中（三連単は外れ）45R・着順まで的中 24R／的中 81R のうち的中赤字 68R／損益分岐の倍率 平均 60.0倍／同じ点数を無作為に選んだ場合の期待PFS 51.5%（同じ146Rの実績 40.7%）／券種別 EXACTA 2190点 PFS 49.5%／TRIFECTA 3650点 PFS 22.2%／TRIO 2920点 PFS 57.1%／荒れ度（発走前・1番人気オッズ）MID 75R PFS 48.7% 的中赤字 32/40／OPEN 6R PFS 18.2% 的中赤字 2/2／SOLID 63R PFS 33.9% 的中赤字 32/37／UNKNOWN 2R PFS 19.8% 的中赤字 2/2／市場ミラーとの差 144R：実績 41.0% − ミラー 69.4% = Δ -28.4pt（95%区間 -57.8〜-0.6、最高1R除き -34.2pt）
-- PAPER 実着順の組の行き先（B1・証拠のみ、41R×3券種）：購入 17／予算で削除 0／予想で除外 34／未生成・券種なし 72／役割馬の行き先 {'PURCHASED': 123}
-- 正式推薦 実着順の組の行き先（B1・証拠のみ、41R×3券種）：購入 52／予算で削除 16／予想で除外 36／未生成・券種なし 19／役割馬の行き先 {'PURCHASED': 300, 'BUDGET_COMPRESSED': 151}
-- PAPER 頭別P2（B3 n92・影の計測、勝ち馬W内 15R／W外 26R、2着が P2 役割 2R）：STATIC 2/15（平均3.93位）／STYLE_COND 4/15（平均3.67位） 救済2・喪失0／MARKET_COND 3/14（平均3.21位） 救済2・喪失1
-- 正式推薦 頭別P2（B3 n92・影の計測、勝ち馬W内 29R／W外 12R、2着が P2 役割 23R）：STATIC 24/29（平均3.79位）／STYLE_COND 24/29（平均3.62位） 救済0・喪失0／MARKET_COND 26/28（平均2.89位） 救済3・喪失0
+| PAPER | 384 | 32.6% | 67.4% | 32.6% | 14.6% | 13.0% | 9.6% | 24.2% | 1.54 |
+| 正式推薦 | 346 | 31.8% | 62.1% | 62.1% | 72.8% | 100.0% | 62.1% | 36.1% | 1.43 |
+- PAPER 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均1.0頭 的中33.0%（無作為9.6%、差+23.4）／P2 平均1.0頭 的中14.1%（無作為9.6%、差+4.6）／P3 平均1.0頭 的中12.7%（無作為9.6%、差+3.1）
+- 正式推薦 役割の頭数と的中（無作為＝頭数÷出走頭数）：W 平均3.0頭 的中64.3%（無作為28.6%、差+35.7）／P2 平均6.0頭 的中72.9%（無作為57.2%、差+15.7）／P3 平均10.77頭 的中100.0%（無作為100.0%、差+0.0）
+- PAPER KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 13.55/40（選択性補正込み）・能力順位 13.9/20（204R平均）
+- 正式推薦 KMS v1.2 第9・10条の式（参考値、KMX・PFSとは別）：役割捕捉 15.37/40（選択性補正込み）・能力順位 13.48/20（197R平均）
+- PAPER 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 7,800円（6.6%）／保護層の資金比率 None（0R）／組だけ的中（三連単は外れ）38R・着順まで的中 2R／的中 55R のうち的中赤字 26R／損益分岐の倍率 平均 8.0倍／同じ点数を無作為に選んだ場合の期待PFS 54.5%（同じ147Rの実績 68.0%）／券種別 EXACTA 57点 PFS 20.5%／TRIFECTA 104点 PFS 15.4%／TRIO 757点 PFS 65.0%／WIDE 250点 PFS 110.5%／WIN 9点 PFS 56.7%／荒れ度（発走前・1番人気オッズ）MID 76R PFS 76.6% 的中赤字 12/28／OPEN 6R PFS 57.4% 的中赤字 0/2／SOLID 63R PFS 55.5% 的中赤字 14/24／UNKNOWN 2R PFS 175.7% 的中赤字 0/1／市場ミラーとの差 145R：実績 65.9% − ミラー 43.8% = Δ 22.1pt（95%区間 -3.1〜52.3、最高1R除き 15.2pt）
+- 正式推薦 回収の頑健性（B2・証拠のみ、券面は変えない）：券種をまたぐ同じ組への追加投資 337,700円（38.3%）／保護層の資金比率 0.0（147R）／組だけ的中（三連単は外れ）45R・着順まで的中 25R／的中 82R のうち的中赤字 69R／損益分岐の倍率 平均 60.0倍／同じ点数を無作為に選んだ場合の期待PFS 51.2%（同じ147Rの実績 40.8%）／券種別 EXACTA 2205点 PFS 49.5%／TRIFECTA 3675点 PFS 22.7%／TRIO 2940点 PFS 57.0%／荒れ度（発走前・1番人気オッズ）MID 76R PFS 48.9% 的中赤字 33/41／OPEN 6R PFS 18.2% 的中赤字 2/2／SOLID 63R PFS 33.9% 的中赤字 32/37／UNKNOWN 2R PFS 19.8% 的中赤字 2/2／市場ミラーとの差 145R：実績 41.1% − ミラー 69.3% = Δ -28.2pt（95%区間 -56.8〜-1.8、最高1R除き -33.9pt）
+- PAPER 実着順の組の行き先（B1・証拠のみ、42R×3券種）：購入 17／予算で削除 0／予想で除外 36／未生成・券種なし 73／役割馬の行き先 {'PURCHASED': 126}
+- 正式推薦 実着順の組の行き先（B1・証拠のみ、42R×3券種）：購入 55／予算で削除 16／予想で除外 36／未生成・券種なし 19／役割馬の行き先 {'PURCHASED': 308, 'BUDGET_COMPRESSED': 154}
+- PAPER 頭別P2（B3 n92・影の計測、勝ち馬W内 16R／W外 26R、2着が P2 役割 2R）：STATIC 2/16（平均4.0位）／STYLE_COND 4/16（平均3.75位） 救済2・喪失0／MARKET_COND 4/15（平均3.07位） 救済3・喪失1
+- 正式推薦 頭別P2（B3 n92・影の計測、勝ち馬W内 30R／W外 12R、2着が P2 役割 24R）：STATIC 25/30（平均3.83位）／STYLE_COND 25/30（平均3.67位） 救済0・喪失0／MARKET_COND 27/29（平均2.83位） 救済3・喪失0
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -123,10 +123,10 @@
 | P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 5 | 3,540 | RECURRING |
 | P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
 | P1:ROLE_W_MISS | P1 | 155 | 768,300 | RECURRING |
-| P1:HIT_BUT_LOSS | P1 | 135 | 492,850 | RECURRING |
+| P1:HIT_BUT_LOSS | P1 | 136 | 495,020 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 71 | 384,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 383 | 1,565,150 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 384 | 1,567,320 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 6 | 26,550 | RECURRING |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
