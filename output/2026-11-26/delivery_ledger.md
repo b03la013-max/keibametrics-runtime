@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-26（16:04時点）
+# 地方版 配送台帳 2026-11-26（16:05時点）
 
 - 管理Race 48／発走済み 25
 - PAPER：凍結 48・Push検証 48・送信 30（発走前 30）・読み戻し一致 30・本人確認 0
@@ -6,7 +6,7 @@
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 25／重要変更 20／Revision 2署名 20
+- 10分前チェック：確認 26／重要変更 21／Revision 2署名 21
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -45,7 +45,7 @@
 | SON_08 | 14:30 | POSTRESULT_DIAGNOSTIC | 13:46 | ○ | SIGNED_FINAL | 14:22 | ○ |  |
 | SON_09 | 15:05 | POSTRESULT_DIAGNOSTIC | 14:22 | ○ | SIGNED_FINAL | 14:23 | ○ |  |
 | SON_10 | 15:40 | POSTRESULT_DIAGNOSTIC | 14:56 | ○ | SIGNED_FINAL | 15:32 | ○ |  |
-| SON_11 | 16:15 | PRESTART_PUSH_VERIFIED | 15:32 | ○ | SIGNED_FINAL | 15:33 | ○ |  |
+| SON_11 | 16:15 | PRESTART_PUSH_VERIFIED | 15:32 | ○ | SIGNED_FINAL | 16:05 | ○ |  |
 | SON_12 | 16:45 | PRESTART_PUSH_VERIFIED | 16:02 | ○ | SIGNED_FINAL | 16:03 | ○ |  |
 | URW_01 | 12:20 | POSTRESULT_DIAGNOSTIC | 11:37 | ○ | SIGNED_FINAL | 12:11 | ○ |  |
 | URW_02 | 12:50 | POSTRESULT_DIAGNOSTIC | 12:05 | ○ | SIGNED_FINAL | 12:41 | ○ |  |
