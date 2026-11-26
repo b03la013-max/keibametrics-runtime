@@ -369,3 +369,14 @@ def test_compression_loss_only_when_in_universe():
     fin['2']['in_role'] = False                                  # 役割の段階で外れたなら圧縮の責任ではない
     assert review.compression_loss(fin, (5, 8, 2), {'trio': [], 'exact': []}) == {
         'in_universe': False, 'compressed_out_trio': False, 'compressed_out_exact': False}
+
+
+def test_component_auc_direction_and_flat():
+    import review
+    rows = [{'no': i, 'tpi': 10 - i, 'isv': i, 'pop': i, 'wda': 1.0} for i in range(1, 9)]
+    a = review.component_auc(rows, [1, 2, 3, 4])
+    assert a['tpi']['top3'] == 1.0 and a['tpi']['win'] == 1.0
+    assert a['isv']['top3'] == 1.0 and a['pop']['win'] == 1.0          # 小さいほど良い成分は向きを逆に
+    assert a['wda'] is None                                              # 全頭同値は判定しない
+    s = review.component_auc_summary([{'component_auc': a}, {'component_auc': review.component_auc(rows, [8, 7, 6, 5])}])
+    assert s['tpi']['races'] == 2 and s['tpi']['auc_top3'] == 0.5

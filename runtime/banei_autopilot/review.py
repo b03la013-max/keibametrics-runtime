@@ -355,6 +355,7 @@ def race_review(out, key, r):
             'moisture_band': ev.get('moisture_band'), 'field': len(ev['rows']), 'pfs': res['pfs'], 'stake': res['stake'], 'return': res['return'],
             'ffl': ffl, 'cause': cause, 'formality': tk['formality'], 'revision': res.get('effective_revision'),
             'rev_audit': res.get('rev_audit'), 'paper': res.get('paper'), 'finishers': fin,
+            'component_auc': component_auc(_full_rows(out, key, eff, ev['rows']), res['order']),
             'honmei': ev.get('honmei'), 'honmei_pop': (rows.get(str(ev.get('honmei'))) or {}).get('pop'),
             'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
@@ -556,6 +557,68 @@ def flat_components(rows, keys=FLAT_KEYS):
     return {'flat': flat, 'unjudged': unjudged, 'field': len(rows)}
 
 
+# KCP-BAN CAL-01（ChatGPT 11/26 KRS 較正計画の読み替え）: ばんえい v4.0 に KRS は無いので、較正の対象は
+# 指数の成分そのもの。成分ごとに「実際の1〜3着馬が、そのレースで他の馬より高い値だったか」を AUC で測る
+# （0.5＝識別なし、1.0＝完全）。isv は小さいほど安定なので向きを逆にする。証拠のみ・閾値なし・点数は変えない。
+COMPONENT_KEYS = ('idx', 'bsi', 'isv', 'lis', 'bta', 'mpa', 'brs', 'wda', 'front_bonus', 'jbr', 'adf', 'bwl', 'cci',
+                  'cpu', 'tpi', 'win_score', 'place_score', 'dcr', 'pop')
+LOWER_IS_BETTER = {'isv', 'pop'}          # pop＝市場（人気）。指数の各成分と同じ物差しで並べる参考の基準線
+
+
+def _full_rows(out, key, eff, rows):
+    """Mac の非公開キャッシュ（run.predict が書く R*.full.json）に BSI・指数・ISV があれば、その行で置き換える。
+    公開の記録には集計した AUC だけが残り、生の値は出ない。"""
+    import os
+    cache = Path(os.environ.get('KM_BAN_CACHE', out.parent / '.cache')) / out.name / f'R{key}{eff}.full.json'
+    try:
+        return json.loads(cache.read_text())['evaluation']['rows']
+    except Exception:
+        return rows
+
+
+def _auc(pos, neg):
+    if not pos or not neg:
+        return None
+    w = sum(1.0 if a > b else 0.5 if a == b else 0.0 for a in pos for b in neg)
+    return w / (len(pos) * len(neg))
+
+
+def component_auc(rows, order, keys=COMPONENT_KEYS):
+    """1レース分：成分ごとの AUC（3着内 対 4着以下、1着 対 その他）。値のある馬が4頭未満・全頭同値の成分は None。"""
+    top3, win = {str(n) for n in order[:3]}, str(order[0]) if order else None
+    out = {}
+    for k in keys:
+        v = {str(x['no']): x.get(k) for x in rows
+             if isinstance(x.get(k), (int, float)) and not isinstance(x.get(k), bool)}
+        if len(v) < 4 or max(v.values()) - min(v.values()) < 1e-9:
+            out[k] = None
+            continue
+        sg = -1 if k in LOWER_IS_BETTER else 1
+        val = {n: sg * x for n, x in v.items()}
+        out[k] = {'top3': _auc([x for n, x in val.items() if n in top3], [x for n, x in val.items() if n not in top3]),
+                  'win': _auc([x for n, x in val.items() if n == win], [x for n, x in val.items() if n != win])}
+    return out
+
+
+def component_auc_summary(revs):
+    """成分ごとの平均 AUC と判定したレース数（KCP-BAN Baseline Error Report の CAL-01 部分）。"""
+    acc = {}
+    for x in revs:
+        for k, d in (x.get('component_auc') or {}).items():
+            if not d:
+                continue
+            a = acc.setdefault(k, {'n': 0, 'top3': 0.0, 'win': 0.0, 'n_win': 0})
+            if d.get('top3') is not None:
+                a['n'] += 1
+                a['top3'] += d['top3']
+            if d.get('win') is not None:
+                a['n_win'] += 1
+                a['win'] += d['win']
+    return {k: {'races': a['n'], 'auc_top3': round(a['top3'] / a['n'], 3) if a['n'] else None,
+                'auc_win': round(a['win'] / a['n_win'], 3) if a['n_win'] else None}
+            for k, a in sorted(acc.items())} or None
+
+
 def flat_components_summary(revs):
     """成分ごとに、全頭同値だったレース数・値が3頭未満で判定しなかったレース数・判定したレース数（証拠のみ）。"""
     out = {}
@@ -710,6 +773,7 @@ def summarize(revs, missed):
             'robustness': payout_robustness(revs), 'by_moisture_band': by_moisture_band(revs),
             'by_honmei_pop_band': by_honmei_pop_band(revs), 'by_info_coverage': by_info_coverage(revs),
             'by_w_count': by_w_count(revs), 'by_gap_wcount': by_gap_wcount(revs), 'rank_discrimination': rank_discrimination(revs),
+            'component_auc': component_auc_summary(revs),
             'axis_dependency': axis_dependency_summary(revs), 'market_drift': market_drift_summary(revs),
             'flat_components': flat_components_summary(revs)}
 
@@ -729,6 +793,12 @@ def _md(title, s, revs=None):
          f"- 圧縮で消えた勝ち筋: 着順の組が役割の全組合せにあった {s['funnel'].get('in_universe', 0)}R のうち、"
          f"30点への圧縮で三連複から外れた {s['funnel'].get('compressed_out_trio', 0)}R・三連単から外れた {s['funnel'].get('compressed_out_exact', 0)}R",
          f"- P0/P1: {s['p0p1'] or 'なし'}"]
+    ca = s.get('component_auc') or {}
+    if ca:
+        cells = sorted(((k, v) for k, v in ca.items() if v.get('auc_top3') is not None and v['races'] >= 5),
+                       key=lambda kv: -kv[1]['auc_top3'])
+        L.append('- 成分の識別力（KCP-BAN CAL-01、3着内 AUC／1着 AUC、0.5＝識別なし、pop＝人気の基準線）: '
+                 + '、'.join(f"{k} {v['auc_top3']}/{v['auc_win']}（{v['races']}R）" for k, v in cells))
     cv = s.get('coverage') or {}
     if any(k in cv for k in ('role_w', 'role_p2', 'role_p3')):
         L.append('- 役割の被覆（的中率／無作為基準・平均頭数）: ' + '・'.join(
