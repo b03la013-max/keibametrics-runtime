@@ -480,6 +480,75 @@ CANDIDATES = {'W_PLUS_STATIC2': w_plus_static2, 'P2_KRS_HEAD_LOCAL': p2_krs_head
               'W_WIND8_STATIC_SAME_COUNT_CONTROL': w_wind8_static_same_count_control}
 
 
+# DRIVE02 (Owner 追加 Drive 資料 2026-11-26「GⅠで外国人騎手を買い続けたら」#28.5; recorded challengers;
+# profiles/KM_JRA_FORWARD_OOS_PREREG_20261128_DRIVE02.json). Fires only in graded stakes (GⅠ〜GⅢ).
+import re as _re
+FOREIGN_JOCKEY = _re.compile(r'^[A-ZＡ-Ｚ][.．]')      # JRA card style for foreign riders: "C.ルメール", "M.デムーロ", "R.ムーア"
+
+
+def race_grade(f, root=ROOT):
+    """'GⅠ' / 'GⅡ' / 'GⅢ' from the calendar race context frozen before the cutoff, else None."""
+    ss = _request_snapshot(f, root)
+    g = str(((ss or {}).get('jra_calendar_race_context') or {}).get('race_class') or '')
+    g = g.replace('G1', 'GⅠ').replace('G2', 'GⅡ').replace('G3', 'GⅢ').replace('Ｇ', 'G')
+    return g if g in ('GⅠ', 'GⅡ', 'GⅢ') else None
+
+
+def is_foreign_jockey(name):
+    return bool(name and FOREIGN_JOCKEY.match(str(name).strip()))
+
+
+def foreign_rule(r, rule):
+    """ALL: foreign rider today. PREV23: and last run finished 2nd or 3rd. SWITCH: and last run had another rider."""
+    if not is_foreign_jockey(r.get('jockey')):
+        return False
+    last = (r.get('recent_runs') or [None])[0]
+    if rule == 'PREV23':
+        return bool(last and last.get('finish') in (2, 3))
+    if rule == 'SWITCH':
+        return bool(last and last.get('jockey') and str(last['jockey']).strip() != str(r['jockey']).strip())
+    return True
+
+
+def _foreign_w_picks(f, rule):
+    """Market top-3 runners not in W whose rider matches the rule (graded stakes only), else None."""
+    if race_grade(f) is None:
+        return None
+    rc, mk = race_card(f), market_ranking(f)
+    if rc is None or mk is None:
+        return None
+    runners, W = rc[1], _live(f, 'W')
+    return [k for k in mk[:3] if k not in W and k in runners and foreign_rule(runners[k], rule)]
+
+
+def _foreign_candidate(rule, tag):
+    def fn(f):
+        picks = _foreign_w_picks(f, rule)
+        return bool(picks) and _add_heads(f, picks, tag)
+    return fn
+
+
+def _foreign_control(rule, tag):
+    def fn(f):  # same firing races, same count, by Static rank among non-W runners
+        picks = _foreign_w_picks(f, rule)
+        if not picks:
+            return False
+        W = _live(f, 'W')
+        ctl = [r for r in (str(x) for x in f['static_prediction']['ranking']) if r not in W][:len(picks)]
+        return _add_heads(f, ctl, tag)
+    return fn
+
+
+CANDIDATES.update({
+    'W_FOREIGN_JOCKEY_MKT_TOP3': _foreign_candidate('ALL', 'W_FOREIGN_JOCKEY_MKT_TOP3'),
+    'W_FOREIGN_JOCKEY_STATIC_SAME_COUNT_CONTROL': _foreign_control('ALL', 'W_FOREIGN_JOCKEY_STATIC_SAME_COUNT_CONTROL'),
+    'W_FOREIGN_PREV23_MKT_TOP3': _foreign_candidate('PREV23', 'W_FOREIGN_PREV23_MKT_TOP3'),
+    'W_FOREIGN_PREV23_STATIC_SAME_COUNT_CONTROL': _foreign_control('PREV23', 'W_FOREIGN_PREV23_STATIC_SAME_COUNT_CONTROL'),
+    'W_FOREIGN_SWITCH_MKT_TOP3': _foreign_candidate('SWITCH', 'W_FOREIGN_SWITCH_MKT_TOP3'),
+    'W_FOREIGN_SWITCH_STATIC_SAME_COUNT_CONTROL': _foreign_control('SWITCH', 'W_FOREIGN_SWITCH_STATIC_SAME_COUNT_CONTROL'),
+})
+
+
 def _settle(f, official):
     s = settle_final(f, official)
     return s.get('effective_investment', s.get('total_investment', 0)) or 0, s.get('total_payout', 0) or 0

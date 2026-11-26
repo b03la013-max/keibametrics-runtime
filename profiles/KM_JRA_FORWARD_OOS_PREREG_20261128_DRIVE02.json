@@ -1,0 +1,94 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-20261128-DRIVE02",
+ "registered_at": "2026-11-26T19:40:00+09:00",
+ "registered_by": "Claude (Owner 2026-11-26 19:23「登録してください」; Drive 新着の即日精読)",
+ "extends": "profiles/KM_JRA_FORWARD_OOS_PREREG_20261128_DRIVE01.json",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-28",
+ "eligibility_note": "Counted only for races frozen by jra_role_candidate_replay.py freeze after this file is on main. 2026-11-29 ジャパンカップ (GⅠ) is the first GⅠ in scope. Races before the merge are not Forward OOS.",
+ "sources": {
+  "DRIVE02": "Drive KeibaMetrics_Library 直下「GⅠで外国人騎手を買い続けたらプラスになる？回収率の真実/#28」(file 1eRl6lCF…, Owner 追加 2026-11-26): poster tally 2010-2026 JRA 平地 GⅠ 387R; UNVERIFIED (win/run counts inconsistent in the source)"
+ },
+ "inputs_rule": "rider, last-run finish / rider, market order and the grade come only from the signed request snapshot frozen at or before prediction_cutoff; otherwise the arm does not fire",
+ "evidence_rule": "same as DRIVE01. Known-result replay is context only. Small sample: graded stakes are about 3 races per weekend, so 100 firing races takes many months; no decision before that.",
+ "budget_note": "arms rebuild tickets with Production MEC; report PFS, PFS excl. max payout, net profit change and investment change together.",
+ "arms": [
+  {
+   "id": "W_FOREIGN_JOCKEY_MKT_TOP3",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "scope": "graded stakes only (jra_calendar_race_context.race_class GⅠ/GⅡ/GⅢ)",
+   "rule": "pre-cutoff market top-3 runner ridden by a foreign rider (JRA card style \"X.カナ\": short-term licence, C.ルメール, M.デムーロ) and not in W -> add as W head",
+   "why": "source: GⅠ 1〜3番人気×外国人騎手 単回 104.0%、同一GⅠ上位人気同士で実93勝 対 市場期待 約75勝",
+   "metric": "net profit change vs frozen Production tickets; must beat W_FOREIGN_JOCKEY_STATIC_SAME_COUNT_CONTROL; report GⅠ and GⅡ+GⅢ separately",
+   "promote_if": "at 100 firing races beats Production and the control on net profit and PFS excl. max payout, GⅠ not worse than the control -> Owner decision",
+   "reject_if": "at 50 firing races not better than the control"
+  },
+  {
+   "id": "W_FOREIGN_JOCKEY_STATIC_SAME_COUNT_CONTROL",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CONTROL",
+   "scope": "same firing races",
+   "rule": "same races, same count, added as W heads by Static rank among runners not in W (no rider information)",
+   "metric": "net profit change",
+   "promote_if": "control arm",
+   "reject_if": "n/a"
+  },
+  {
+   "id": "W_FOREIGN_PREV23_MKT_TOP3",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "scope": "graded stakes only (jra_calendar_race_context.race_class GⅠ/GⅡ/GⅢ)",
+   "rule": "as above and the last run finished 2nd or 3rd",
+   "why": "source: 前走2〜3着×1〜3番人気×外国人騎手 単回 129.7%（両期間で同じ向き、継続騎乗を含む）",
+   "metric": "net profit change vs frozen Production tickets; must beat W_FOREIGN_PREV23_STATIC_SAME_COUNT_CONTROL; report GⅠ and GⅡ+GⅢ separately",
+   "promote_if": "at 100 firing races beats Production and the control on net profit and PFS excl. max payout, GⅠ not worse than the control -> Owner decision",
+   "reject_if": "at 50 firing races not better than the control"
+  },
+  {
+   "id": "W_FOREIGN_PREV23_STATIC_SAME_COUNT_CONTROL",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CONTROL",
+   "scope": "same firing races",
+   "rule": "same races, same count, added as W heads by Static rank among runners not in W (no rider information)",
+   "metric": "net profit change",
+   "promote_if": "control arm",
+   "reject_if": "n/a"
+  },
+  {
+   "id": "W_FOREIGN_SWITCH_MKT_TOP3",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CANDIDATE",
+   "scope": "graded stakes only (jra_calendar_race_context.race_class GⅠ/GⅡ/GⅢ)",
+   "rule": "as above and the last run had a different rider (switch to a foreign rider)",
+   "why": "source: 外国人騎手への乗り替わり×1〜3番人気 単回 108.6%、他騎手への乗り替わり 61.7%",
+   "metric": "net profit change vs frozen Production tickets; must beat W_FOREIGN_SWITCH_STATIC_SAME_COUNT_CONTROL; report GⅠ and GⅡ+GⅢ separately",
+   "promote_if": "at 100 firing races beats Production and the control on net profit and PFS excl. max payout, GⅠ not worse than the control -> Owner decision",
+   "reject_if": "at 50 firing races not better than the control"
+  },
+  {
+   "id": "W_FOREIGN_SWITCH_STATIC_SAME_COUNT_CONTROL",
+   "tracker": "runtime/analysis/jra_role_candidate_replay.py",
+   "kind": "SHADOW_CONTROL",
+   "scope": "same firing races",
+   "rule": "same races, same count, added as W heads by Static rank among runners not in W (no rider information)",
+   "metric": "net profit change",
+   "promote_if": "control arm",
+   "reject_if": "n/a"
+  }
+ ],
+ "pending": [
+  {
+   "id": "P3_LAST3F_TOP5_MKT_TOP5",
+   "source": "Drive「2026年 ジャパンカップ 近年の血統傾向」亀谷敬正 (file 1XGACf4a…): 5番人気以内×前走JRA 上がり順位5位以内 複勝率69% 対 6位以下 29% (poster tally, UNVERIFIED)",
+   "status": "PENDING_INPUT",
+   "reason": "the frozen race card has each runner's own last-run final 3F time but not its rank within that race; the rank needs the full result of the previous race (JRA results backfill runtime/jra_results_history, not populated yet). Will be pre-registered with its own date once the input exists; never computed from post-cutoff data."
+  },
+  {
+   "id": "PEDIGREE_TONYBIN_EUROPE_TOK_TURF_LONG",
+   "source": "same video: トニービン内包・父が欧州型 × 人気薄 (東京芝中長距離)",
+   "status": "RECORDED_ONLY",
+   "reason": "needs sire-line typing for the JRA card (sire / damsire names are on the card; a type table is not). Kept as a J2 research item."
+  }
+ ]
+}
