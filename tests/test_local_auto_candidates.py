@@ -140,3 +140,19 @@ def test_krscap_tempered_changes_cross_type_order():
     assert fm.variant_of(s, 'GEN:KRSCAP:mode=1')[0] == ('EXACTA', [1, 2])        # 0.05 > 6 x 0.008
     assert fm.variant_of(s, 'GEN:KRSCAP:mode=1:t=165')[0] == ('TRIO', [1, 2, 3])  # 6 x 0.008^0.61 > 0.05^0.61
     assert 'C30-KRS-CAP-TEMPERED-60' in ap.candidates('/nonexistent')
+
+
+def test_kcp_registers_new_temperature_once(tmp_path):
+    d = tmp_path / 'krs_calib'
+    d.mkdir()
+    rep = {'temperature': {'krs_w': {'T_fitted_on_train': 1.82, 'test_log_loss_identity': 2.3, 'test_log_loss_tempered': 2.05}}}
+    (d / '2026-11-30.json').write_text(json.dumps(rep))
+    res = ac.daily(tmp_path, '2026-11-30')
+    st = ac.load(tmp_path)
+    k = [c for c in res['new'] if 'KRSCAP' in c]
+    assert k and st['candidates'][k[0]]['variant'] == 'GEN:KRSCAP:mode=1:t=180'
+    assert st['candidates'][k[0]]['first_eligible_post'].startswith('2026-12-01')
+    assert not [c for c in ac.daily(tmp_path, '2026-12-01')['new'] if 'KRSCAP' in c]   # same T: not again
+    rep['temperature']['krs_w']['T_fitted_on_train'] = 1.65                              # = fixed C30: not again
+    (d / '2026-12-07.json').write_text(json.dumps(rep))
+    assert not [c for c in ac.daily(tmp_path, '2026-12-07')['new'] if 'KRSCAP' in c]

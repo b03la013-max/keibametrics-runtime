@@ -51,8 +51,22 @@ def _corners(res):
     return hist_stats.corner_positions(cs[0]), hist_stats.corner_positions(cs[-1])
 
 
+def _hist_corners(root):
+    """Official passing order for races settled before result.json kept it: NAR monthly CSVs (the Owner's ZIPs) and
+    the Rakuten result backfill, via hist_stats.load_sources. {VEN_YYYYMMDD_Rnn: (first, last)}; {} if none."""
+    import os
+    try:
+        from runtime.local_autopilot import hist_stats
+        races, _ = hist_stats.load_sources(Path(root), os.environ.get('KM_LOCAL_NAR_ROOT'))
+    except Exception:
+        return {}
+    return {rid: (r.get('first_corner') or None, r.get('last_corner') or None) for rid, r in races.items()
+            if r.get('first_corner') and r.get('last_corner')}
+
+
 def races(root):
     out = []
+    hist = None
     for dd in sorted(Path(root).glob('20??-??-??')):
         for f in sorted((dd / 'formal').glob('*.krs_prediction_utility.json')):
             key = f.name.split('.')[0]
@@ -68,6 +82,11 @@ def races(root):
             rk = {int(r['no']): r for r in (pap.get('prediction') or {}).get('ranking') or []}
             fs = _load(dd / 'formal' / f'{key}.summary.json') or {}
             fc, lc = _corners(res)
+            if not fc:
+                if hist is None:
+                    hist = _hist_corners(root)
+                v, rn = key.split('_')[0], int(key.split('_')[1])
+                fc, lc = hist.get(f"{v}_{dd.name.replace('-', '')}_R{rn:02d}", (None, None))
             out.append({'day': dd.name, 'key': key, 'venue': key.split('_')[0], 'order': [int(x) for x in res['order']],
                         'krs_w': _norm({h: s.get('SSR-W') or 0 for h, s in summ.items()}),
                         'krs_t3': {h: min(1.0, (s.get('SSR-T3') or 0)) for h, s in summ.items()},
@@ -256,7 +275,7 @@ def md(rep):
             L.append(f"- {cn}：平均ずれ {x['mae_positions']} 頭分、予測の幅（p25〜p75）に入った割合 {x['inside_p25_p75']}（名目 0.5）・{x['horses']}頭")
         f3 = s['front3_stays_front3']
         L.append(f"- 予測の先頭馬が実際に1角先頭：{s['predicted_leader_led_1角']}／1角3番手内の馬が4角も3番手内：予測 {f3['predicted']}・実際 {f3['actual']}（{f3['horses']}頭）")
-    L.append(f"- 通過順あり {s['races_with_passing_order']}R・なし {s['races_without']}R（通過順は 11/26 から記録。それ以前は NAR 月次 CSV で補う予定）")
+    L.append(f"- 通過順あり {s['races_with_passing_order']}R・なし {s['races_without']}R（結果ページの通過順は 11/26 から記録、それ以前は NAR 月次 CSV・結果ページの過去分で補完）")
     L += ['', '**KRS を使う価値（29指数の正式順位との比較）**', '',
           f"- 勝ち馬の順位：KRS が上 {inc['winner_rank_krs_better']}R・同じ {inc['same']}R・下 {inc['worse']}R",
           f"- 3着内 AUC：KRS {inc['auc_top3_krs']}／正式順位 {inc['auc_top3_formal_ranking']}"]

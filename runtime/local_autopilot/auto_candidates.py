@@ -27,6 +27,7 @@ PROFILE = 'KM-LOCAL-AUTO-CANDIDATES-v1.0-20261122'
 MAX_EVALUATING = 6
 MAX_NEW_PER_DAY = 2
 RETIRE_RACES = 200
+KCP_MIN_GAIN = 0.02   # winner log loss improvement on the later days needed to register a KRS temperature
 FAMILY_GRID = {   # family -> parameter sets in the order they are tried (the fixed C13/C15/C23/C24/C28 settings excluded)
     'TRIOBOX': [{'n': 5}, {'n': 4}],
     'WAXTRIO': [{'n': 5}, {'n': 4}],
@@ -131,6 +132,39 @@ def generate(st, root, today):
     return new
 
 
+def _kcp(st, root, today, slots):
+    """KCP (Owner 2026-11-26 21:25 「KCPは永続的に実施」): from the latest weekly KRS calibration report
+    (<root>/krs_calib/<day>.json, krs_calib.weekly), when the temperature fitted on the earlier days lowers the
+    later days' winner log loss by >= KCP_MIN_GAIN, register KRSCAP with that temperature (rounded to 0.05) as a
+    NEW candidate. A registered candidate is never changed afterwards; a later, different T is a new candidate."""
+    from runtime.local_autopilot import auto_promote
+    if slots <= 0:
+        return []
+    reps = sorted((Path(root) / 'krs_calib').glob('20??-??-??.json'))
+    if not reps:
+        return []
+    try:
+        tk = json.loads(reps[-1].read_text())['temperature']['krs_w']
+        T, a, b = float(tk['T_fitted_on_train']), float(tk['test_log_loss_identity']), float(tk['test_log_loss_tempered'])
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    if a - b < KCP_MIN_GAIN or abs(T - 1.0) < 0.1:
+        return []
+    t = int(round(T * 20)) * 5
+    name = formal_mix.gen_name('KRSCAP', mode=1, t=t)
+    used = {c['variant'] for c in st['candidates'].values()} | {v for v, _ in auto_promote.CANDIDATES.values()}
+    if name in used:
+        return []
+    cid = f"G{len(st['candidates']) + 1:03d}-KRSCAP-mode1-t{t}"
+    st['candidates'][cid] = {
+        'variant': name, 'family': 'KRSCAP', 'params': {'mode': 1, 't': t}, 'status': 'EVALUATING',
+        'registered_at': datetime.now().astimezone().isoformat(),
+        'first_eligible_post': (date.fromisoformat(today) + timedelta(days=1)).isoformat() + 'T00:00:00+09:00',
+        'origin': {'day': today, 'priority': 'KCP:CAL-05', 'count': None, 'impact_yen': 0,
+                   'report': reps[-1].name, 'T': T, 'test_log_loss': [a, b]}}
+    return [cid]
+
+
 def daily(root, today, decision=None, rows_fn=None):
     """Run after auto_promote.decide(root, today). Returns {'retired': [...], 'new': [...]} and saves the state."""
     st = load(root)
@@ -138,6 +172,8 @@ def daily(root, today, decision=None, rows_fn=None):
     st.setdefault('candidates', {})
     retired = _retire(st, root, today, rows_fn, decision)
     new = generate(st, root, today)
+    ev = sum(c.get('status') == 'EVALUATING' for c in st['candidates'].values())
+    new += _kcp(st, root, today, min(MAX_NEW_PER_DAY - len(new), MAX_EVALUATING - ev))
     st.setdefault('log', []).append({'day': today, 'retired': retired, 'new': new,
                                      'at': datetime.now().astimezone().isoformat()})
     st['log'] = st['log'][-200:]
@@ -151,6 +187,10 @@ def md(root, res):
     L = ['', '### 自動で作った改善案', '']
     for cid in res.get('new') or []:
         c = C[cid]
+        if c['origin']['priority'].startswith('KCP'):
+            L.append(f"- 新規登録：{cid}（{c['variant']}）← KRS 較正測定 {c['origin']['report']}（T={c['origin']['T']}、"
+                     f"試験の対数損失 {c['origin']['test_log_loss'][0]}→{c['origin']['test_log_loss'][1]}）、{c['first_eligible_post'][:10]} から比較")
+            continue
         L.append(f"- 新規登録：{cid}（{c['variant']}）← 反省 {c['origin']['priority']}（{c['origin']['count']}件・"
                  f"{c['origin']['impact_yen']:,}円）、{c['first_eligible_post'][:10]} から比較")
     for cid in res.get('retired') or []:
