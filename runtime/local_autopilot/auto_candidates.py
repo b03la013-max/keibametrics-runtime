@@ -181,15 +181,23 @@ def _kiep(st, root, today, slots):
     used = {c['variant'] for c in st['candidates'].values()} | {v for v, _ in auto_promote.CANDIDATES.values()}
     nxt = (date.fromisoformat(today) + timedelta(days=1)).isoformat() + 'T00:00:00+09:00'
     new = []
-    for idx, x in sorted(ab.items(), key=lambda kv: -(kv[1]['test'].get('auc_gain') or 0)):
-        if x.get('verdict') != 'DROP_HELPS' or len(new) >= slots:
+    try:
+        sc = json.loads(reps[-1].read_text()).get('scale') or {}
+    except (OSError, ValueError):
+        sc = {}
+    items = [(idx, x, 'IDXABL') for idx, x in ab.items() if x.get('verdict') == 'DROP_HELPS']
+    items += [(idx, x, 'IDXSCL') for idx, x in (sc.get('rows') or {}).items() if x.get('verdict') == 'UP_HELPS']
+    for idx, x, fam in sorted(items, key=lambda t: -(t[1]['test'].get('auc_gain') or 0)):
+        if len(new) >= slots:
             continue
-        name = formal_mix.gen_name('IDXABL', drop=kiep.INDEX_IDS.index(idx))
+        n = kiep.INDEX_IDS.index(idx)
+        name = (formal_mix.gen_name('IDXABL', drop=n) if fam == 'IDXABL' else
+                formal_mix.gen_name('IDXSCL', i=n, s=int(round(100 * float(sc.get('factor') or kiep.SCALE)))))
         if name in used:
             continue
-        cid = f"G{len(st['candidates']) + 1:03d}-IDXABL-{idx.replace('/', '_')}"
+        cid = f"G{len(st['candidates']) + 1:03d}-{fam}-{idx.replace('/', '_')}"
         st['candidates'][cid] = {
-            'variant': name, 'family': 'IDXABL', 'params': {'drop': kiep.INDEX_IDS.index(idx), 'index': idx},
+            'variant': name, 'family': fam, 'params': {'index': idx, 'n': n},
             'status': 'EVALUATING', 'registered_at': datetime.now().astimezone().isoformat(), 'first_eligible_post': nxt,
             'origin': {'day': today, 'priority': 'KIEP:ABLATION', 'count': None, 'impact_yen': 0, 'report': reps[-1].name,
                        'index': idx, 'auc_gain': [x['train'].get('auc_gain'), x['test'].get('auc_gain')]}}
@@ -223,7 +231,8 @@ def md(root, res):
     for cid in res.get('new') or []:
         c = C[cid]
         if c['origin']['priority'].startswith('KIEP'):
-            L.append(f"- 新規登録：{cid}（{c['variant']}＝{c['origin']['index']} を無効化した正式順位で60点）← KIEP 除去実験 "
+            what = '無効化' if c['family'] == 'IDXABL' else '重みを上げた'
+            L.append(f"- 新規登録：{cid}（{c['variant']}＝{c['origin']['index']} を{what}正式順位で60点）← KIEP 実計算 "
                      f"{c['origin']['report']}（3着内AUC 学習 {c['origin']['auc_gain'][0]:+} / 試験 {c['origin']['auc_gain'][1]:+}）、"
                      f"{c['first_eligible_post'][:10]} から比較")
             continue
