@@ -50,8 +50,8 @@ HOLD_SECONDS = 1800
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("KM_JRA_RESULTS_HISTORY_OUT") or ROOT / "runtime/jra_results_history")
 PAGE = "/JRADB/accessS.html"
-VENUES = {"01": "SAP", "02": "HAK", "03": "FKS", "04": "NII", "05": "TKY",
-          "06": "NAK", "07": "CHU", "08": "KYO", "09": "HAN", "10": "KOK"}
+VENUES = {"01": "SPP", "02": "HKD", "03": "FKS", "04": "NGT", "05": "TKY",  # canonical (jra_race_day_resolver)
+          "06": "NKY", "07": "CHK", "08": "KYO", "09": "HSN", "10": "KKR"}
 ENTRY = re.compile(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)")
 
 

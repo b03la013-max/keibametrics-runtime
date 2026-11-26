@@ -64,3 +64,9 @@ def test_entry_day_is_the_previous_sunday():
     assert B._entry_day(dt.date(2026, 11, 26)) == dt.date(2026, 11, 22)  # Thursday
     assert B._entry_day(dt.date(2026, 11, 23)) == dt.date(2026, 11, 22)  # Monday
     assert B._entry_day(dt.date(2026, 11, 22)) == dt.date(2026, 11, 15)  # Sunday itself is not used (results may be partial)
+
+
+def test_venue_codes_match_the_canonical_race_ids():
+    import jra_race_day_resolver as R
+    m = next(v for v in vars(R).values() if isinstance(v, dict) and v.get("04") == ("NGT", "新潟"))
+    assert B.VENUES == {k: v[0] for k, v in m.items()}
