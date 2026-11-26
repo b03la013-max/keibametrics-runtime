@@ -126,3 +126,17 @@ def test_krscap_orders_mec_by_simulation():
     assert v2[0] == ('TRIFECTA', [4, 2, 1]) and v2[-1] == ('EXACTA', [1, 2])
     s['_krs'] = None
     assert fm.variant_of(s, 'GEN:KRSCAP:mode=1') == fm.signed(s)
+
+
+def test_krscap_tempered_changes_cross_type_order():
+    s = _s()
+    s['signed_final_tickets'] = [{'bet_type': 'TRIO', 'selection': [1, 2, 3], 'mec_tier': 'CORE'},
+                                 {'bet_type': 'EXACTA', 'selection': [1, 2], 'mec_tier': 'CORE'}]
+    util = {'top_trifecta_occurrence': [{'W': a, 'P2': b, 'P3': c, 'frequency': 0.008}
+                                        for a, b, c in [(1, 2, 3), (1, 3, 2), (2, 1, 3), (2, 3, 1), (3, 1, 2), (3, 2, 1)]],
+            'top_exacta_occurrence': [{'W': 1, 'P2': 2, 'frequency': 0.05}],
+            'summary': [{'horse_no': h, 'SSR-W': 0.1, 'SSR-P2': 0.1, 'SSR-P3': 0.1} for h in range(1, 9)]}
+    s['_krs'] = fm.krs_view(util)
+    assert fm.variant_of(s, 'GEN:KRSCAP:mode=1')[0] == ('EXACTA', [1, 2])        # 0.05 > 6 x 0.008
+    assert fm.variant_of(s, 'GEN:KRSCAP:mode=1:t=165')[0] == ('TRIO', [1, 2, 3])  # 6 x 0.008^0.61 > 0.05^0.61
+    assert 'C30-KRS-CAP-TEMPERED-60' in ap.candidates('/nonexistent')

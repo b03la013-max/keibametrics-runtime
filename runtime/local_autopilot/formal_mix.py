@@ -136,6 +136,11 @@ def gen_variant(summary, name, base=None):
         # trifecta/exacta tables) else the product of the per-horse SSR rates; 三連複 = sum of its 6 orders.
         # mode 1: KRS score only; mode 2: MEC tier first (CORE > PROTECTION > TAIL), KRS score within a tier
         kv = summary.get('_krs')
+        if kv and k.get('t'):   # t = temperature x100 (KRS calibration baseline 2026-11-26: SSR-W over-confident, T=1.65)
+            T = k['t'] / 100.0
+            kv = {'tri': {c: f ** (1 / T) for c, f in kv['tri'].items()},
+                  'ex': {c: f ** (1 / T) for c, f in kv['ex'].items()},
+                  'ssr': {h: tuple(x ** (1 / T) for x in v) for h, v in kv['ssr'].items()}}
         mec = [(t['bet_type'], [int(x) for x in t['selection']], t.get('mec_tier')) for t in summary.get('signed_final_tickets') or []]
         if not kv or not mec:
             return base
