@@ -32,7 +32,7 @@ EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
 MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3', 'ITV', 'BWS', 'BWP', 'SHF', 'FRS',
-            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI', 'BMO', 'FAW', 'FWT', 'FLT']
+            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI', 'BMO', 'FAW', 'FWT', 'FLT', 'LCL']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
 DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
@@ -43,7 +43,8 @@ DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
                 'CLF': 0.0,   # B3 third part (組×着順), same rule
                 'DBI': 0.0,   # B3 fourth part (新馬の情報量区分), same rule
                 'BMO': 0.0,   # B3 fifth part (生まれ月×新馬戦/2歳戦, 2026-11-25 15), same rule
-                'FAW': 0.0, 'FWT': 0.0, 'FLT': 0.0}   # B3 sixth part (危険な人気馬の細目, 2026-11-25 18), same rule
+                'FAW': 0.0, 'FWT': 0.0, 'FLT': 0.0,   # B3 sixth part (危険な人気馬の細目, 2026-11-25 18), same rule
+                'LCL': 0.0}   # B3 seventh part (前走逃げ×同型の有無, 2026-11-26 12), same rule
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
@@ -210,6 +211,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
     _hh = {x['horse_no']: merged_history(hist.get(em.key(x.get('name'))) or [], card_history(x, day)) for x in runners}
     fshare, fdebut = b3i.field_info(sum(1 for v in _hh.values() if v), len(runners))
     fbws = [x.get('current_body_weight') for x in runners if x.get('current_body_weight')]
+    ffront = sum(1 for v in _hh.values() if b3i.is_front_type(v))
     for x in runners:
         hk = em.key(x.get('name'))
         hh = _hh[x['horse_no']]
@@ -222,6 +224,7 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                'special': hs.special_flag(v, race.get('race_name')), 'daybias': daybias,
                'sire': x.get('sire'), 'damsire': x.get('damsire'),
                'field_hist_share': fshare, 'field_has_debut': fdebut, 'field_bws': fbws,
+               'field_front_n': ffront,
                'shinba': '新馬' in str(race.get('race_name') or ''), 'birth': x.get('birth_date')}
         rows[x['horse_no']] = {'venue': v, 'band': em.dist_band(d), 'going': em.going_class(race.get('going')),
                                'distance': d, 'fband': em.field_band(field), 'sire': em.key(x.get('sire')),

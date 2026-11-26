@@ -387,3 +387,40 @@ def labels6(cur, hist):
     if rel:
         out.append(('FAVLIGHT', rel))
     return out
+
+
+# ---------------------------------------------------------------- B3 seventh part (pre-registered 2026-11-26 12時台)
+"""
+  LEADCLASH 前走で逃げた（初角先頭）馬の今回: 前走の着順 WON（1着＝楽逃げ圧勝の代わり）/ LOST
+            x 今回のメンバーに自分以外の「逃げ型」がいるか CLASH（1頭以上）/ ALONE。
+            逃げ型 = 前走の初角が先頭、または直近5走の初角平均が前1/4（2走以上）。
+            (Drive n7『楽逃げ圧勝→同型出現』、n78『前走逃げ→今回ハナを取れず番手』の着順：ハナを取れるかは事前に
+            分からないので、同型がいるかを事前の代わりにする。LEADX は同型の有無を見ていなかった)
+  未接続：同じ相手との比較（対戦表が要る）、斤量減の人気馬（ext_model の行に斤量が無い）
+"""
+PREREG7 = {'registered': '2026-11-26T12', 'bundle': 'B3', 'labels': ['LEADCLASH'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS7 = {'LEADCLASH': 'LCL'}
+
+
+def is_front_type(hist):
+    """hist oldest first (dicts with 'early'). True when the last start led at the first corner, or the
+    mean first-corner position of the last 5 starts (2+ known) is in the front quarter."""
+    if not hist:
+        return False
+    if hist[-1].get('early') is not None and hist[-1]['early'] <= 0.0:
+        return True
+    ear = [p['early'] for p in hist[-5:] if p.get('early') is not None]
+    return len(ear) >= 2 and sum(ear) / len(ear) <= 0.25
+
+
+def labels7(cur, hist):
+    """Seventh B3 part. cur['field_front_n']: 今回のメンバー（この馬を含む）の逃げ型の頭数. -> [(name, value)]"""
+    if not hist or hist[-1].get('early') is None or hist[-1]['early'] > 0.0:
+        return []
+    n = cur.get('field_front_n')
+    if n is None:
+        return []
+    others = max(0, int(n) - 1)   # this horse led last time, so it is itself counted as a front type
+    won = hist[-1].get('finish') == 1
+    return [('LEADCLASH', f"{'WON' if won else 'LOST'}|{'CLASH' if others >= 1 else 'ALONE'}")]
