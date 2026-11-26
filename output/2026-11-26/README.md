@@ -17,15 +17,15 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:00:04 / 21:04:09 / 21:04:09 / 21:52:57 |
 | 最早発走 | 10:40 |
-| Provider要求 | 192回・待機5748秒 |
+| Provider要求 | 194回・待機5806秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想48Rのうち実行48R／525頭×29＝15225セル（期待値 15225）：CALCULATED 13337・RULED-NEUTRAL 1888・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 15225／。KRS実試行 0（外部Engine未呼出）。
+予想48Rのうち実行48R／525頭×29＝15225セル（期待値 15225）：CALCULATED 13361・RULED-NEUTRAL 1864・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 15225／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較48R：◎一致 18/48・順位相関（Spearman平均）0.70。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較48R：◎一致 19/48・順位相関（Spearman平均）0.70。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）
 
@@ -82,7 +82,7 @@
 | [9R](NGY_09.md) | 19:05 | POSTRESULT_DIAGNOSTIC | 直前版 | 18:20 | 18:20 | ◎4 ヤングゼネラル | 単勝 4<br>馬単 4→6,2 | 4-11-6 払戻160円 |
 | [10R](NGY_10.md) | 19:40 | POSTRESULT_DIAGNOSTIC | 直前版 | 18:55 | 18:55 | ◎12 ヴェッツラー | ワイド 12-4 / 12-2<br>三連複 3-4-6 / 4-6-12 / 3-4-12 / 4-7-12 / 4-5-12 | 5-4-6 払戻0円 |
 | [11R](NGY_11.md) | 20:15 | PRESTART_PUSH_VERIFIED | 直前版 | 19:30 | 19:30 | ◎7 ニューハーピー | ワイド 7-6 / 7-2<br>三連複 6-7-11 / 5-6-7 / 6-7-8 / 6-7-9 / 2-6-7 |  |
-| [12R](NGY_12.md) | 20:50 | PRESTART_PUSH_VERIFIED | 朝版 | 21:52 | 21:52 | ◎11 フェリスナビダ | ワイド 11-5 / 11-1<br>三連複 5-10-11 / 5-8-11 / 1-5-11 / 8-10-11 / 1-10-11 |  |
+| [12R](NGY_12.md) | 20:50 | PREDICTION_COMPLETE | 直前版 | 20:05 | 20:05 | ◎11 フェリスナビダ | ワイド 11-5 / 11-6<br>三連複 5-8-11 / 5-10-11 / 3-5-11 / 4-5-11 / 5-6-11 |  |
 
 ## 園田
 
