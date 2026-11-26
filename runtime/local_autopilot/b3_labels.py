@@ -541,3 +541,50 @@ def add_returns(table, rows, names=None):
         d['win_ret'] = round(w / n, 1) if n else None
         d['place_ret'] = round(p / n, 1) if n else None
     return table
+
+
+# ---------------------------------------------------------------- B3 tenth part (pre-registered 2026-11-26T21)
+"""
+  FAVJRADIRT 1・2番人気の中央（JRA）時代のダート経験（n79「中央でダート経験なし」の残り）。
+          楽天カードの近走欄に JRA 10場の出走が1つ以上ある馬だけ：JRA でのダート出走が NODIRT（0回、すべて芝）/
+          DIRT（1回以上）/ UNKNOWN（距離欄が読めず芝ダが不明）。地方での出走が今回の前に無ければ FIRSTNAR、あれば SEENNAR。値 = '<ダ>|<地方>|<人気>'。
+          近走欄（レース前に分かる値）だけから取る。NAR CSV の履歴には中央の出走が無いため、ext_model._rows
+          （過去の EXT 表）ではこのラベルは付かず、当日の race_ext で候補ラベルとして記録されるだけになる
+          （表の実測は当日記録の蓄積待ち。重みは 0 のまま、保留期間つき再推定でのみ採用されうる）。
+          (Drive: (8)【地方競馬】ちょっと待て 怪しくないか？中央馬、n79。FAVLIGHT・FAVSLOW で他の細目は接続済み)
+"""
+PREREG10 = {'registered': '2026-11-26T21', 'bundle': 'B3', 'labels': ['FAVJRADIRT'],
+            'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS10 = {'FAVJRADIRT': 'FJD'}
+JRA_VENUES = ('札幌', '函館', '福島', '新潟', '東京', '中山', '中京', '京都', '阪神', '小倉')
+
+
+def jra_starts(starts, race_day=None):
+    """Card starts (rakuten.parse 'starts': venue, date 'YY.MM.DD', surface) -> [(iso_date, surface)] at JRA venues,
+    strictly before race_day."""
+    out = []
+    for s in starts or []:
+        v = str(s.get('venue') or '')
+        if not any(j in v for j in JRA_VENUES):
+            continue
+        try:
+            y, m_, d = str(s.get('date')).split('.')
+            dt = f'{2000 + int(y):04d}-{int(m_):02d}-{int(d):02d}'
+        except (ValueError, AttributeError):
+            continue
+        if race_day and dt >= race_day:
+            continue
+        # rakuten.parse defaults surface to 'DIRT' before the distance line is read: trust it only with a distance
+        out.append((dt, s.get('surface') if s.get('distance') else None))
+    return out
+
+
+def labels10(cur, hist):
+    """Tenth B3 part. cur['jra_starts'] = jra_starts(card starts, day); hist = pre-race local history."""
+    pop, js = cur.get('pop'), cur.get('jra_starts')
+    if not pop or pop > 2 or not js:
+        return []
+    known = [s for _, s in js if s]
+    d = 'UNKNOWN' if not known else 'DIRT' if 'DIRT' in known else 'NODIRT'
+    n = 'SEENNAR' if hist else 'FIRSTNAR'
+    return [('FAVJRADIRT', f'{d}|{n}|{pop}')]

@@ -199,6 +199,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels9(cur, hist)  # B3 ninth part (2026-11-26 18): FAVLOAD（上位人気×斤量の前走差）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels10(cur, hist)  # B3 tenth part (2026-11-26 21): FAVJRADIRT（上位人気×中央でのダート経験）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -232,7 +236,7 @@ CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
                    'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO',
                    'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT', 'LEADCLASH': 'LCL', 'FAVH2H': 'FH2',
-                   'FAVLOAD': 'FLD'}
+                   'FAVLOAD': 'FLD', 'FAVJRADIRT': 'FJD'}
 
 
 def labels(cur, hist):
