@@ -265,6 +265,10 @@ def step(root, log=lambda *a: None):
         reg['kcp'] = {'at': _now(), 'rule': KCP, 'component_auc': kcp_table(revs)}
         import review as _rv
         reg['kiep'] = {'at': _now(), **_rv.kiep_summary(revs)}
+        import intel
+        reg['kdp_ksp_kap'] = {'at': _now(), 'structure': intel.structure_summary(revs), 'risk': intel.risk_summary(revs),
+                              'drift': intel.drift_summary(revs),
+                              'rules': {'structure': intel.STRUCTURE, 'risk': intel.RISK, 'drift': intel.DRIFT}}
     except Exception as e:                                        # 較正の集計は本処理を止めない
         reg['kcp'] = {'at': _now(), 'error': f'{type(e).__name__}:{str(e)[:120]}'}
     # KIEP-BAN P0: Formula Ledger を毎晩書き、算式の SHA が変わった日を履歴に残す
@@ -322,6 +326,30 @@ def _status_md(root, reg, table):
         rp = kp.get('redundant_pairs') or {}
         L += ['', f"- 重複（平均順位相関 |0.6| 以上）: {('、'.join(f'{p} {r}' for p, r in rp.items())) or 'なし'}",
               f"- 情報源の取得率: {('、'.join(f'{f} {r}' for f, r in (kp.get('feed_rate') or {}).items())) or '—'}"]
+    x = reg.get('kdp_ksp_kap') or {}
+    if x:
+        L += ['', '## KDP・KSP・KAP（毎晩更新、証拠のみ）', '']
+        st = x.get('structure') or {}
+        if st:
+            nm = {'ONE': '一強', 'TWO': '二強', 'THREE': '三強', 'MIXED': '混戦'}
+            L += ['KDP レースの型（1着の点の上位差 4 以上で区切る、11/26 事前固定）', '',
+                  '| 型 | R | 勝ち馬W内 | ◎1着 | 三連複 | 三連単 | 回収率 |', '|---|---|---|---|---|---|---|']
+            L += [f"| {nm.get(k, k)} | {d['races']} | {d['winner_in_W']} | {d['honmei_win']} | {d['trio_hit']} | {d['exact_hit']} | {d['pfs']}% |"
+                  for k, d in sorted(st.items())]
+        r = x.get('risk') or {}
+        if r:
+            L += ['', f"KSP 仮想精算（{r['races']}R・{r['days']}開催日）: 回収率 {r['pfs']}%（最高1本除く {r['pfs_ex_top1']}%・3本除く {r['pfs_ex_top3']}%）、"
+                  f"純損益 {r['net']:,}円、最大ドローダウン {r['max_drawdown']:,}円（{r['max_drawdown_races']}R）、連続不的中 最長 {r['longest_losing_streak']}R、"
+                  f"的中赤字 {r['hit_but_loss']}/{r['hit_races']}R"]
+            if 'var' in r:
+                L += [f"- {r['note']}：仮想資金 {r['bankroll']:,}円で {r['boot_horizon_days']}開催日 → 損益の中央値 {r['median_net']:,}円、"
+                      f"5% VaR {r['var']:,}円、CVaR {r['cvar']:,}円、途中で資金が尽きる割合 {r['ruin_rate']}"]
+        d = x.get('drift') or {}
+        if d:
+            fl = '、'.join(f"{f['kind']}:{f['what']} {f['prior']}→{f['recent']}" for f in d.get('flags') or []) or 'なし'
+            L += ['', f"KAP 環境変化の検知: {d['status']}"
+                  + (f"（直近{d['recent_races']}R 対 それ以前{d['prior_races']}R、回収率 {d['pfs_prior']}%→{d['pfs_recent']}%、検知: {fl}）"
+                     if d['status'] != 'WAITING' else f"（{d['races']}/{d['need']}R、窓がたまるまで待機）")]
     fh = reg.get('formula_history') or []
     if fh:
         L += [f"- 算式の版（formula_ledger.json）: {fh[-1]['formula_sha'][:12]}（{fh[-1]['at'][:10]} から、記録 {len(fh)} 版）"]

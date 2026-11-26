@@ -47,3 +47,9 @@
 - 既存の仕組みとの対応: KIEP-02/04（変換・閾値・係数）＝registry の近傍候補（BANDS・SCORE・BSI_W・SBO_SHARE・CUTS）と候補キュー、KIEP-03/04（成分の除去）＝KCP_ABLATE_*、KIEP-06（総合）＝SCORE・MARKET_FREE・EXACT_* の影、KIEP-08（採否）＝registry.PROMOTE（自動昇格・戻す・引退）。KRS は v4.0 に無いので KCP×KIEP の4系列比較は指数のみ（B0＝本番、C1＝影の候補）
 - 11/21〜23 の33R（参考値）: 単調なのは tpi・win_score・place_score・bta・cci・人気。単調でないのは mpa・brs・wda・front_bonus・lis。重複（|0.6| 以上）はなし（bsi は公開記録に無く、次の開催日から Mac の非公開キャッシュで測る）。情報源の取得率はキンタロー・水分ボンバー・競馬ブックとも 100%
 - 取得元の無いもの（発走後の位置・障害失敗・停止回数）は UNKNOWN。平地の係数は使わない。確率・EV は出さない
+
+## 2026-11-26 KDP・KSP・KAP（ChatGPT「五大知能計画」のばんえい分）を永続運用に（Owner 22:03「永続的に実施」、対象はばんえい版と確認）
+- 既存で足りているもの: KDP-01 不確実性＝DCR・info_coverage（情報量別の成績）・C0-INFO・top2_gap、KDP-03 市場＝NOMKT/MKT30/MKT50 の影・market_drift・人気の AUC、KDP-04 条件付き役割＝failure_chain（HEAD-P2/PAIR-P3）・EXACT_BY_W/2HEAD/UNIV の影、KDP-05 変換＝funnel・compression_loss・axis_dependency、KSP-03 方式比較＝同じレース・同じ30点の影の候補、KAP-01 反実仮想＝層ごとの影（patch＝指数、tpatch＝券面、cuts＝変換、nopos）を発走前に凍結して比較、KAP-04 知識→実装＝drive_reading/ban_connect.md、KAP-05 研究の管理＝registry（重複は登録しない・引退も保存）、KAP-06 独立監査＝Drive の全レース記録 JSON（ChatGPT が再計算できる）
+- 新しく足したもの（intel.py、毎晩 improvement_status.md に表）: KDP-02 レースの型（1着の点の上位差 4 以上で一強・二強・三強・混戦、事前固定）、KSP 仮想精算のリスク（最大ドローダウン・期間・連続不的中・的中赤字率・最高1本/3本を除く回収率・開催日単位のブロック・ブートストラップによる VaR/CVaR と仮想資金10万円の枯渇率、30開催日・種固定）、KAP-03 環境変化の検知（直近36R とそれ以前で成分の識別力 ±0.08・欠損率/情報源の取得率 ±0.15、72R から開始）
+- 11/21〜23 の33R（参考値）: 一強13R は回収率170.2%・三連複8的中、混戦8R 61.8%、二強6R 60.2%、三強6R 0%。回収率92.4%（最高1本除く53.5%）、最大ドローダウン30,840円、連続不的中 最長8R、的中赤字 6/12R。3開催日しかないので仮想の枯渇率（54%）は目安にもならない
+- 変えないもの: 毎レース購入・30点・三連複/三連単・確率/EV を出さない。KRS は v4.0 に無いので KRS 依存の比較は行わない。取得元の無い障害失敗・停止回数は UNKNOWN

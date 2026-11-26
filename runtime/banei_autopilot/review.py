@@ -359,6 +359,7 @@ def race_review(out, key, r):
             'component_health': component_health(_full_rows(out, key, eff, ev['rows']), res['order']),
             'component_corr': component_corr(_full_rows(out, key, eff, ev['rows'])),
             'feeds_present': rec.get('feeds_present'),
+            'structure': __import__('intel').race_structure(ev['rows']),
             'honmei': ev.get('honmei'), 'honmei_pop': (rows.get(str(ev.get('honmei'))) or {}).get('pop'),
             'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
