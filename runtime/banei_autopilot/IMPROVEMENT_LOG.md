@@ -35,3 +35,8 @@
 - B項目と現在の成分: B-01 重量＝wda・load／B-02 馬体重＝bwl・body_delta_pct／B-03 水分＝SBO・moisture・ADF（DRYのみ）／B-05・B-08 障害＝bta（キンタロー障害区間秒）／B-06・B-10 障害前後＝fades_after_barrier・front_type（キンタロー区間秒）／B-12 騎手＝jbr・jockey_changed_from（11/23〜）。B-04 発走後の位置・B-09 障害失敗・B-11 停止回数は取得元が無い（UNKNOWN、推定で埋めない）。
 - CAL-01 の基準値（Baseline Error Report、11/21〜23 の33R、結果を知った上の集計＝参考値）: 3着内 AUC／1着 AUC は place_score 0.646/0.691、win_score 0.639/0.705、tpi 0.637/0.692、bta 0.598/0.621、cci 0.544/0.537、jbr 0.533/0.504、brs 0.521/0.564、mpa 0.483/0.491、front_bonus 0.481/0.552、wda 0.475/0.545。人気（市場）は 0.660/0.726 で、合成の指数より少し高い。bsi・idx・isv は公開記録から外しているため、Mac の非公開キャッシュを読む次の開催日の反省から測る。
 - 仮説: 斤量（wda）・先行（front_bonus）・位置（mpa）は単独では識別力が無い（0.5 前後）。合成で効いているのは TPI の土台（BSI と思われる）と障害（bta）。検証方法: 成分の AUC を毎日の要約に出し、100R で 0.55 未満の成分は影の候補（その成分の重みを0にする）で比べる。状態: 記録開始
+
+## 2026-11-26 KCP-BAN を永続運用に（Owner 21:25「KCP は永続的に実施」）
+- 毎レース：review.component_auc で成分ごとの識別力（3着内/1着 AUC、人気の基準線つき）を記録（PR #501）
+- 毎晩：registry.step が全期間の AUC を集計して improvement_status.md の「KCP-BAN」表を更新。100R 以上で 3着内 AUC が 0.55 未満の成分は「重みを0」の影の候補 KCP_ABLATE_* を自動登録（同時に最大3本、engine.COMP_W、本番はすべて1.0で TPI 不変）。比較・昇格・戻す・引退はほかの候補と同じ PROMOTE 条件
+- 毎晩の反省タスク：KCP の表の動き（成分の AUC と人気との差）を報告し、この記録に月ごとの要約を残す

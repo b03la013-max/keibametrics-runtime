@@ -47,3 +47,18 @@ def test_add_rejects_duplicate_config():
     reg = registry.load('/nonexistent-dir-for-test')
     assert not registry.add(reg, 'DUP', 'x', {'patch': {'MARKET_W': 0.3}}, 'test')
     assert registry.add(reg, 'NEW', 'x', {'patch': {'MARKET_W': 0.45}}, 'test')
+
+
+def test_kcp_ablation_candidate_only_after_min_races():
+    import copy as _c
+    revs = [{'component_auc': {'wda': {'top3': 0.45, 'win': 0.5}, 'bta': {'top3': 0.7, 'win': 0.7}}}]
+    assert registry.kcp_candidates(revs * (registry.KCP['min_races'] - 1), {}) == {}
+    got = registry.kcp_candidates(revs * registry.KCP['min_races'], {})
+    assert set(got) == {'KCP_ABLATE_wda'}
+    cfg = got['KCP_ABLATE_wda'][1]['patch']['COMP_W']
+    assert cfg['wda'] == 0.0 and all(v == 1.0 for k, v in cfg.items() if k != 'wda')
+
+
+def test_comp_w_production_is_identity():
+    import engine
+    assert set(engine.COMP_W.values()) == {1.0}
