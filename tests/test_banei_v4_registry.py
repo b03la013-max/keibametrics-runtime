@@ -82,3 +82,20 @@ def test_kiep_health_and_redundancy():
     s = review.kiep_summary([{'component_health': h, 'component_corr': c, 'feeds_present': ['kintaro']}] * 5)
     assert s['components']['tpi']['monotonic'] is True and 'bta~pop' in s['redundant_pairs']
     assert s['feed_rate'] == {'kintaro': 1.0}
+
+
+def test_intel_structure_risk_drift():
+    import intel
+    rows = lambda g: [{'win_score': v} for v in g]
+    assert intel.race_structure(rows([20, 10, 9, 8])) == 'ONE'
+    assert intel.race_structure(rows([20, 19, 10, 9])) == 'TWO'
+    assert intel.race_structure(rows([20, 19, 18, 10])) == 'THREE'
+    assert intel.race_structure(rows([20, 19, 18, 17])) == 'MIXED'
+    assert intel.race_structure(rows([20, 19])) is None
+    revs = [{'day': f'2026-11-2{d}', 'key': f'{k:02d}', 'stake': 3000, 'return': (9000 if k == 1 else 0)}
+            for d in range(1, 5) for k in range(1, 4)]
+    r = intel.risk_summary(revs)
+    assert r['races'] == 12 and r['net'] == 4 * 9000 - 12 * 3000 and r['longest_losing_streak'] == 2
+    assert r['hit_but_loss'] == 0 and 'var' in r and 0 <= r['ruin_rate'] <= 1
+    assert intel.risk_summary(revs) == r                                 # 乱数の種を固定（毎晩同じ入力なら同じ結果）
+    assert intel.drift_summary(revs)['status'] == 'WAITING'
