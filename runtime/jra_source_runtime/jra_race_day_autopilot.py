@@ -1505,11 +1505,35 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
     return r.returncode==0
 
 
+def _rev2_shadow_check(root: Path, race_date: str, now=None) -> list:
+    """Refresh the official notices once when a FINAL race enters its T-12 window, then record Rev2."""
+    import sys as _sys
+    _sys.path.insert(0, str(root / 'runtime/analysis'))
+    import jra_rev2_shadow as R2
+    import jra_official_daily
+    now = now or _dt.datetime.now(JST)
+    due = []
+    for rid, post in R2.schedule(race_date).items():
+        try:
+            p = _dt.datetime.fromisoformat(post.replace('Z', '+00:00'))
+        except ValueError:
+            continue
+        if (p - _dt.timedelta(minutes=R2.WINDOW_MIN) <= now < p and (root/'runtime/final_artifacts'/f'{rid}.json').exists()
+                and not (root/'runtime/jra_rev2_shadow'/race_date/f'{rid}.json').exists()):
+            due.append(rid)
+    if not due:
+        return []
+    jra_official_daily.record(root, race_date, force=True)
+    return R2.check(race_date, now)
+
+
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
     if (root/'runtime/jra_official_daily'/f'{race_date}.json').exists():
         paths.append(f"runtime/jra_official_daily/{race_date}.json")
+    if (root/'runtime/jra_rev2_shadow'/race_date).is_dir():
+        paths.append(f"runtime/jra_rev2_shadow/{race_date}")
     plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
     if plan_path.exists():
         plan=json.loads(plan_path.read_text())
@@ -1717,6 +1741,10 @@ def main(argv=None):
                 jra_official_daily.record(root,a.date)
             except Exception as exc:  # noqa: BLE001 — never affects dispatch
                 print(json.dumps({"stage":"OFFICIAL_DAILY","error":str(exc)[:300]}),flush=True)
+            try:  # T-10 re-check, Revision 2 RECORD ONLY (Owner 2026-11-21 10:19); never affects dispatch
+                _rev2_shadow_check(root,a.date)
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"stage":"REV2_SHADOW","error":str(exc)[:300]}),flush=True)
         if (root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').exists():
             try:
                 _commit(root,a.date)
