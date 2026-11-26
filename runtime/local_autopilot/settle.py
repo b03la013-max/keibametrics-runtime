@@ -92,7 +92,12 @@ def parse_result(html):
             pays.setdefault(kind, {})[tuple(sorted(t)) if kind in UNORDERED else t] = y
     if len(order) < 3 or not pays:
         return None
-    return {'order': order, 'payouts': pays, 'non_starters': non_starters, 'did_not_finish': did_not_finish}
+    k = html.find('summary="コーナー通過順位"')   # passing order for the KRS stage check (2026-11-26)
+    cseg = html[k:html.find('</table>', k)] if k >= 0 else ''
+    corners = [[nfkc(a), nfkc(text(b))] for a, b in
+               re.findall(r'<th scope="row">(.*?)</th>\s*<td class="time">(.*?)</td>', cseg, re.S)]
+    return {'order': order, 'payouts': pays, 'non_starters': non_starters, 'did_not_finish': did_not_finish,
+            'corners': corners}
 
 
 def settle(html, prediction_path, settled_at=None):
@@ -147,7 +152,7 @@ def settle_parsed(res, pred, prediction_ref, settled_at=None):
             'ticket_sha256': pred.get('ticket_sha256'), 'prediction_saved_at': pred.get('saved_at'),
             'settled_at': settled_at, 'order': order,
             'non_starters': sorted(gone), 'non_starters_inferred': inferred, 'did_not_finish': res.get('did_not_finish', []),
-            'non_starters_pre_freeze': res.get('non_starters_pre_freeze', []),
+            'non_starters_pre_freeze': res.get('non_starters_pre_freeze', []), 'corners': res.get('corners', []),
             'payouts': {k: {'-'.join(map(str, c)): v for c, v in d.items()} for k, d in res['payouts'].items()},
             'winner_hit': rank[0] == order[0], 'win_hit': int(rank[0] == order[0]),
             'top_in3': int(rank[0] in top3), 'top3_capture': len(top3 & set(rank[:3])),

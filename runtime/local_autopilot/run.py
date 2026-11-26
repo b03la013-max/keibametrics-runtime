@@ -624,6 +624,16 @@ def auto_promotion_daily(q, out):
                 _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': ih})
     except Exception as exc:
         log('INDEX_HEALTH_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    try:   # weekly KRS calibration baseline (measurement only; Owner 2026-11-26 19:53)
+        from runtime.local_autopilot import krs_calib
+        kc = krs_calib.weekly(ROOT, out.name)
+        if kc:
+            log('KRS_CALIB', out.name)
+            issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+            if issue:
+                _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': kc})
+    except Exception as exc:
+        log('KRS_CALIB_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
     (rv / 'auto_promotion.md').write_text(text)
     log('AUTO_PROMOTION', rec['action'], rec.get('candidate'), rec.get('effective_from'))
     if rec['action'] in ('PROMOTE', 'DEMOTE'):
