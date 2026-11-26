@@ -23,3 +23,12 @@ def test_drift_flags_low_week():
                      'rank': [1, 2, 3, 4, 5, 6], 'order': [1, 2, 3, 4, 5, 6] if good else [6, 5, 4, 3, 2, 1]})
     d = five.drift(rows)
     assert d['ALL']['weeks']['2026-W48']['flag'] is True and d['ALL']['weeks']['2026-W47']['flag'] is False
+
+
+def test_budget_half_keeps_priority_order():
+    from runtime.local_autopilot import budget_series as b
+    tk = [{'bet_type': 'TRIO', 'selection': [5, 6, 7], 'mec_tier': 'TAIL'}] + \
+         [{'bet_type': 'EXACTA', 'selection': [1, i], 'mec_tier': 'CORE'} for i in range(2, 40)]
+    h = b._half(tk, list(range(1, 40)))
+    assert len(h) == 30 and all(t['mec_tier'] == 'CORE' for t in h) and h[0]['selection'] == [1, 2]
+    assert b.FIRST == '2026-11-27' and b.GAP > 0

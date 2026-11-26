@@ -226,6 +226,11 @@ def evaluate(root):
         rep['ksp_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
     rep['kdp_uncertainty'] = kdp(rows)
     rep['kap_drift'] = drift(rows)
+    try:   # KSP-03 budget-changing research series (Owner 2026-11-26 22:31)
+        from runtime.local_autopilot import budget_series
+        rep['budget_series'] = budget_series.report(root)
+    except Exception as exc:
+        rep['budget_series_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
     return rep
 
 
@@ -257,6 +262,9 @@ def md(rep):
         L.append(f"- {'全場' if v == 'ALL' else VENUE_JA.get(v, v)}：長期 {x['long_run']}／" +
                  '、'.join(f"{w} {y['auc_top3']}（{y['races']}R）" for w, y in wk.items()) +
                  (f" → **低下の兆候 {'・'.join(flags)}**（研究のきっかけ。係数は変えない）" if flags else ''))
+    if rep.get('budget_series'):
+        from runtime.local_autopilot import budget_series
+        L.append(budget_series.md(rep['budget_series']))
     return '\n'.join(L) + '\n'
 
 
