@@ -191,6 +191,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels7(cur, hist)  # B3 seventh part (2026-11-26 12): LEADCLASH（前走逃げ×同型の有無）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels8(cur, hist)  # B3 eighth part (2026-11-26 15): FAVH2H（上位人気×同じ相手との比較）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -223,7 +227,7 @@ def _kame3(cur, hist):
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
                    'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO',
-                   'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT', 'LEADCLASH': 'LCL'}
+                   'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT', 'LEADCLASH': 'LCL', 'FAVH2H': 'FH2'}
 
 
 def labels(cur, hist):
@@ -369,6 +373,8 @@ def _rows(races, std=None):
                 cur = dict(cur0, age=x.get('age'), sex=x.get('sex'), pop=x['pop'], frame_no=x.get('frame'), bw=x.get('bw'),
                            jockey=x.get('jockey'), sire=x.get('sire'), damsire=x.get('damsire'),
                            birth=x.get('birth') or x.get('horse_key'))
+                if x['pop'] <= 2:   # B3 FAVH2H: same-opponent comparison from pre-race histories only
+                    cur['h2h'] = b3i.h2h(prev, [hist.get(o) for o in _ran if o != hk])
                 rr.append({'race_id': race['race_id'], 'date': race['date'], 'venue': race['venue'],
                            'distance': race.get('distance'), 'band': dist_band(race.get('distance')), 'going': g,
                            'fband': field_band(field), 'pop': x['pop'], 'top3': bool(x.get('finish') and x['finish'] <= 3),

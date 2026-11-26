@@ -424,3 +424,50 @@ def labels7(cur, hist):
     others = max(0, int(n) - 1)   # this horse led last time, so it is itself counted as a front type
     won = hist[-1].get('finish') == 1
     return [('LEADCLASH', f"{'WON' if won else 'LOST'}|{'CLASH' if others >= 1 else 'ALONE'}")]
+
+
+# ---------------------------------------------------------------- B3 eighth part (pre-registered 2026-11-26T15)
+"""
+  FAVH2H  上位人気（1・2番人気）の「同じ相手との比較」: 今回のメンバーのうち過去に同じレースで走った相手について、
+          いちばん最近の対戦で先着されたか。NOMEET（対戦なし）/ BEATALL（対戦した相手には全部先着）/
+          LOST1（1頭に先着された）/ LOST2+（2頭以上）。
+          同じレースの判定は (日付, 場, 距離, 頭数) の一致（NAR の行と楽天の近5走で共通に持つ列。race_id を持たない
+          近5走でも同じ物差しにするため。同じ日・場・距離・頭数の別レースは稀で、誤一致は残る前提）。
+          (Drive n7『地方競馬版・危険な1番人気の見抜き方』の残り『同じ相手との比較』。主張・未検証。
+           勝ちと負けの数や着差は使わない：事前に固定できる最小の区分にとどめる)
+"""
+PREREG8 = {'registered': '2026-11-26T15', 'bundle': 'B3', 'labels': ['FAVH2H'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS8 = {'FAVH2H': 'FH2'}
+
+
+def meet_key(p):
+    if not p or not p.get('date') or not p.get('venue') or not p.get('distance') or not p.get('field'):
+        return None
+    return (str(p['date']), p['venue'], p['distance'], p['field'])
+
+
+def h2h(own, opps):
+    """own: this horse's history (oldest first); opps: the other runners' histories.
+    -> (met, beaten_by) where beaten_by counts opponents that finished ahead in the most recent common race."""
+    mine = [(meet_key(p), p.get('finish')) for p in reversed(own or []) if p.get('finish')]
+    met = beaten = 0
+    for oh in opps or []:
+        theirs = {meet_key(p): p.get('finish') for p in (oh or []) if p.get('finish')}
+        theirs.pop(None, None)
+        for k, f in mine:
+            if k is not None and k in theirs:
+                met += 1
+                beaten += 1 if theirs[k] < f else 0
+                break
+    return met, beaten
+
+
+def labels8(cur, hist):
+    """Eighth B3 part. cur['h2h'] = (met, beaten_by) against today's field, counted from pre-race histories."""
+    pop, hh = cur.get('pop'), cur.get('h2h')
+    if not pop or pop > 2 or not hh:
+        return []
+    met, beaten = hh
+    v = 'NOMEET' if not met else 'BEATALL' if not beaten else 'LOST1' if beaten == 1 else 'LOST2+'
+    return [('FAVH2H', v)]
