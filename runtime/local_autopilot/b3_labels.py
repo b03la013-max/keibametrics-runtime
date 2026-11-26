@@ -471,3 +471,73 @@ def labels8(cur, hist):
     met, beaten = hh
     v = 'NOMEET' if not met else 'BEATALL' if not beaten else 'LOST1' if beaten == 1 else 'LOST2+'
     return [('FAVH2H', v)]
+
+
+# ---------------------------------------------------------------- B3 ninth part (pre-registered 2026-11-26T18)
+"""
+  FAVLOAD 1・2番人気の斤量の前走差（n80「斤量減の人気馬」）：今回の負担重量 − 前走の負担重量。
+          DEC（−1.0kg 以下）/ SAME（−1.0〜+1.0 の間）/ INC（+1.0kg 以上）/ NOPREV（前走の斤量が無い）。値 = '<帯>|<人気>'。
+          前走の斤量は NAR CSV の負担重量と楽天カードの近走欄（騎手名の後ろの斤量）だけから取る（レース前に分かる値）。
+          (Drive: ちょっと待て 怪しくないか？人気ウマ、n80。FAVRST で短期休み明けは接続済み、斤量減は前走値が履歴に無く未着手だった)
+  人気帯別の回収（label_pop_table の win_ret / place_ret）：払戻のあるレースだけで、候補ラベルの値×人気帯ごとに
+          100円あたりの単勝・複勝の平均払戻を出す（n259「勝率が高い≠回収率が高い」の残り）。払戻は結果側の値で、
+          特徴には使わず表だけに出す。証拠のみ、正式券面・重みは不変。
+"""
+PREREG9 = {'registered': '2026-11-26T18', 'bundle': 'B3', 'labels': ['FAVLOAD'],
+           'rule': 'weight 0.0; adopted only via ext_model.fit_weights hold-out improvement (no manual weights)'}
+COMPONENTS9 = {'FAVLOAD': 'FLD'}
+
+
+def load_of(v):
+    """'56.0' / '▲54' / 54 -> float, else None."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if 30 <= v <= 70 else None
+    m = _re.search(r'(\d{2}(?:\.\d)?)', str(v))
+    x = float(m[1]) if m else None
+    return x if x is not None and 30 <= x <= 70 else None
+
+
+def load_band(now, prev):
+    if now is None:
+        return None
+    if prev is None:
+        return 'NOPREV'
+    d = round(now - prev, 1)
+    return 'DEC' if d <= -1.0 else 'INC' if d >= 1.0 else 'SAME'
+
+
+def labels9(cur, hist):
+    """Ninth B3 part. cur['load'] = today's 負担重量; hist[-1]['load'] = the previous start's (pre-race histories only)."""
+    pop = cur.get('pop')
+    if not pop or pop > 2:
+        return []
+    prev = load_of(hist[-1].get('load')) if hist else None
+    b = load_band(load_of(cur.get('load')), prev)
+    return [('FAVLOAD', f'{b}|{pop}')] if b else []
+
+
+def add_returns(table, rows, names=None):
+    """n259 remainder: add win_ret / place_ret (average payout per 100 yen) to label_pop_table() output, using only rows
+    whose race had payouts (r['pay_known']). Evidence only."""
+    acc = {}
+    for r in rows:
+        if not r.get('pay_known'):
+            continue
+        pb = pop_band(r.get('pop'))
+        if pb is None:
+            continue
+        for name, val in r.get('cand_labels') or []:
+            if names and name not in names:
+                continue
+            d = acc.setdefault((f'{name}={val}', pb), [0, 0, 0])
+            d[0] += 1
+            d[1] += r.get('pay_win') or 0
+            d[2] += r.get('pay_place') or 0
+    for (lv, pb), (n, w, p) in acc.items():
+        d = table.setdefault(lv, {}).setdefault(pb, {'n': 0, 'top3': 0, 'exp': 0.0, 'ae': None})
+        d['n_pay'] = n
+        d['win_ret'] = round(w / n, 1) if n else None
+        d['place_ret'] = round(p / n, 1) if n else None
+    return table

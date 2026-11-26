@@ -240,6 +240,7 @@ def parse_start(td):
         m = re.fullmatch(r'[☆▲△◇★]?(\S+?)\s+(\d{2}\.\d)', ln)
         if m and out['ride_jockey'] is None and out['distance']:
             out['ride_jockey'] = m[1]
+            out['ride_load'] = float(m[2])   # 近走欄の斤量（B3 FAVLOAD 2026-11-26、新しいキーの追加のみ）
             continue
         m = re.search(r'((?:\d+:)?\d{2}\.\d)\s*\((-?\d+\.\d)\)', ln)
         if m:

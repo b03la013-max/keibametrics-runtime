@@ -32,7 +32,7 @@ EXT_SHARE = 0.30
 NEUTRAL = 52.0
 FIXED_W = {'VMI': 0.25, 'TMI': 0.06, 'KBA': 0.06, 'PACE': 0.03}
 MEASURED = ['JKY', 'FRM', 'HRS', 'PAT', 'SPD', 'KM3', 'ITV', 'BWS', 'BWP', 'SHF', 'FRS',
-            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI', 'BMO', 'FAW', 'FWT', 'FLT', 'LCL', 'FH2']
+            'LDX', 'SSX', 'RS2', 'FSL', 'DBX', 'CLF', 'DBI', 'BMO', 'FAW', 'FWT', 'FLT', 'LCL', 'FH2', 'FLD']
 # first fit 2026-11-21 (tables < 2026-08-09, fit 08-09..10-03, hold-out 10-04..10-31 log-loss 0.45268 market ->
 # 0.44788); refit weekly by ensure(refit=True)
 DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
@@ -45,7 +45,8 @@ DEFAULT_BETA = {'JKY': 0.35, 'FRM': 0.3, 'HRS': 0.0, 'PAT': 0.3, 'SPD': 0.8,
                 'BMO': 0.0,   # B3 fifth part (生まれ月×新馬戦/2歳戦, 2026-11-25 15), same rule
                 'FAW': 0.0, 'FWT': 0.0, 'FLT': 0.0,   # B3 sixth part (危険な人気馬の細目, 2026-11-25 18), same rule
                 'LCL': 0.0,   # B3 seventh part (前走逃げ×同型の有無, 2026-11-26 12), same rule
-                'FH2': 0.0}   # B3 eighth part (上位人気×同じ相手との比較, 2026-11-26 15), same rule
+                'FH2': 0.0,   # B3 eighth part (上位人気×同じ相手との比較, 2026-11-26 15), same rule
+                'FLD': 0.0}   # B3 ninth part (上位人気×斤量の前走差, 2026-11-26 18), same rule
 SPD_WITH_SBO = 0.5          # 水分ボンバー present: the own speed figure counts half (same past races, 条項 6.1)
 FIT_NAMES = list(MEASURED)
 REFIT_DAYS = 7
@@ -153,7 +154,8 @@ def card_history(r, race_day):
                     'early': (pos[0] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
                     'late': (pos[-1] - 1) / (fs - 1) if pos and fs and fs > 1 else None,
                     'cls': em.class_code(s.get('race_name')), 'lvl': em._lvl(s.get('race_name')), 'jockey': s.get('ride_jockey'),
-                    'field': fs, 'pos': pos[0] if pos else None, 'bw': s.get('ride_body_weight')})
+                    'field': fs, 'pos': pos[0] if pos else None, 'bw': s.get('ride_body_weight'),
+                    'load': s.get('ride_load')})
     return sorted(out, key=lambda x: x['date'])
 
 
@@ -226,7 +228,8 @@ def race_ext(race, runners, day, sbo_table=None, kb=None, daybias=None, weather=
                'sire': x.get('sire'), 'damsire': x.get('damsire'),
                'field_hist_share': fshare, 'field_has_debut': fdebut, 'field_bws': fbws,
                'field_front_n': ffront,
-               'shinba': '新馬' in str(race.get('race_name') or ''), 'birth': x.get('birth_date')}
+               'shinba': '新馬' in str(race.get('race_name') or ''), 'birth': x.get('birth_date'),
+               'load': x.get('current_load')}
         if pop and pop <= 2:   # B3 FAVH2H (2026-11-26 15): same-opponent comparison, same rule as ext_model._rows
             cur['h2h'] = b3i.h2h(hh, [v_ for n_, v_ in _hh.items() if n_ != x['horse_no']])
         rows[x['horse_no']] = {'venue': v, 'band': em.dist_band(d), 'going': em.going_class(race.get('going')),

@@ -195,6 +195,10 @@ def cand_labels(cur, hist):
         extra = extra + b3.labels8(cur, hist)  # B3 eighth part (2026-11-26 15): FAVH2H（上位人気×同じ相手との比較）
     except Exception:
         pass
+    try:
+        extra = extra + b3.labels9(cur, hist)  # B3 ninth part (2026-11-26 18): FAVLOAD（上位人気×斤量の前走差）
+    except Exception:
+        pass
     return _kame3(cur, hist) + extra
 
 
@@ -227,7 +231,8 @@ def _kame3(cur, hist):
 CAND_COMPONENTS = {'KAME3': 'KM3', 'INTV': 'ITV', 'BWSZ': 'BWS', 'BWPCT': 'BWP', 'SHFR': 'SHF', 'FAVRST': 'FRS',
                    'LEADX': 'LDX', 'SEASEX': 'SSX', 'REST2': 'RS2', 'FAVSLOW': 'FSL', 'DEBUTX': 'DBX',
                    'CLSFIN': 'CLF', 'DEBINF': 'DBI', 'BMONTH': 'BMO',
-                   'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT', 'LEADCLASH': 'LCL', 'FAVH2H': 'FH2'}
+                   'FAVAWAY': 'FAW', 'FAVWET': 'FWT', 'FAVLIGHT': 'FLT', 'LEADCLASH': 'LCL', 'FAVH2H': 'FH2',
+                   'FAVLOAD': 'FLD'}
 
 
 def labels(cur, hist):
@@ -372,7 +377,7 @@ def _rows(races, std=None):
             if x['status'] == 'RAN' and x.get('pop'):
                 cur = dict(cur0, age=x.get('age'), sex=x.get('sex'), pop=x['pop'], frame_no=x.get('frame'), bw=x.get('bw'),
                            jockey=x.get('jockey'), sire=x.get('sire'), damsire=x.get('damsire'),
-                           birth=x.get('birth') or x.get('horse_key'))
+                           birth=x.get('birth') or x.get('horse_key'), load=x.get('load'))
                 if x['pop'] <= 2:   # B3 FAVH2H: same-opponent comparison from pre-race histories only
                     cur['h2h'] = b3i.h2h(prev, [hist.get(o) for o in _ran if o != hk])
                 rr.append({'race_id': race['race_id'], 'date': race['date'], 'venue': race['venue'],
@@ -382,12 +387,16 @@ def _rows(races, std=None):
                            'trainer': key(x.get('trainer')), 'frame': frame_band(x.get('frame')), 'horse': hk,
                            'sex': x.get('sex'), 'age': x.get('age'), 'bwchg': chg_band(x.get('bw_chg')),
                            'season': season(race['date']), 'spd': spd_of(prev), 'labels': labels(cur, prev),
-                           'cand_labels': cand_labels(cur, prev), 'style': style(prev), 'early_now': early})
+                           'cand_labels': cand_labels(cur, prev), 'style': style(prev), 'early_now': early,
+                           # result-side payouts, evaluation tables only (B3 n259 label_pop_table returns), never features
+                           'pay_known': bool((race.get('payouts') or {}).get('WIN')),
+                           'pay_win': ((race.get('payouts') or {}).get('WIN') or {}).get(str(x['no'])) or 0,
+                           'pay_place': ((race.get('payouts') or {}).get('PLACE') or {}).get(str(x['no'])) or 0})
             done.append((hk, {'date': race['date'], 'venue': race['venue'], 'distance': race.get('distance'),
                               'finish': x.get('finish'), 'early': early, 'late': late, 'cls': cur0['cls'], 'lvl': cur0['lvl'],
                               'jockey': x.get('jockey'), 'fig': None if fig is None else round(fig, 1),
                               'f3best': (None if best3 is None or hs._f3(x.get('last3f')) is None else hs._f3(x.get('last3f')) == best3),
-                              'field': field, 'pos': fc, 'bw': x.get('bw')}))
+                              'field': field, 'pos': fc, 'bw': x.get('bw'), 'load': x.get('load')}))
         sp = [r['spd'] for r in rr if r['spd'] is not None]
         mu = sum(sp) / len(sp) if len(sp) >= 2 else None
         for r in rr:
