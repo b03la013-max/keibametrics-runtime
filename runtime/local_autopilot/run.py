@@ -624,6 +624,12 @@ def auto_promotion_daily(q, out):
                 _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': ih})
     except Exception as exc:
         log('INDEX_HEALTH_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    try:   # KCP research re-runs of the day's settled races (non-production; Owner 2026-11-26 21:35)
+        from runtime.local_autopilot import krs_research
+        if os.environ.get('KM_LOCAL_KRS_RESEARCH', '1') != '0':
+            log('KRS_RESEARCH', out.name, krs_research.nightly(ROOT, out.name))
+    except Exception as exc:
+        log('KRS_RESEARCH_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
     try:   # weekly KRS calibration baseline (measurement only; Owner 2026-11-26 19:53)
         from runtime.local_autopilot import krs_calib
         kc = krs_calib.weekly(ROOT, out.name)

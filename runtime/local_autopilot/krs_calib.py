@@ -64,11 +64,14 @@ def _hist_corners(root):
             if r.get('first_corner') and r.get('last_corner')}
 
 
-def races(root):
+def races(root, research=None):
+    """research=None: the formal KRS; research='HOLD15' etc.: the after-result research re-run of the same race
+    (krs_research.py), only for races that have one."""
     out = []
     hist = None
     for dd in sorted(Path(root).glob('20??-??-??')):
-        for f in sorted((dd / 'formal').glob('*.krs_prediction_utility.json')):
+        pat = f'*.krs_research_{research}.json' if research else '*.krs_prediction_utility.json'
+        for f in sorted((dd / 'formal').glob(pat)):
             key = f.name.split('.')[0]
             res = _load(dd / f'{key}.result.json')
             ku = _load(f)
@@ -236,6 +239,10 @@ def evaluate(root):
     ven = {}
     for r in R:
         ven.setdefault(r['venue'], []).append(r)
+    try:
+        rep['variants'] = compare_variants(root)
+    except Exception as exc:
+        rep['variants_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
     rep.update(probability=prob, krs_top3_brier=_t3_brier(R), temperature=temp, stage=_stage(R),
                increment=_increment(R),
                by_venue={v: {'races': len(x), 'krs_log_loss': (_win_scores(x, 'krs_w') or {}).get('log_loss'),
@@ -243,6 +250,27 @@ def evaluate(root):
                              **{k: v2 for k, v2 in _increment(x).items() if k in ('winner_rank_krs_better', 'same', 'worse')}}
                          for v, x in sorted(ven.items()) if len(x) >= 20})
     return rep
+
+
+def compare_variants(root):
+    """Formal KRS vs each research variant on exactly the same races (CAL-01/02 shadow comparison)."""
+    from runtime.local_autopilot import krs_research
+    out = {}
+    for name in krs_research.VARIANTS:
+        V = races(root, name)
+        if not V:
+            continue
+        keys = {(r['day'], r['key']) for r in V}
+        B = [r for r in races(root) if (r['day'], r['key']) in keys]
+        row = {}
+        for lab, R in (('formal', B), (name, V)):
+            st = _stage(R)
+            ws = _win_scores(R, 'krs_w') or {}
+            row[lab] = {'races': len(R), 'log_loss': ws.get('log_loss'), 'ece': ws.get('ece'),
+                        'front3_stays_front3': st['front3_stays_front3'], '1角_mae': st['1角']['mae_positions'],
+                        '4角_mae': st['4角']['mae_positions'], 'auc_top3': _increment(R)['auc_top3_krs']}
+        out[name] = row
+    return out
 
 
 def md(rep):
@@ -279,6 +307,15 @@ def md(rep):
     L += ['', '**KRS を使う価値（29指数の正式順位との比較）**', '',
           f"- 勝ち馬の順位：KRS が上 {inc['winner_rank_krs_better']}R・同じ {inc['same']}R・下 {inc['worse']}R",
           f"- 3着内 AUC：KRS {inc['auc_top3_krs']}／正式順位 {inc['auc_top3_formal_ranking']}"]
+    cv = rep.get('variants') or {}
+    if cv:
+        L += ['', '**係数を変えた再計算（研究・結果確定後に同じ入力・同じ乱数で再実行）**', '',
+              '| 比較 | R | 勝ち 対数損失 | 3着内 AUC | 1角3番手内→4角3番手内（予測/実際） | 4角ずれ |', '|---|---|---|---|---|---|']
+        for name, row in cv.items():
+            for lab, x in row.items():
+                f3 = x['front3_stays_front3']
+                L.append(f"| {'正式 KRS' if lab == 'formal' else lab} | {x['races']} | {x['log_loss']} | {x['auc_top3']} | "
+                         f"{f3['predicted']}/{f3['actual']} | {x['4角_mae']} |")
     bv = rep.get('by_venue') or {}
     if bv:
         L += ['', '| 競馬場 | R | KRS 対数損失 | 市場 | 勝ち馬順位 KRS上/同/下 |', '|---|---|---|---|---|']

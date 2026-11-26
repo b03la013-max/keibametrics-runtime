@@ -418,6 +418,7 @@ def run_formal(r, out_dir, deadline):
                 'proxy_reason': f"{authority['manifest_id']}: LOCAL numerical KRS-input consumer false; SOURCE-derived technical proxy"})
         kin.setdefault('race', {})['race_id'] = race['formal_race_id']
         kin.setdefault('simulation', {}).update({'run_count': 5000, 'master_seed': req['seed']})
+        arts['krs_input'] = copy.deepcopy(kin)   # kept for the KRS calibration re-runs (KCP 2026-11-26; derived values only)
         guard('PRE_KRS')
         pc, pre = _call(base, '/pre-krs', {'family_id': 'LOCAL', 'race_id': race['formal_race_id'], 'source_receipt': src,
                                           'krs_input_data': kin, 'full_terminalization': True,

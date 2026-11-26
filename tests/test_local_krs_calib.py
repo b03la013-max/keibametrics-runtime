@@ -40,3 +40,26 @@ def test_result_page_corners_parsed():
             '<tr><th scope="row">4コーナー</th><td class="time">3-1,2</td></tr></table>')
     r = settle.parse_result(html)
     assert r['corners'] == [['1コーナー', '3,1,2'], ['4コーナー', '3-1,2']]
+
+
+def test_research_rerun_variant_and_compare(tmp_path):
+    from runtime.local_autopilot import krs_research as kr
+    ssr = {1: 0.5, 2: 0.2, 3: 0.15, 4: 0.1, 5: 0.05}
+    _race(tmp_path, '2026-11-27', 'OHI_01', [1, 2, 3, 4, 5], ssr, {h: 2 + h for h in ssr},
+          [['1コーナー', '1,2,3,4,5'], ['4コーナー', '1,2,3,4,5']])
+    kin = {'race': {'race_id': 'R'}, 'simulation': {'master_seed': 7},
+           'horses': [{'horse_no': h, 'hsv': {'early_position_hold': 95.0, 'midrace_hold': 40.0, 'front_friction_tolerance': 10.0}} for h in ssr]}
+    (tmp_path / '2026-11-27' / 'formal' / 'OHI_01.krs_input.json').write_text(json.dumps(kin))
+    v = kr.variant_input(kin, 'HOLD15')['horses'][0]['hsv']
+    assert v == {'early_position_hold': 100.0, 'midrace_hold': 55.0, 'front_friction_tolerance': 25.0}
+    seen = []
+
+    def fake(inp, rid, n, seed):
+        seen.append((rid, n, seed))
+        summ = [{'horse_no': h, 'SSR-W': ssr[h], 'SSR-T3': 0.5,
+                 'positions': {'1角': {'median': h, 'p25': h, 'p75': h}, '4角': {'median': h, 'p25': h, 'p75': h}}} for h in ssr]
+        return {'http_status': 200, 'receipt_status': 'EXECUTED'}, {'artifact': {'raw_output': {'summary': summ}}}
+    assert kr.nightly(tmp_path, '2026-11-27', runner=fake) == 1 and seen == [('R-RESEARCH-HOLD15', 5000, 7)]
+    assert kr.nightly(tmp_path, '2026-11-27', runner=fake) == 0           # not run twice
+    cv = kc.compare_variants(tmp_path)
+    assert cv['HOLD15']['HOLD15']['front3_stays_front3']['predicted'] == 1.0 and cv['HOLD15']['formal']['races'] == 1
