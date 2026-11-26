@@ -155,6 +155,20 @@ def gen_variant(summary, name, base=None):
             if len(out) >= CAP:
                 break
         return out
+    if fam == 'IDXABL':         # KIEP (Owner 2026-11-26 21:43): the signed MEC capped to 60 like R54, ordered with the
+        # formal ranking re-computed with index INDEX_IDS[drop] neutralised (race mean); needs summary['_abl_src']
+        src = summary.get('_abl_src')
+        mec = summary.get('signed_final_tickets') or []
+        if not src or not mec:
+            return base
+        from runtime.local_autopilot import kiep
+        from runtime.local_autopilot.formal_rakuten import cap_tickets
+        try:
+            rk = kiep.ranking(src['full29'], src.get('ext') or {}, kiep.INDEX_IDS[k['drop']])
+        except Exception:
+            return base
+        capped = cap_tickets(mec, [str(h) for h in rk], CAP)
+        return [(t['bet_type'], [int(x) for x in t['selection']]) for t in capped['tickets']]
     if fam == 'CORE':           # CORE_LAYER_60 with the core pair set = top-n P2
         return core_layer(summary, base, w, p2, core_n=k['n'])
     raise ValueError(f'unknown family {fam}')
@@ -309,6 +323,13 @@ def races(root, since=None):
                 except (OSError, ValueError, KeyError, TypeError):
                     pass
                 break
+        if any(str(g).startswith('GEN:IDXABL') for g in gen):   # KIEP: frozen Full29 + EXT of the effective revision
+            fd = d if (d / f'{key}.full29.json').exists() else sp.parent
+            try:
+                ec = json.loads((fd / f'{key}.ext_connection.json').read_text()) if (fd / f'{key}.ext_connection.json').exists() else {}
+                summ['_abl_src'] = {'full29': json.loads((fd / f'{key}.full29.json').read_text()), 'ext': ec.get('runners') or {}}
+            except (OSError, ValueError):
+                pass
         for name, t in variants(summ, gen).items():
             i, p, h = sm.settle(t, res['payouts'], ns)
             row[name] = (i, p, h, len(t))

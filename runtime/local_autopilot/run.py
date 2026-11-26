@@ -624,6 +624,16 @@ def auto_promotion_daily(q, out):
                 _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': ih})
     except Exception as exc:
         log('INDEX_HEALTH_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    try:   # weekly KIEP actual-consumer ablation (research only; Owner 2026-11-26 21:43)
+        from runtime.local_autopilot import kiep
+        kp = kiep.weekly(ROOT, out.name)
+        if kp:
+            log('KIEP', out.name)
+            issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+            if issue:
+                _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': kp})
+    except Exception as exc:
+        log('KIEP_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
     try:   # KCP research re-runs of the day's settled races (non-production; Owner 2026-11-26 21:35)
         from runtime.local_autopilot import krs_research
         if os.environ.get('KM_LOCAL_KRS_RESEARCH', '1') != '0':

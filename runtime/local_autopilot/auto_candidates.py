@@ -165,6 +165,39 @@ def _kcp(st, root, today, slots):
     return [cid]
 
 
+def _kiep(st, root, today, slots):
+    """KIEP (Owner 2026-11-26 21:43 「永続的に実施」): an index whose neutralisation improves the formal-consumer top-3
+    AUC on both the earlier and the later days (kiep.weekly report, DROP_HELPS) becomes GEN:IDXABL:drop=<n>."""
+    from runtime.local_autopilot import auto_promote, kiep
+    if slots <= 0:
+        return []
+    reps = sorted((Path(root) / 'kiep').glob('20??-??-??.json'))
+    if not reps:
+        return []
+    try:
+        ab = json.loads(reps[-1].read_text())['ablation']
+    except (OSError, ValueError, KeyError):
+        return []
+    used = {c['variant'] for c in st['candidates'].values()} | {v for v, _ in auto_promote.CANDIDATES.values()}
+    nxt = (date.fromisoformat(today) + timedelta(days=1)).isoformat() + 'T00:00:00+09:00'
+    new = []
+    for idx, x in sorted(ab.items(), key=lambda kv: -(kv[1]['test'].get('auc_gain') or 0)):
+        if x.get('verdict') != 'DROP_HELPS' or len(new) >= slots:
+            continue
+        name = formal_mix.gen_name('IDXABL', drop=kiep.INDEX_IDS.index(idx))
+        if name in used:
+            continue
+        cid = f"G{len(st['candidates']) + 1:03d}-IDXABL-{idx.replace('/', '_')}"
+        st['candidates'][cid] = {
+            'variant': name, 'family': 'IDXABL', 'params': {'drop': kiep.INDEX_IDS.index(idx), 'index': idx},
+            'status': 'EVALUATING', 'registered_at': datetime.now().astimezone().isoformat(), 'first_eligible_post': nxt,
+            'origin': {'day': today, 'priority': 'KIEP:ABLATION', 'count': None, 'impact_yen': 0, 'report': reps[-1].name,
+                       'index': idx, 'auc_gain': [x['train'].get('auc_gain'), x['test'].get('auc_gain')]}}
+        used.add(name)
+        new.append(cid)
+    return new
+
+
 def daily(root, today, decision=None, rows_fn=None):
     """Run after auto_promote.decide(root, today). Returns {'retired': [...], 'new': [...]} and saves the state."""
     st = load(root)
@@ -174,6 +207,8 @@ def daily(root, today, decision=None, rows_fn=None):
     new = generate(st, root, today)
     ev = sum(c.get('status') == 'EVALUATING' for c in st['candidates'].values())
     new += _kcp(st, root, today, min(MAX_NEW_PER_DAY - len(new), MAX_EVALUATING - ev))
+    ev = sum(c.get('status') == 'EVALUATING' for c in st['candidates'].values())
+    new += _kiep(st, root, today, min(MAX_NEW_PER_DAY - len(new), MAX_EVALUATING - ev))
     st.setdefault('log', []).append({'day': today, 'retired': retired, 'new': new,
                                      'at': datetime.now().astimezone().isoformat()})
     st['log'] = st['log'][-200:]
@@ -187,6 +222,11 @@ def md(root, res):
     L = ['', '### 自動で作った改善案', '']
     for cid in res.get('new') or []:
         c = C[cid]
+        if c['origin']['priority'].startswith('KIEP'):
+            L.append(f"- 新規登録：{cid}（{c['variant']}＝{c['origin']['index']} を無効化した正式順位で60点）← KIEP 除去実験 "
+                     f"{c['origin']['report']}（3着内AUC 学習 {c['origin']['auc_gain'][0]:+} / 試験 {c['origin']['auc_gain'][1]:+}）、"
+                     f"{c['first_eligible_post'][:10]} から比較")
+            continue
         if c['origin']['priority'].startswith('KCP'):
             L.append(f"- 新規登録：{cid}（{c['variant']}）← KRS 較正測定 {c['origin']['report']}（T={c['origin']['T']}、"
                      f"試験の対数損失 {c['origin']['test_log_loss'][0]}→{c['origin']['test_log_loss'][1]}）、{c['first_eligible_post'][:10]} から比較")
