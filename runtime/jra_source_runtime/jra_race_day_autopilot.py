@@ -1193,6 +1193,21 @@ def reconcile_source_run_status(root, row, runs, now):
         recommendation_pfs=None)
 
 
+def _display_deadline_passed(row, now):
+    """Display layer only (Owner 2026-11-21 10:19 task): a race still DISPATCHED_RUNNING after its post
+    time can no longer produce a pre-race FINAL, so it is shown as passed. `state` is untouched because
+    the scheduler, the dispatcher and post-result recovery read it."""
+    if row.get('state')!='DISPATCHED_RUNNING' or not row.get('post'):
+        return
+    try:
+        post=_dt.datetime.fromisoformat(str(row['post']).replace('Z','+00:00'))
+    except ValueError:
+        return
+    if post.tzinfo and now>=post:
+        row['display_state']='POST_PASSED_NO_PRE_RACE_FINAL'
+        row['display_note']='発走時刻を過ぎても署名済みFINALなし（予想は配信されていない）'
+
+
 def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict, *, formal_runs=None, resolver_runs=None, source_runs=None) -> dict:
     verification_report=_load_result_verification_report(root,race_date)
     rows=[]
@@ -1208,6 +1223,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
         reconcile_resolver_run_status(root,row,resolver_runs,now)
         reconcile_formal_run_status(root,row,runs)
         reconcile_source_run_status(root,row,source_runs,now)
+        _display_deadline_passed(row,now)
     rows.sort(key=lambda r: (r.get("post") or "", r["race_id"]))
     idx = {"profile": PROFILE, "race_date": race_date, "generated_at":now.isoformat(), "races": rows,
            "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race "
