@@ -339,3 +339,17 @@ def test_expired_source_to_formal_handoff_is_a_technical_failure(tmp_path):
     (runtime/'requests').mkdir()
     (runtime/'requests'/(eid+'-FORMAL.json')).write_text(json.dumps(request))
     assert status(41)['state']=='DISPATCHED_RUNNING'
+
+
+def test_display_marks_dispatched_running_after_post_without_touching_state():
+    import datetime as dt
+    import jra_race_day_autopilot as A
+    jst = dt.timezone(dt.timedelta(hours=9))
+    row = {"race_id": "KM-JRA-TKY-20261128-R01", "post": "2026-11-28T10:05:00+09:00", "state": "DISPATCHED_RUNNING"}
+    A._display_deadline_passed(row, dt.datetime(2026, 11, 28, 10, 0, tzinfo=jst))
+    assert "display_state" not in row
+    A._display_deadline_passed(row, dt.datetime(2026, 11, 28, 10, 6, tzinfo=jst))
+    assert row["state"] == "DISPATCHED_RUNNING" and row["display_state"] == "POST_PASSED_NO_PRE_RACE_FINAL"
+    done = {"race_id": "x", "post": "2026-11-28T10:05:00+09:00", "state": "FINAL"}
+    A._display_deadline_passed(done, dt.datetime(2026, 11, 28, 11, 0, tzinfo=jst))
+    assert "display_state" not in done
