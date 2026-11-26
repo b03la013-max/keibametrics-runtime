@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-26（16:51時点）
+# 地方版 配送台帳 2026-11-26（16:57時点）
 
 - 管理Race 48／発走済み 30
-- PAPER：凍結 48・Push検証 48・送信 34（発走前 34）・読み戻し一致 34・本人確認 0
+- PAPER：凍結 48・Push検証 47・送信 34（発走前 34）・読み戻し一致 34・本人確認 0
 - 正式：試行 34・Signed FINAL 34（NO-BET 0）・発走前送信 34・読み戻し一致 34・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 31／重要変更 25／Revision 2署名 25
+- 10分前チェック：確認 32／重要変更 26／Revision 2署名 26
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -16,8 +16,8 @@
 | KNZ_03 | 15:20 | POSTRESULT_DIAGNOSTIC | 14:36 | ○ | SIGNED_FINAL | 14:38 | ○ |  |
 | KNZ_04 | 15:55 | POSTRESULT_DIAGNOSTIC | 15:12 | ○ | SIGNED_FINAL | 15:46 | ○ |  |
 | KNZ_05 | 16:30 | PRESTART_PUSH_VERIFIED | 15:47 | ○ | SIGNED_FINAL | 15:48 | ○ |  |
-| KNZ_06 | 17:05 | PRESTART_PUSH_VERIFIED | 16:22 | ○ | SIGNED_FINAL | 16:24 | ○ |  |
-| KNZ_07 | 17:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_06 | 17:05 | PRESTART_PUSH_VERIFIED | 16:22 | ○ | SIGNED_FINAL | 16:57 | ○ |  |
+| KNZ_07 | 17:43 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KNZ_08 | 18:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_09 | 18:50 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_10 | 19:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
@@ -55,7 +55,7 @@
 | URW_06 | 14:50 | POSTRESULT_DIAGNOSTIC | 14:05 | ○ | SIGNED_FINAL | 14:41 | ○ |  |
 | URW_07 | 15:25 | POSTRESULT_DIAGNOSTIC | 14:44 | ○ | SIGNED_FINAL | 14:45 | ○ |  |
 | URW_08 | 16:00 | POSTRESULT_DIAGNOSTIC | 15:18 | ○ | SIGNED_FINAL | 15:51 | ○ |  |
-| URW_09 | 16:35 | PRESTART_PUSH_VERIFIED | 15:51 | ○ | SIGNED_FINAL | 16:26 | ○ |  |
+| URW_09 | 16:35 | POSTRESULT_DIAGNOSTIC | 15:51 | ○ | SIGNED_FINAL | 16:26 | ○ |  |
 | URW_10 | 17:10 | PRESTART_PUSH_VERIFIED | 16:27 | ○ | SIGNED_FINAL | 16:27 | ○ |  |
 | URW_11 | 17:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_12 | 18:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
