@@ -40,6 +40,37 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C29-KRS-CAP-60': ('GEN:KRSCAP:mode=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261125_R13.json'),
     'C30-KRS-CAP-TEMPERED-60': ('GEN:KRSCAP:mode=1:t=165', 'KM_LOCAL_FORWARD_OOS_PREREG_20261127_R14.json'),
 }
+# Owner-decided promotions (not automatic). Applied once into the state: the variant becomes the delivered one from
+# effective_from, replacing whatever is active. Probation uses the pre-registered revert rule of the candidate.
+# Rollback: delete the entry (or set 'withdrawn': True) and set output/auto_promotion.json 'active' back.
+OWNER_PROMOTIONS = [
+    {'candidate': 'C24-W-PLUS-TOP2POP-SAME-BUDGET', 'variant': 'W_PLUS_TOP2POP_60', 'effective_from': '2026-11-27',
+     'decided_at': '2026-11-26T23:00:00+09:00', 'owner_words': 'Aでよろしく／それでもC24に切替',
+     'decision_profile': 'KM_LOCAL_FORWARD_OOS_DECISION_20261126_C24.json',
+     # prereg R9: revert if PFS excluding top-1 falls below the R54_60 replay over the next 100 races
+     'revert_rule': 'PFS_EX_TOP1'},
+]
+
+
+def _apply_owner(st, owner=None):
+    owner = OWNER_PROMOTIONS if owner is None else owner
+    done = st.setdefault('owner_applied', [])
+    for o in owner:
+        tag = f"{o['candidate']}@{o['effective_from']}"
+        if o.get('withdrawn') or tag in done:
+            continue
+        prev_a = st.get('active')
+        prev = (prev_a or {}).get('candidate')
+        st['active'] = {'previous': {k: v for k, v in prev_a.items() if k != 'previous'} if prev_a else None,
+                        'candidate': o['candidate'], 'variant': o['variant'], 'effective_from': o['effective_from'],
+                        'promoted_on': o['decided_at'][:10], 'by': 'OWNER', 'revert_rule': o.get('revert_rule')}
+        st.setdefault('blocked_until', {}).pop(o['candidate'], None)
+        st['history'] = (st.get('history') or [])[-100:] + [{
+            'decided_at': o['decided_at'], 'day': o['decided_at'][:10], 'action': 'OWNER_PROMOTE',
+            'candidate': o['candidate'], 'variant': o['variant'], 'effective_from': o['effective_from'],
+            'replaced': prev, 'owner_words': o.get('owner_words')}]
+        done.append(tag)
+    return st
 
 
 def candidates(root):
@@ -68,9 +99,10 @@ def state_path(root):
 
 def load_state(root):
     try:
-        return json.loads(state_path(root).read_text())
+        st = json.loads(state_path(root).read_text())
     except (OSError, ValueError):
-        return {'profile': PROFILE, 'active': None, 'history': [], 'blocked_until': {}}
+        st = {'profile': PROFILE, 'active': None, 'history': [], 'blocked_until': {}}
+    return _apply_owner(st)
 
 
 def active_variant(root, race_date):
@@ -78,6 +110,9 @@ def active_variant(root, race_date):
     a = load_state(root).get('active')
     if a and str(race_date) >= a['effective_from']:
         return a
+    p = (a or {}).get('previous')   # races before an Owner switch keep the variant that was active then
+    if p and str(race_date) >= p['effective_from']:
+        return p
     return None
 
 
@@ -128,8 +163,9 @@ def decide(root, today, rows_fn=None):
         rows = [r for r in rows_fn(root, since) if a['variant'] in r]
         cmpd = compare(rows, a['variant'], CHAMPION)
         rec.update(action='PROBATION', candidate=a['candidate'], races=len(rows), detail=cmpd)
-        if len(rows) >= MIN_RACES and cmpd['candidate']['pfs'] < cmpd['champion']['pfs'] \
-                and cmpd['candidate']['pfs_ex_top1'] < cmpd['champion']['pfs_ex_top1']:
+        ex_worse = cmpd['candidate']['pfs_ex_top1'] < cmpd['champion']['pfs_ex_top1']
+        if len(rows) >= MIN_RACES and (ex_worse if a.get('revert_rule') == 'PFS_EX_TOP1'
+                                       else cmpd['candidate']['pfs'] < cmpd['champion']['pfs'] and ex_worse):
             st['active'] = None
             st.setdefault('blocked_until', {})[a['candidate']] = nxt
             rec.update(action='DEMOTE', effective_from=nxt)

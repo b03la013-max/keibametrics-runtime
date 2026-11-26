@@ -1,0 +1,18 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-DECISION-20261126-C24",
+ "candidate": "C24-W-PLUS-TOP2POP-SAME-BUDGET",
+ "decided_at": "2026-11-26T23:00:00+09:00",
+ "owner_words": "Aでよろしく（C24に置き換え、採用後100Rの検証）／確認後「それでもC24に切替」",
+ "decision": "ADOPT_WITH_POST_ADOPTION_CHECK",
+ "effective_from": "2026-11-27",
+ "replaces": "C13-FORMAL-MIX-P2BOX20 (auto-promoted, delivered since 2026-11-22)",
+ "evidence": {
+  "prereg_100R_vs_R54_60": {"races": 239, "pfs": [43.7, 40.8], "pfs_ex_top1": [39.9, 37.4], "hit_races": [135, 111]},
+  "vs_delivered_C13_since_20261122": {"races": 187, "pfs": [39.45, 43.28], "pfs_ex_top1": [34.51, 39.23], "hit_races": [104, 104]},
+  "owner_was_told": "C24 trails the delivered C13 on the 187 races since 11/22; Owner chose to switch anyway"
+ },
+ "post_adoption_check": "prereg R9: next 100 races after 2026-11-27; revert to R54_60 if C24 PFS excluding the top-1 race falls below the R54_60 replay (auto_promote revert_rule PFS_EX_TOP1). Challengers (incl. C13) keep being judged against C24 on races from 2026-11-27 under the auto-promotion rules.",
+ "implementation": "runtime/local_autopilot/auto_promote.py OWNER_PROMOTIONS",
+ "rollback": "set 'withdrawn': True on the OWNER_PROMOTIONS entry and restore output/auto_promotion.json 'active' to its 'previous' (C13) on local-autopilot-data, or git revert this commit before the next race day",
+ "unchanged": "29 indices, KRS, MEC, 60-ticket cap, purchase policy (recommendation only, no purchase)"
+}

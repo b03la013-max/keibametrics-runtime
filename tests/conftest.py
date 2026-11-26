@@ -47,3 +47,13 @@ def pytest_runtest_setup(item):
             sys.modules[name] = mods[name]
         else:
             sys.modules.pop(name, None)
+
+
+@pytest.fixture(autouse=True)
+def _no_local_owner_promotions(monkeypatch):
+    """Owner-decided promotions in auto_promote.OWNER_PROMOTIONS are production state; tests start without them."""
+    try:
+        from runtime.local_autopilot import auto_promote
+    except Exception:
+        return
+    monkeypatch.setattr(auto_promote, 'OWNER_PROMOTIONS', [])
