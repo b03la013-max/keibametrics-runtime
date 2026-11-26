@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-26（18:35時点）
+# 地方版 配送台帳 2026-11-26（18:42時点）
 
 - 管理Race 48／発走済み 40
-- PAPER：凍結 48・Push検証 48・送信 42（発走前 42）・読み戻し一致 42・本人確認 0
+- PAPER：凍結 48・Push検証 47・送信 42（発走前 42）・読み戻し一致 42・本人確認 0
 - 正式：試行 42・Signed FINAL 42（NO-BET 0）・発走前送信 42・読み戻し一致 42・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 40／重要変更 33／Revision 2署名 33
+- 10分前チェック：確認 41／重要変更 34／Revision 2署名 34
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -19,8 +19,8 @@
 | KNZ_06 | 17:05 | POSTRESULT_DIAGNOSTIC | 16:22 | ○ | SIGNED_FINAL | 16:57 | ○ |  |
 | KNZ_07 | 17:43 | POSTRESULT_DIAGNOSTIC | 16:57 | ○ | SIGNED_FINAL | 16:58 | ○ |  |
 | KNZ_08 | 18:15 | POSTRESULT_DIAGNOSTIC | 17:31 | ○ | SIGNED_FINAL | 18:07 | ○ |  |
-| KNZ_09 | 18:50 | PRESTART_PUSH_VERIFIED | 18:08 | ○ | SIGNED_FINAL | 18:08 | ○ |  |
-| KNZ_10 | 19:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KNZ_09 | 18:50 | PRESTART_PUSH_VERIFIED | 18:08 | ○ | SIGNED_FINAL | 18:42 | ○ |  |
+| KNZ_10 | 19:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KNZ_11 | 20:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_12 | 20:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | NGY_01 | 14:40 | POSTRESULT_DIAGNOSTIC | 13:55 | ○ | SIGNED_FINAL | 14:32 | ○ |  |
@@ -58,6 +58,6 @@
 | URW_09 | 16:35 | POSTRESULT_DIAGNOSTIC | 15:51 | ○ | SIGNED_FINAL | 16:26 | ○ |  |
 | URW_10 | 17:10 | POSTRESULT_DIAGNOSTIC | 16:27 | ○ | SIGNED_FINAL | 17:01 | ○ |  |
 | URW_11 | 17:45 | POSTRESULT_DIAGNOSTIC | 17:01 | ○ | SIGNED_FINAL | 17:36 | ○ |  |
-| URW_12 | 18:20 | PRESTART_PUSH_VERIFIED | 17:38 | ○ | SIGNED_FINAL | 18:10 | ○ |  |
+| URW_12 | 18:20 | POSTRESULT_DIAGNOSTIC | 17:38 | ○ | SIGNED_FINAL | 18:10 | ○ |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
