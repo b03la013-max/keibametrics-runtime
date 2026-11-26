@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-26'] ／ 1005R・10844出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-26'] ／ 1012R・10930出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -257,20 +257,20 @@
 | URW | L | 4 | 5※ | 0 | 1 | 2 | 60.0% (23%–88%) | 0% | 104% |
 | URW | L | 5 | 5※ | 1 | 0 | 0 | 20.0% (4%–62%) | 188% | 56% |
 | URW | L | 6-9 | 20※ | 1 | 0 | 2 | 15.0% (5%–36%) | 78% | 52% |
-| URW | M | 1 | 17※ | 8 | 2 | 0 | 58.8% (36%–78%) | 88% | 68% |
-| URW | M | 10+ | 55 | 0 | 2 | 2 | 7.3% (3%–17%) | 0% | 97% |
-| URW | M | 2 | 17※ | 4 | 3 | 1 | 47.1% (26%–69%) | 107% | 72% |
-| URW | M | 3 | 17※ | 3 | 3 | 3 | 52.9% (31%–74%) | 103% | 101% |
-| URW | M | 4 | 17※ | 0 | 2 | 5 | 41.2% (22%–64%) | 0% | 114% |
-| URW | M | 5 | 17※ | 1 | 2 | 1 | 23.5% (10%–47%) | 50% | 56% |
-| URW | M | 6-9 | 65 | 1 | 3 | 5 | 13.9% (7%–24%) | 42% | 68% |
-| URW | S | 1 | 5※ | 3 | 0 | 2 | 100.0% (57%–100%) | 94% | 110% |
-| URW | S | 10+ | 6※ | 0 | 0 | 2 | 33.3% (10%–70%) | 0% | 243% |
-| URW | S | 2 | 5※ | 1 | 2 | 0 | 60.0% (23%–88%) | 64% | 78% |
-| URW | S | 3 | 5※ | 1 | 1 | 0 | 40.0% (12%–77%) | 92% | 62% |
-| URW | S | 4 | 5※ | 0 | 2 | 1 | 60.0% (23%–88%) | 0% | 102% |
-| URW | S | 5 | 5※ | 0 | 0 | 0 | 0.0% (-0%–43%) | 0% | 0% |
-| URW | S | 6-9 | 19※ | 0 | 0 | 0 | 0.0% (0%–17%) | 0% | 0% |
+| URW | M | 1 | 22※ | 11 | 3 | 0 | 63.6% (43%–80%) | 84% | 73% |
+| URW | M | 10+ | 70 | 0 | 2 | 2 | 5.7% (2%–14%) | 0% | 76% |
+| URW | M | 2 | 22※ | 5 | 5 | 2 | 54.5% (35%–73%) | 96% | 82% |
+| URW | M | 3 | 22※ | 4 | 4 | 3 | 50.0% (31%–69%) | 98% | 93% |
+| URW | M | 4 | 22※ | 0 | 3 | 6 | 40.9% (23%–61%) | 0% | 102% |
+| URW | M | 5 | 22※ | 1 | 2 | 2 | 22.7% (10%–43%) | 39% | 55% |
+| URW | M | 6-9 | 85 | 1 | 3 | 7 | 12.9% (7%–22%) | 32% | 63% |
+| URW | S | 1 | 7※ | 4 | 1 | 2 | 100.0% (65%–100%) | 97% | 110% |
+| URW | S | 10+ | 12※ | 0 | 0 | 2 | 16.7% (5%–45%) | 0% | 122% |
+| URW | S | 2 | 7※ | 1 | 3 | 0 | 57.1% (25%–84%) | 46% | 79% |
+| URW | S | 3 | 7※ | 2 | 1 | 0 | 42.9% (16%–75%) | 143% | 69% |
+| URW | S | 4 | 7※ | 0 | 2 | 1 | 42.9% (16%–75%) | 0% | 73% |
+| URW | S | 5 | 7※ | 0 | 0 | 1 | 14.3% (3%–51%) | 0% | 24% |
+| URW | S | 6-9 | 27※ | 0 | 0 | 1 | 3.7% (1%–18%) | 0% | 14% |
 
 ## 枠（A/E＝人気から見た期待3着内に対する実績）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -301,10 +301,11 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
+| venue=URW / band=M / distance_change=LONGER | 35 | 22.9% | 1.46 | 6% |
 | venue=NGY / band=M / distance_change=LONGER | 46 | 10.9% | 0.77 | 6% |
 | venue=NGY / band=M / distance_change=SHORTER | 31 | 32.3% | 1.27 | 322% |
+| venue=URW / band=M / distance_change=SHORTER | 40 | 22.5% | 1.26 | 20% |
 | venue=MIZ / band=M / distance_change=LONGER | 60 | 33.3% | 1.24 | 70% |
-| venue=URW / band=M / distance_change=SHORTER | 30 | 23.3% | 1.23 | 26% |
 | venue=MON / band=S / distance_change=SAME | 64 | 26.6% | 1.23 | 88% |
 | venue=KSM / band=M / distance_change=LONGER | 51 | 19.6% | 0.82 | 21% |
 | venue=KOC / band=M / distance_change=SHORTER | 62 | 33.9% | 1.20 | 103% |
@@ -320,16 +321,16 @@
 | venue=KSM / band=M / distance_change=SHORTER | 44 | 25.0% | 1.07 | 35% |
 | venue=KNZ / band=M / distance_change=SHORTER | 63 | 33.3% | 1.07 | 117% |
 | venue=MIZ / band=S / distance_change=LONGER | 62 | 21.0% | 0.94 | 13% |
-| venue=SON / band=S / distance_change=SAME | 54 | 27.8% | 1.06 | 26% |
 
 ## 出走間隔：A/E の偏りが大きい区分（30出走以上、上位20）
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
+| venue=URW / days_since_last=<=14d | 32 | 21.9% | 1.34 | 32% |
 | venue=MOR / days_since_last=<=14d | 76 | 21.1% | 0.86 | 30% |
+| venue=URW / days_since_last=15-35d | 112 | 23.2% | 1.16 | 44% |
 | venue=KNZ / days_since_last=15-35d | 38 | 39.5% | 1.15 | 26% |
 | venue=NGY / days_since_last=<=14d | 153 | 24.8% | 1.14 | 46% |
-| venue=URW / days_since_last=15-35d | 85 | 24.7% | 1.10 | 56% |
 | venue=SAG / days_since_last=<=14d | 343 | 25.1% | 1.08 | 46% |
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
 | venue=MON / days_since_last=<=14d | 120 | 22.5% | 1.08 | 60% |
@@ -471,6 +472,7 @@
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
 | venue=MIZ / distance=1300 / same_venue_distance_win_before=False / last_finish=7+ | 47 | 4.3% | 0.52 | 0% |
+| venue=URW / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 32 | 6.2% | 0.58 | 0% |
 | venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 106 | 7.5% | 0.62 | 37% |
 | venue=MIZ / distance=1600 / same_venue_distance_win_before=False / last_finish=7+ | 37 | 10.8% | 0.68 | 0% |
 | venue=KSM / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 77 | 10.4% | 0.71 | 6% |
@@ -489,7 +491,6 @@
 | venue=SON / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 99 | 16.2% | 1.13 | 135% |
 | venue=NGY / distance=1500 / same_venue_distance_win_before=False / last_finish=7+ | 123 | 15.4% | 1.11 | 20% |
 | venue=SAG / distance=1300 / same_venue_distance_win_before=False / last_finish=4-6 | 32 | 31.2% | 1.10 | 49% |
-| venue=KNZ / distance=1500 / same_venue_distance_win_before=False / last_finish=1-3 | 42 | 42.9% | 1.09 | 31% |
 
 ## 1・2番人気×枠（浦和 第28条12 外枠人気馬の検証用）：A/E の偏りが大きい区分（30出走以上、上位20）
 
