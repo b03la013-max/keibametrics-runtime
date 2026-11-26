@@ -1,0 +1,19 @@
+{
+  "profile": "KM-JRA-FORWARD-OOS-PREREG-KCP-C2-v1",
+  "registered_at": "2026-11-26T20:30:00+09:00",
+  "task": "ChatGPT KCP v1.0 (2026-11-26) 中央版 KCP-JRA, CAL-05; Owner approval 2026-11-26 (「登録してよい（推奨）」)",
+  "production_effect": "NONE",
+  "no_use": "SSR-W and the calibrated values are not probabilities for EV, Kelly, Role, MEC, Capital or Delivery",
+  "first_eligible_card": "2026-11-28",
+  "tracker": "runtime/analysis/jra_krs_calibration.py forward (runs in km-jra-index-research.yml)",
+  "input": "signed FINAL krs_prediction_utility.summary SSR-W (KRS-Engine v1.1.0, parameter_map 0.1-provisional); winner from the stored official result",
+  "arms": {"KCP-B1": "identity", "KCP-C2": "p proportional to SSR-W ** (1/2.65), renormalised per race"},
+  "fit": "T chosen by grid 0.30..3.00 step 0.05 minimising win log loss on race days 2026-10-11..2026-11-07 (209 races); fixed, never refitted inside the evaluation",
+  "primary": "paired win log loss per race (C2 - B1), lower is better",
+  "secondary": ["Brier", "ECE (10 bins)", "C2 vs UNIFORM log loss", "venue x surface"],
+  "engine_change_rule": "if the engine or parameter_map version changes, the race is excluded and the arm is re-registered",
+  "stages": [30, 100, 300],
+  "promotion_eligible": ">= 100 forward races with 95% CI upper < 0 on the primary; Owner decision only. Promotion would only allow the calibrated value to be shown as a frequency, not EV/Kelly",
+  "reject": ">= 30 forward races with CI lower > 0",
+  "known_result_replay_context_only": {"races": 355, "after_fit_days": {"races": 146, "logloss": {"KCP-B1": 2.9226, "KCP-C2": 2.4878, "UNIFORM": 2.6514}, "ece": {"KCP-B1": 0.0338, "KCP-C2": 0.005}}}
+}
