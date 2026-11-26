@@ -263,8 +263,21 @@ def step(root, log=lambda *a: None):
                 events.append(('REGISTERED', cid, {}))
                 kcp_active += 1
         reg['kcp'] = {'at': _now(), 'rule': KCP, 'component_auc': kcp_table(revs)}
+        import review as _rv
+        reg['kiep'] = {'at': _now(), **_rv.kiep_summary(revs)}
     except Exception as e:                                        # 較正の集計は本処理を止めない
         reg['kcp'] = {'at': _now(), 'error': f'{type(e).__name__}:{str(e)[:120]}'}
+    # KIEP-BAN P0: Formula Ledger を毎晩書き、算式の SHA が変わった日を履歴に残す
+    try:
+        import formula_ledger
+        led = formula_ledger.build()
+        (Path(root) / 'formula_ledger.json').write_text(json.dumps(led, ensure_ascii=False, indent=1) + '\n')
+        fh = reg.setdefault('formula_history', [])
+        if not fh or fh[-1]['formula_sha'] != led['formula_sha']:
+            fh.append({'at': _now(), 'formula_sha': led['formula_sha'], 'production': reg['production']['version'],
+                       'implementation_sha16': led['implementation_sha16']})
+    except Exception as e:
+        reg['formula_ledger_error'] = f'{type(e).__name__}:{str(e)[:120]}'
     reg['history'] += [{'at': _now(), 'event': e, 'candidate': c, 'evidence': t} for e, c, t in events]
     reg['last_step'] = {'at': _now(), 'table': table}
     save(root, reg)
@@ -297,6 +310,21 @@ def _status_md(root, reg, table):
               '| 成分 | R | 3着内 AUC | 1着 AUC |', '|---|---|---|---|']
         L += [f"| {c} | {d['races']} | {d['auc_top3']} | {d['auc_win']} |"
               for c, d in sorted(k['component_auc'].items(), key=lambda kv: -(kv[1].get('auc_top3') or 0))]
+    kp = reg.get('kiep') or {}
+    if kp.get('components'):
+        L += ['', '## KIEP-BAN 成分の健康診断（毎晩更新）', '',
+              f"{kp['races']}R。単調性＝レース内で上位・中位・下位の3群に分けた3着内率（上位≥中位≥下位なら単調）。"
+              "欠損率＝値の無い馬の割合。", '',
+              '| 成分 | 判定R | 欠損率 | 上位 | 中位 | 下位 | 単調 |', '|---|---|---|---|---|---|---|']
+        L += [f"| {c} | {d['races']} | {d['missing_rate']} | {d['top3_rate_high']} | {d['top3_rate_mid']} | {d['top3_rate_low']} | "
+              f"{'○' if d['monotonic'] else '×' if d['monotonic'] is False else ''} |"
+              for c, d in sorted(kp['components'].items()) if d['races']]
+        rp = kp.get('redundant_pairs') or {}
+        L += ['', f"- 重複（平均順位相関 |0.6| 以上）: {('、'.join(f'{p} {r}' for p, r in rp.items())) or 'なし'}",
+              f"- 情報源の取得率: {('、'.join(f'{f} {r}' for f, r in (kp.get('feed_rate') or {}).items())) or '—'}"]
+    fh = reg.get('formula_history') or []
+    if fh:
+        L += [f"- 算式の版（formula_ledger.json）: {fh[-1]['formula_sha'][:12]}（{fh[-1]['at'][:10]} から、記録 {len(fh)} 版）"]
     L += ['', '## 履歴', ''] + [f"- {h['at']} {h['event']} {h['candidate']}" for h in reg['history'][-30:]]
     L += ['', '引退・不採用の候補も registry に残す。新しい候補は本番の近傍から自動で、P1仮説からは毎晩の作業で登録する。']
     (Path(root) / 'improvement_status.md').write_text('\n'.join(L) + '\n')

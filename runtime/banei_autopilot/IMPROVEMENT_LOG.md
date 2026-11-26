@@ -40,3 +40,10 @@
 - 毎レース：review.component_auc で成分ごとの識別力（3着内/1着 AUC、人気の基準線つき）を記録（PR #501）
 - 毎晩：registry.step が全期間の AUC を集計して improvement_status.md の「KCP-BAN」表を更新。100R 以上で 3着内 AUC が 0.55 未満の成分は「重みを0」の影の候補 KCP_ABLATE_* を自動登録（同時に最大3本、engine.COMP_W、本番はすべて1.0で TPI 不変）。比較・昇格・戻す・引退はほかの候補と同じ PROMOTE 条件
 - 毎晩の反省タスク：KCP の表の動き（成分の AUC と人気との差）を報告し、この記録に月ごとの要約を残す
+
+## 2026-11-26 KIEP-BAN（ChatGPT「指数進化計画 KIEP v1.0」のばんえい分）を永続運用に（Owner 21:43「永続的に実施」）
+- P0 Formula Ledger: formula_ledger.py が engine・derive・tickets の定数から全成分の算式・係数・閾値・欠損時の扱い・接続先を組み立て、毎晩 output_ban/formula_ledger.json に書く。算式の SHA が変わった日を registry の formula_history に残す
+- KIEP-03 成分の健康診断: 毎レース、成分ごとに 単調性（レース内で上位・中位・下位の3群の3着内率）・欠損率・成分どうしの順位相関（重複）・情報源の取得率を記録し、毎晩 improvement_status.md の「KIEP-BAN」表に出す
+- 既存の仕組みとの対応: KIEP-02/04（変換・閾値・係数）＝registry の近傍候補（BANDS・SCORE・BSI_W・SBO_SHARE・CUTS）と候補キュー、KIEP-03/04（成分の除去）＝KCP_ABLATE_*、KIEP-06（総合）＝SCORE・MARKET_FREE・EXACT_* の影、KIEP-08（採否）＝registry.PROMOTE（自動昇格・戻す・引退）。KRS は v4.0 に無いので KCP×KIEP の4系列比較は指数のみ（B0＝本番、C1＝影の候補）
+- 11/21〜23 の33R（参考値）: 単調なのは tpi・win_score・place_score・bta・cci・人気。単調でないのは mpa・brs・wda・front_bonus・lis。重複（|0.6| 以上）はなし（bsi は公開記録に無く、次の開催日から Mac の非公開キャッシュで測る）。情報源の取得率はキンタロー・水分ボンバー・競馬ブックとも 100%
+- 取得元の無いもの（発走後の位置・障害失敗・停止回数）は UNKNOWN。平地の係数は使わない。確率・EV は出さない

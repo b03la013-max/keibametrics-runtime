@@ -62,3 +62,23 @@ def test_kcp_ablation_candidate_only_after_min_races():
 def test_comp_w_production_is_identity():
     import engine
     assert set(engine.COMP_W.values()) == {1.0}
+
+
+def test_formula_ledger_covers_tpi_components_and_is_stable():
+    import formula_ledger, engine
+    a, b = formula_ledger.build(), formula_ledger.build()
+    assert a['formula_sha'] == b['formula_sha'] and len(a['formula_sha']) == 64
+    assert {'bsi', 'bta', 'mpa', 'brs', 'wda', 'jbr', 'adf', 'bwl', 'cci', 'cpu', 'tpi'} <= set(a['components'])
+    assert a['constants']['engine.COMP_W'] == engine.COMP_W
+
+
+def test_kiep_health_and_redundancy():
+    import review
+    rows = [{'no': i, 'tpi': 20 - i, 'bta': 20 - i, 'wda': (i % 2) * 1.0, 'pop': i} for i in range(1, 10)]
+    h = review.component_health(rows, [1, 2, 3])
+    assert h['tpi']['high'][0] == 3 and h['tpi']['low'][0] == 0
+    c = review.component_corr(rows)
+    assert c['bta~pop'] == 1.0                                     # 人気は小さいほど良いので向きをそろえる
+    s = review.kiep_summary([{'component_health': h, 'component_corr': c, 'feeds_present': ['kintaro']}] * 5)
+    assert s['components']['tpi']['monotonic'] is True and 'bta~pop' in s['redundant_pairs']
+    assert s['feed_rate'] == {'kintaro': 1.0}
