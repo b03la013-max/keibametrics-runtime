@@ -18,12 +18,12 @@ FIRST = PREREG['first_eligible_day']
 HALF = 30
 
 
-def _half(tickets, ranking):
+def _half(tickets, ranking, n=HALF):
     tier = {'CORE': 0, 'PROTECTION': 1, 'TAIL': 2}
     pos = {int(h): i for i, h in enumerate(ranking)}
     order = sorted(range(len(tickets)), key=lambda i: (tier.get(str(tickets[i].get('mec_tier')), 3),
                                                         sum(pos.get(int(x), 99) for x in tickets[i]['selection']), i))
-    return [tickets[i] for i in order[:HALF]]
+    return [tickets[i] for i in order[:n]]
 
 
 def series(root):
@@ -43,7 +43,8 @@ def series(root):
         low_gap = r['gap'] is not None and r['gap'] <= GAP
         krs_d = r['robust'] == 'D'
         plan = {'B0_DELIVERED': tk, 'B1_GAP_SKIP': [] if low_gap else tk, 'B2_GAP_HALF': _half(tk, rank) if low_gap else tk,
-                'B3_KRSD_SKIP': [] if krs_d else tk, 'B4_ANY_HALF': _half(tk, rank) if (low_gap or krs_d) else tk}
+                'B3_KRSD_SKIP': [] if krs_d else tk, 'B4_ANY_HALF': _half(tk, rank) if (low_gap or krs_d) else tk,
+                'B5_ALL20': _half(tk, rank, 20), 'B6_ALL30': _half(tk, rank, 30)}
         bucket = out['forward' if day >= FIRST else 'reference']
         for nm, t in plan.items():
             inv, pay, _ = sm.settle([(x['bet_type'], [int(y) for y in x['selection']]) for x in t], res['payouts'], ns)
