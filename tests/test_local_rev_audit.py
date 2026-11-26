@@ -33,3 +33,23 @@ def test_rev2_audit_and_w_miss(tmp_path):
     assert r['w_miss']['winner_market_rank'] == 2
     assert out['summary']['w_lost_by_rev2'] == 1
     assert (d / 'review' / 'revision_audit.md').read_text().startswith('# 修正版')
+
+
+def test_delta_concentration_nov26_shape():
+    from runtime.local_autopilot import rev_audit as ra
+    rev = [{'race': 'NGY_04', 'replay_payout_r1_r2': [6200, 51000]},
+           {'race': 'KNZ_11', 'replay_payout_r1_r2': [810, 12620]},
+           {'race': 'URW_04', 'replay_payout_r1_r2': [13600, 710]},
+           {'race': 'X', 'replay_payout_r1_r2': [100, 100]}]
+    c = ra.delta_concentration(rev)
+    assert c['total'] == 44800 + 11810 - 12890
+    assert c['largest_race'] == 'NGY_04' and c['largest_delta'] == 44800
+    assert c['races_better'] == 2 and c['races_worse'] == 1
+    assert c['total_excl_largest'] == c['total'] - 44800
+    assert ra._delta_line(c)[0].startswith('差の内訳')
+
+
+def test_delta_concentration_empty():
+    from runtime.local_autopilot import rev_audit as ra
+    c = ra.delta_concentration([{'race': 'A', 'replay_payout_r1_r2': None}])
+    assert c['largest_race'] is None and ra._delta_line(c) == []

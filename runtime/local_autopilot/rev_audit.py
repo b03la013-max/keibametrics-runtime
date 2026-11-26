@@ -123,7 +123,24 @@ def day(day_dir):
             'w_miss': sum(1 for r in rows if r.get('w_miss')),
             'w_miss_market_top3': sum(1 for r in rows if r.get('w_miss') and (r['w_miss']['winner_market_rank'] or 99) <= 3),
             'production_change': 'NONE (evidence only)'}
+    summ['replay_delta'] = delta_concentration(rev)
     return {'summary': summ, 'races': rows}
+
+
+def delta_concentration(rev):
+    """Robustness of the same-60 Rev1->Rev2 payout difference (2026-11-26 LOCAL review, KAP item 5:
+    one race (NGY_04) made 76.6 % of the day's gain). Evidence only."""
+    d = [(r['race'], (r.get('replay_payout_r1_r2') or [0, 0])[1] - (r.get('replay_payout_r1_r2') or [0, 0])[0]) for r in rev]
+    tot = sum(x for _, x in d)
+    nz = [t for t in d if t[1]]
+    if not nz:
+        return {'total': tot, 'races_better': 0, 'races_worse': 0, 'largest_race': None,
+                'largest_delta': 0, 'largest_share_pct': None, 'total_excl_largest': tot}
+    big = max(nz, key=lambda t: abs(t[1]))
+    return {'total': tot, 'races_better': sum(1 for _, x in d if x > 0), 'races_worse': sum(1 for _, x in d if x < 0),
+            'largest_race': big[0], 'largest_delta': big[1],
+            'largest_share_pct': round(100 * big[1] / tot, 1) if tot else None,
+            'total_excl_largest': tot - big[1]}
 
 
 def md(out, date):
@@ -132,6 +149,7 @@ def md(out, date):
          f"対象 {s['races']}R、うちRev2 {s['revision2']}R。勝ち馬の順位：改善 {s['winner_rank_better']}R／悪化 {s['winner_rank_worse']}R。"
          f"Rev2でWから外れた勝ち馬 {s['w_lost_by_rev2']}R／Rev2でWに入った勝ち馬 {s['w_gained_by_rev2']}R。"
          f"同じ60点の払戻：Rev1 {s['replay_payout_r1']:,}円 → Rev2 {s['replay_payout_r2']:,}円。", '',
+         *_delta_line(s.get('replay_delta')),
          (lambda a, b: f"直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）{a['horses']}頭：勝率 {a['win_rate']}%・3着内 {a['top3_rate']}%"
                        f"／その他 {b['horses']}頭：勝率 {b['win_rate']}%・3着内 {b['top3_rate']}%（1日分は参考）")(s['late_money']['shortened'], s['late_money']['other']), '',
          f"勝ち馬がW外：{s['w_miss']}R（うち市場の上位3頭 {s['w_miss_market_top3']}R）", '',
@@ -150,6 +168,14 @@ def md(out, date):
         if m:
             L.append(f"| {r['race']} | {r['winner']} | {m['winner_rank_effective']} | {m['winner_market_rank']} | {', '.join(m['indices_with_winner_top3']) or '-'} |")
     return '\n'.join(L) + '\n'
+
+
+def _delta_line(c):
+    if not c or c.get('largest_race') is None:
+        return []
+    sh = f"{c['largest_share_pct']}%" if c['largest_share_pct'] is not None else '-'
+    return [f"差の内訳：増えたR {c['races_better']}／減ったR {c['races_worse']}。最大の差 {c['largest_race']} {c['largest_delta']:+,}円"
+            f"（差の合計 {c['total']:+,}円の {sh}）、それを除くと {c['total_excl_largest']:+,}円。", '']
 
 
 def write_daily(day_dir):
