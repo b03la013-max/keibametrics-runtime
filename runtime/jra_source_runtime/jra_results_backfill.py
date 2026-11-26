@@ -101,9 +101,17 @@ def _calendar(d: dt.date) -> str:
     return f"/keiba/calendar{d.year}/{d.year}/{d.month}/{d.strftime('%m%d')}.html"
 
 
+def _entry_day(today: dt.date | None = None) -> dt.date:
+    """Most recent Sunday strictly before today: JRA has a calendar page only for race days, and a
+    non-race day's page answers 403 (first nightly run 2026-11-26 asked for Thursday 11/26)."""
+    t = today or dt.date.today()
+    back = (t.weekday() + 1) % 7 or 7  # Mon=0 .. Sun=6 -> days back to the previous Sunday
+    return t - dt.timedelta(days=back)
+
+
 def month_days(client, month: dt.date) -> dict:
     """{YYYYMMDD: [pw01srl day tokens]} for one archive month (observed tokens only)."""
-    cal = client.get(_calendar(dt.date.today()))
+    cal = client.get(_calendar(_entry_day()))
     archive = next((t for t in ENTRY.findall(cal) if t.startswith("pw01skl")), None)
     if archive is None:
         raise ValueError("JRA_BACKFILL_ARCHIVE_ENTRY_NOT_OBSERVED")

@@ -56,3 +56,11 @@ def test_race_key():
     assert B.race_key("pw01sde1005202605061120261123/CF")["race_id"] == "KM-JRA-TKY-20261123-R11"
     with pytest.raises(ValueError):
         B.race_key("pw01sde1099202605061120261123/CF")
+
+
+def test_entry_day_is_the_previous_sunday():
+    import datetime as dt
+    from jra_source_runtime import jra_results_backfill as B
+    assert B._entry_day(dt.date(2026, 11, 26)) == dt.date(2026, 11, 22)  # Thursday
+    assert B._entry_day(dt.date(2026, 11, 23)) == dt.date(2026, 11, 22)  # Monday
+    assert B._entry_day(dt.date(2026, 11, 22)) == dt.date(2026, 11, 15)  # Sunday itself is not used (results may be partial)
