@@ -107,3 +107,15 @@ def test_forward_evaluation_falls_back_to_signed_official_result(tmp_path):
     (tmp_path / f"runtime/results/{rid}.json").write_text(json.dumps({"official_result": {"finish_order": runners[:3]}}))
     assert R.official_top3(tmp_path, rid) == [str(x) for x in runners[:3]]
     assert R.evaluate_forward(tmp_path)[c["candidate_id"]]["eligible_races"] == 1
+
+
+def test_reflection_falls_back_to_the_signed_official_result(tmp_path):
+    fp, d = _root(tmp_path)
+    rid = d["race_id"]
+    runners = list(d["final_prediction_package"]["index_provenance_replay"]["runners"])
+    (tmp_path / "runtime/jra_static_owner_forward_oos" / rid / "result_evaluation.json").unlink()
+    (tmp_path / "runtime/results").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "runtime/results" / f"{rid}.json").write_text(json.dumps(
+        {"official_result": {"finish_order": runners[:4], "observed_at": "2026-11-14T08:00:00+00:00"}}))
+    a = R.reflect_one(tmp_path, fp)
+    assert a and a["top3"] == [str(x) for x in runners[:3]] and a["official_result_sha256"]
