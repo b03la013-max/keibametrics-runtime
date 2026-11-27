@@ -229,6 +229,18 @@ def market_drift_summary(revs):
 
 
 def race_review(out, key, r):
+    """レースの反省（Blue）に、KAG-BAN の結果後の Red（発走前の指摘が当たっていたか）を足す。"""
+    rv = _race_review_core(out, key, r)
+    if rv and rv.get('governance_pre'):
+        try:
+            import governance
+            rv['governance'] = governance.post_result(rv['governance_pre'], rv)
+        except Exception as e:                                    # 統治の集計は反省を止めない
+            rv['governance'] = {'error': f'{type(e).__name__}:{str(e)[:80]}'}
+    return rv
+
+
+def _race_review_core(out, key, r):
     res = _j(out / f'R{key}.result.json')
     eff = '.rev2' if r.get('effective') == 'rev2' else ''
     rec = _j(out / f'R{key}{eff}.json')
@@ -360,6 +372,7 @@ def race_review(out, key, r):
             'component_corr': component_corr(_full_rows(out, key, eff, ev['rows'])),
             'feeds_present': rec.get('feeds_present'),
             'structure': __import__('intel').race_structure(ev['rows']),
+            'governance_pre': _j(out / f'R{key}{eff}.gov.json'),
             'honmei': ev.get('honmei'), 'honmei_pop': (rows.get(str(ev.get('honmei'))) or {}).get('pop'),
             'honmei_finish': next((i + 1 for i, n in enumerate(res['order'][:3])
                                                                if str(n) == str(ev.get('honmei'))), None),
@@ -379,6 +392,7 @@ def shadow_metrics(out, key, eff, res, rec):
     w, s, t = res['order'][:3]
     pay = res['payouts']
     m = {}
+    base = sh['candidates'].get('BASE') or {}
     for cid, c in sh['candidates'].items():
         if 'error' in c:
             m[cid] = {'error': c['error']}
@@ -390,7 +404,9 @@ def shadow_metrics(out, key, eff, res, rec):
                   'top3_in_place5': sum(1 for n in (w, s, t) if n in po[:5]),
                   'honmei_top3': c['honmei'] in (w, s, t),
                   'trio_hit': tr > 0, 'exact_hit': ex > 0,
-                  'stake': c['points'] * 100, 'return': tr + ex}
+                  'stake': c['points'] * 100, 'return': tr + ex,
+                  'differs': bool(base) and (c['trio'] != base.get('trio') or c['exact'] != base.get('exact')
+                                             or wo != base.get('win_order'))}
     return m
 
 

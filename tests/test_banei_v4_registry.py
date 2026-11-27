@@ -99,3 +99,24 @@ def test_intel_structure_risk_drift():
     assert r['hit_but_loss'] == 0 and 'var' in r and 0 <= r['ruin_rate'] <= 1
     assert intel.risk_summary(revs) == r                                 # 乱数の種を固定（毎晩同じ入力なら同じ結果）
     assert intel.drift_summary(revs)['status'] == 'WAITING'
+
+
+def test_governance_pre_race_post_result_summary():
+    import governance
+    rows = [{'no': 1, 'pop': 1, 'role_w': False, 'role_p2': True, 'win_score': 10.0, 'jockey': 'A', 'bta_evidence': 'STABLE', 'nar_starts': 5},
+            {'no': 2, 'pop': 2, 'role_w': True, 'win_score': 9.5, 'jockey': None, 'bta_evidence': 'STABLE', 'nar_starts': 5},
+            {'no': 3, 'pop': 3, 'role_w': True, 'win_score': 5.0, 'jockey': 'C', 'bta_evidence': 'STABLE', 'nar_starts': 5},
+            {'no': 4, 'pop': 4, 'win_score': 1.0, 'jockey': 'D', 'bta_evidence': 'STABLE', 'nar_starts': 5}]
+    rec = {'evaluation': {'rows': rows, 'honmei': 2}, 'tickets': {'exact': [[2, 3, 1]], 'trio': [[1, 2, 3]], 'universe': {'exact': 20}},
+           'feeds_present': ['kintaro', 'sbo', 'keibabook'], 'moisture': 2.0}
+    g = governance.pre_race(rec)
+    ids = {c['id'] for c in g['challenges']}
+    assert {'E3_JOCKEY_MISSING', 'P1_FAVORITE_OUT_OF_W', 'P2_LOW_DISCRIMINATION', 'C1_MULTI_W_SINGLE_HEAD', 'C2_HEAVY_COMPRESSION',
+            'C3_HUB_ALL_TRIO'} <= ids and g['production_changed'] is False
+    assert all(c['purple'] in ('ADOPT-BEFORE-FREEZE', 'REJECT-WITH-REASON', 'SHADOW', 'EXISTING-RULE-ABSORBED', 'REGRESSION-ONLY', 'NO-CHANGE')
+               for c in g['challenges'])
+    pr = governance.post_result(g, {'ffl': 'ROLE', 'cause': 'C2'})
+    assert pr['failed'] and any(c['confirmed'] for c in pr['checked'] if c['id'] == 'P1_FAVORITE_OUT_OF_W')
+    s = governance.summary([{'governance': pr}, {'governance': governance.post_result({'challenges': []}, {'ffl': 'NONE', 'cause': 'C0'})}])
+    assert s['races_with_challenge'] == 1 and s['races_without_challenge'] == 1
+    assert s['challenges']['P1_FAVORITE_OUT_OF_W']['base_rate'] == 0.5

@@ -150,6 +150,11 @@ def predict(reader, q, key, out, hist, rev=1):
     (out / f'R{key}{sfx}.md').write_text(text + '\n')
     dump(out / f'R{key}{sfx}.shadow.json', {'frozen_at': frozen, 'prereg': challengers.PREREG['registered_at'],
                                             'candidates': shadow})
+    try:                                                  # KAG-BAN: 発走前の Red 機械反証（本番は変えない）
+        import governance
+        dump(out / f'R{key}{sfx}.gov.json', governance.pre_race(pub))
+    except Exception as e:
+        log(out, 'GOV_FAIL', key, f'{type(e).__name__}:{str(e)[:80]}')
     if rev != 1:
         return pub
     r.update(state='PREDICTION_COMPLETE', frozen_at=frozen, ticket_sha256=sha, points=total,

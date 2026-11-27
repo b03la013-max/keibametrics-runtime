@@ -265,6 +265,8 @@ def step(root, log=lambda *a: None):
         reg['kcp'] = {'at': _now(), 'rule': KCP, 'component_auc': kcp_table(revs)}
         import review as _rv
         reg['kiep'] = {'at': _now(), **_rv.kiep_summary(revs)}
+        import governance
+        reg['kag'] = {'at': _now(), 'summary': governance.summary(revs), 'meta': governance.meta(reg, revs)}
         import intel
         reg['kdp_ksp_kap'] = {'at': _now(), 'structure': intel.structure_summary(revs), 'risk': intel.risk_summary(revs),
                               'drift': intel.drift_summary(revs),
@@ -350,6 +352,24 @@ def _status_md(root, reg, table):
             L += ['', f"KAP 環境変化の検知: {d['status']}"
                   + (f"（直近{d['recent_races']}R 対 それ以前{d['prior_races']}R、回収率 {d['pfs_prior']}%→{d['pfs_recent']}%、検知: {fl}）"
                      if d['status'] != 'WAITING' else f"（{d['races']}/{d['need']}R、窓がたまるまで待機）")]
+    g = reg.get('kag') or {}
+    if g:
+        sm, mt = g.get('summary') or {}, g.get('meta') or {}
+        L += ['', '## KAG-BAN 三チーム統治（Blue・Red・Purple、毎晩更新）', '',
+              '発走前に凍結した記録だけで Red が機械反証（LEVEL-1、規則は 11/27 事前固定）。結果後に、その指摘が実際の最初の断線と'
+              '同じ層だったか（当たり）を数える。本番は変えない。ChatGPT による独立反証（LEVEL-3）は Drive の記録を使い、応答と Owner 判断は改善の記録に残す。', '']
+        if sm.get('challenges'):
+            L += ['| 指摘 | 層 | 件数 | 当たり | 当たり率 | 基準率 | 倍率 |', '|---|---|---|---|---|---|---|']
+            L += [f"| {cid} | {d['layer']} | {d['n']} | {d['confirmed']} | {d['precision']} | {d.get('base_rate')} | {d.get('lift')} |"
+                  for cid, d in sm['challenges'].items()]
+            L += ['', '倍率＝当たり率÷基準率（指摘の有無に関係なく、その層で断線したレースの割合）。1前後の指摘は見分ける力が無く、'
+                      '100R 以上でそうなら RED-5 で REJECT-WITH-REASON の候補（規則を変えるときは新しい版として登録）。']
+            L += ['', f"- 指摘のあったレースの断線率 {sm['fail_rate_with_challenge']}（{sm['races_with_challenge']}R）"
+                      f" 対 指摘の無いレース {sm['fail_rate_without_challenge']}（{sm['races_without_challenge']}R）"]
+        else:
+            L += ['- まだ発走前の指摘の記録がありません（11/28 から）']
+        L += [f"- RED-5 Meta: 影の候補 {mt.get('active')}本、30R 以上本番と同じ券面のままの候補 {mt.get('inert_after_30R') or 'なし'}、"
+              f"同じ設定の重複 {mt.get('duplicate_configs') or 'なし'}"]
     fh = reg.get('formula_history') or []
     if fh:
         L += [f"- 算式の版（formula_ledger.json）: {fh[-1]['formula_sha'][:12]}（{fh[-1]['at'][:10]} から、記録 {len(fh)} 版）"]
