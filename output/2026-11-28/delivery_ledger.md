@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-28（21:07時点）
+# 地方版 配送台帳 2026-11-28（21:15時点）
 
 - 管理Race 24／発走済み 0
-- PAPER：凍結 7・Push検証 0・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 15・Push検証 7・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -11,26 +11,26 @@
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
-| KOC_01 | 14:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_02 | 15:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_03 | 16:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KOC_04 | 16:35 | DISCOVERED |  | … | - | - | - |  |
-| KOC_05 | 17:10 | DISCOVERED |  | … | - | - | - |  |
-| KOC_06 | 17:45 | DISCOVERED |  | … | - | - | - |  |
-| KOC_07 | 18:15 | DISCOVERED |  | … | - | - | - |  |
+| KOC_01 | 14:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_02 | 15:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_03 | 16:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_04 | 16:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_05 | 17:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_06 | 17:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KOC_07 | 18:15 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KOC_08 | 18:45 | DISCOVERED |  | … | - | - | - |  |
 | KOC_09 | 19:15 | DISCOVERED |  | … | - | - | - |  |
 | KOC_10 | 19:45 | DISCOVERED |  | … | - | - | - |  |
 | KOC_11 | 20:20 | DISCOVERED |  | … | - | - | - |  |
 | KOC_12 | 20:50 | DISCOVERED |  | … | - | - | - |  |
-| SAG_01 | 14:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_02 | 15:20 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_03 | 15:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_04 | 16:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SAG_05 | 17:00 | DISCOVERED |  | … | - | - | - |  |
-| SAG_06 | 17:35 | DISCOVERED |  | … | - | - | - |  |
-| SAG_07 | 18:05 | DISCOVERED |  | … | - | - | - |  |
-| SAG_08 | 18:35 | DISCOVERED |  | … | - | - | - |  |
+| SAG_01 | 14:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_02 | 15:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_03 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_04 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SAG_05 | 17:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_06 | 17:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_07 | 18:05 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SAG_08 | 18:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SAG_09 | 19:05 | DISCOVERED |  | … | - | - | - |  |
 | SAG_10 | 19:35 | DISCOVERED |  | … | - | - | - |  |
 | SAG_11 | 20:10 | DISCOVERED |  | … | - | - | - |  |
