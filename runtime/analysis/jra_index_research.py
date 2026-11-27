@@ -146,12 +146,21 @@ def reflect_one(root: Path, final_path: Path) -> dict | None:
     if out.exists():
         return json.loads(out.read_text())
     ev = root / "runtime/jra_static_owner_forward_oos" / rid / "result_evaluation.json"
-    if not ev.exists():
-        return None
-    off = json.loads(ev.read_text())
+    if ev.exists():
+        off = json.loads(ev.read_text())
+    else:
+        # The Static Owner evaluations stopped after 2026-11-14, which froze this ledger at 207 races
+        # (found 2026-11-27). Fall back to the signed official result, as evaluate_forward already does.
+        rp = root / "runtime/results" / f"{rid}.json"
+        top = official_top3(root, rid)
+        if not top:
+            return None
+        o = (json.loads(rp.read_text()).get("official_result") or {})
+        off = {"top3": top, "observed_at": o.get("observed_at") or o.get("fetched_at"),
+               "official_result_sha256": file_sha(rp)}
     top3 = [str(x) for x in off["top3"]]
-    runners = d["final_prediction_package"]["index_provenance_replay"]["runners"]
-    if not all(t in runners for t in top3):
+    runners = ((d.get("final_prediction_package") or {}).get("index_provenance_replay") or {}).get("runners")
+    if not runners or not all(t in runners for t in top3):
         return None
     per_index, missing = {}, {}
     for idx in ALL20:
@@ -503,6 +512,11 @@ def run_all(root: Path, date8: str | None, weekly: bool) -> dict:
     if date8:
         summary["freeze"] = freeze(root, date8)
     summary["forward"] = evaluate_forward(root)
+    try:  # stages 1-2 (conversion, index formula), generations, ledger, packets (Owner 2026-11-21 22:39)
+        import jra_index_evolution as EV
+        summary["evolution"] = EV.run(root, rows, date8)
+    except Exception as e:  # noqa: BLE001 - research only; never blocks the existing loop
+        summary["evolution"] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
     summary["production_effect"] = "NONE"
     (out / "status.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
     return summary

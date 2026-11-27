@@ -1,0 +1,207 @@
+{
+ "profile": "KM-JRA-INDEX-RESEARCH-v1-EVOLUTION",
+ "rule": {
+  "interim": 30,
+  "decision": 100,
+  "confirm": 300,
+  "winner_in_top3_max_drop_pts": 2.0,
+  "stratum_min_races": 30,
+  "stratum_max_worse_rank": 0.3,
+  "primary": "paired top3_mean_rank (Challenger - Champion), lower is better",
+  "note": "Challengers have no frozen tickets: max-payout-excluded PFS is reported for Production only"
+ },
+ "candidates": [
+  {
+   "stage": "S1_CONVERSION",
+   "type": "CATEGORY_SCALE_ISOTONIC",
+   "hypothesis": "band points follow the training top-3 rate of each band (isotonic, 50% shrink)",
+   "category_scale": {
+    "VERY_WEAK": 24.0,
+    "WEAK": 33.48,
+    "CAUTION": 47.15,
+    "MIXED": 52.99,
+    "NEUTRAL": 61.78,
+    "POSITIVE": 70.69,
+    "STRONG": 77.81,
+    "VERY_STRONG": 86.87,
+    "EXCEPTIONAL": 94.0
+   },
+   "training_band_counts": {
+    "VERY_WEAK": 822,
+    "WEAK": 8690,
+    "CAUTION": 14200,
+    "MIXED": 22307,
+    "NEUTRAL": 51977,
+    "POSITIVE": 42948,
+    "STRONG": 48979,
+    "VERY_STRONG": 31064,
+    "EXCEPTIONAL": 2241
+   },
+   "generation": 1,
+   "parent_candidate_id": null,
+   "train_window": [
+    "20261011",
+    "20261123"
+   ],
+   "train_races": 352,
+   "rule": {
+    "interim": 30,
+    "decision": 100,
+    "confirm": 300,
+    "winner_in_top3_max_drop_pts": 2.0,
+    "stratum_min_races": 30,
+    "stratum_max_worse_rank": 0.3,
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better",
+    "note": "Challengers have no frozen tickets: max-payout-excluded PFS is reported for Production only"
+   },
+   "parent_formula": "JRA-MAPPING-v1.0_20260921 + ZAI-WIN-v1.1",
+   "parent_formula_sha256": "36da938736c8a58c8e24a24d06dae08bfaa2756fb2b371b11a31010cdc64beaa",
+   "candidate_id": "CAND-EVO-6e6fd109ab",
+   "formula_sha256": "dc7ae0c7f94de356039d16bd885f0ba7f43f4002d9e175e87385d9234f3512c6",
+   "status": "SHADOW",
+   "registered_at": "2026-11-27T11:09:18.169170+00:00",
+   "forward_from_race_date": "20261124",
+   "forward": {
+    "eligible_races": 0
+   }
+  },
+  {
+   "stage": "S2_INDEX_FORMULA",
+   "profile": "ESTABLISHED",
+   "index": "BWI",
+   "training_index_winner_pct": 0.4643,
+   "training_feature_winner_pct": {
+    "bodyweight_range_fit": [
+     0.5181,
+     267
+    ],
+    "bodyweight_delta_fit": [
+     0.4838,
+     304
+    ],
+    "weight_load_fit": [
+     0.4886,
+     351
+    ],
+    "physical_readiness": [
+     0.4962,
+     267
+    ],
+    "equipment_effect": [
+     0.5,
+     0
+    ],
+    "body_condition_comment": [
+     0.5,
+     0
+    ]
+   },
+   "type": "INDEX_FEATURE_REWEIGHT:BWI",
+   "feature_weights": {
+    "bodyweight_range_fit": 0.12,
+    "bodyweight_delta_fit": 0.348136,
+    "weight_load_fit": 0.28109,
+    "physical_readiness": 0.160774,
+    "equipment_effect": 0.05,
+    "body_condition_comment": 0.04
+   },
+   "hypothesis": "BWI is the weakest base index in training; re-weight its features by their own winner discrimination (50% shrink)",
+   "generation": 1,
+   "parent_candidate_id": null,
+   "train_window": [
+    "20261011",
+    "20261123"
+   ],
+   "train_races": 352,
+   "rule": {
+    "interim": 30,
+    "decision": 100,
+    "confirm": 300,
+    "winner_in_top3_max_drop_pts": 2.0,
+    "stratum_min_races": 30,
+    "stratum_max_worse_rank": 0.3,
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better",
+    "note": "Challengers have no frozen tickets: max-payout-excluded PFS is reported for Production only"
+   },
+   "parent_formula": "JRA-MAPPING-v1.0_20260921 + ZAI-WIN-v1.1",
+   "parent_formula_sha256": "36da938736c8a58c8e24a24d06dae08bfaa2756fb2b371b11a31010cdc64beaa",
+   "candidate_id": "CAND-EVO-82fcbe4f57",
+   "formula_sha256": "39a13d55fc91fe1e669fddf8fc676dfb0f6ab41e2d5c5711c7053a549fd0eb8b",
+   "status": "SHADOW",
+   "registered_at": "2026-11-27T11:09:18.169338+00:00",
+   "forward_from_race_date": "20261124",
+   "forward": {
+    "eligible_races": 0
+   }
+  },
+  {
+   "stage": "S2_INDEX_FORMULA",
+   "profile": "ESTABLISHED",
+   "index": "BWI",
+   "training_index_winner_pct": 0.4643,
+   "training_feature_winner_pct": {
+    "bodyweight_range_fit": [
+     0.5181,
+     267
+    ],
+    "bodyweight_delta_fit": [
+     0.4838,
+     304
+    ],
+    "weight_load_fit": [
+     0.4886,
+     351
+    ],
+    "physical_readiness": [
+     0.4962,
+     267
+    ],
+    "equipment_effect": [
+     0.5,
+     0
+    ],
+    "body_condition_comment": [
+     0.5,
+     0
+    ]
+   },
+   "type": "INDEX_FEATURE_ABLATE:BWI",
+   "feature_weights": {
+    "bodyweight_delta_fit": 0.18,
+    "weight_load_fit": 0.2,
+    "physical_readiness": 0.2,
+    "equipment_effect": 0.1,
+    "body_condition_comment": 0.08
+   },
+   "removed": "bodyweight_range_fit",
+   "hypothesis": "BWI's weakest feature bodyweight_range_fit adds noise; drop it (remaining weights re-normalised by Production's coverage rule)",
+   "generation": 1,
+   "parent_candidate_id": null,
+   "train_window": [
+    "20261011",
+    "20261123"
+   ],
+   "train_races": 352,
+   "rule": {
+    "interim": 30,
+    "decision": 100,
+    "confirm": 300,
+    "winner_in_top3_max_drop_pts": 2.0,
+    "stratum_min_races": 30,
+    "stratum_max_worse_rank": 0.3,
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better",
+    "note": "Challengers have no frozen tickets: max-payout-excluded PFS is reported for Production only"
+   },
+   "parent_formula": "JRA-MAPPING-v1.0_20260921 + ZAI-WIN-v1.1",
+   "parent_formula_sha256": "36da938736c8a58c8e24a24d06dae08bfaa2756fb2b371b11a31010cdc64beaa",
+   "candidate_id": "CAND-EVO-d00517c465",
+   "formula_sha256": "aee342daf3f5ac3b0f5c97207d1eda6c7fd0ca6a67374e5da4af9d58f1bb0d8a",
+   "status": "SHADOW",
+   "registered_at": "2026-11-27T11:09:18.169473+00:00",
+   "forward_from_race_date": "20261124",
+   "forward": {
+    "eligible_races": 0
+   }
+  }
+ ]
+}
