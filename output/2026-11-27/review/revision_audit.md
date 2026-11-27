@@ -1,10 +1,10 @@
 # 修正版（Rev2）監査と勝ち馬漏れの診断 2026-11-27（証拠のみ）
 
-対象 25R、うちRev2 20R。勝ち馬の順位：改善 3R／悪化 1R。Rev2でWから外れた勝ち馬 0R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 61,120円 → Rev2 61,120円。
+対象 26R、うちRev2 21R。勝ち馬の順位：改善 3R／悪化 1R。Rev2でWから外れた勝ち馬 1R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 61,120円 → Rev2 61,120円。
 
-直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）42頭：勝率 11.9%・3着内 40.5%／その他 185頭：勝率 8.1%・3着内 23.2%（1日分は参考）
+直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）43頭：勝率 14.0%・3着内 41.9%／その他 196頭：勝率 7.7%・3着内 23.0%（1日分は参考）
 
-勝ち馬がW外：11R（うち市場の上位3頭 7R）
+勝ち馬がW外：12R（うち市場の上位3頭 8R）
 
 | R | 勝ち馬 | 順位R1→R2 | W R1/R2 | 単勝R1→R2 | 動いた指数（勝ち馬） | 60点払戻R1→R2 |
 |---|---|---|---|---|---|---|
@@ -12,6 +12,7 @@
 | NGY_02 | 3 | 9→9 | ×/× | 2.1→1.6 | BWI-L 55.7→64.8, DCR 22.5→25.0, TPI-L 33.3→34.0, PRI 36.4→45.5 | 0→0 |
 | NGY_03 | 2 | 1→1 | ○/○ | 1.0→1.1 | BWI-L 53.8→63.8, DCR 50.8→53.3, TPI-L 61.8→65.7, ZAI-WIN 63.6→65.1 | 0→0 |
 | NGY_04 | 3 | 1→1 | ○/○ | 1.2→1.1 | BWI-L 53.8→64.0, DCR 50.8→53.3, TPI-L 62.0→66.0, ZAI-WIN 62.3→63.8 | 3,720→3,720 |
+| NGY_05 | 2 | 3→None | ○/× | 11.0→7.0 | BWI-L 53.6→63.8, DCR 44.2→46.7, TPI-L 51.8→52.6, PRI 81.8→90.9 |  |
 | SON_01 | 10 | 1→1 | ○/○ | 0.0→1.5 | PRI 52.0→100.0, OPI-V 52.0→50.0, WCI 68.5→71.7, W-AKI 27.0→17.4 | 1,530→1,530 |
 | SON_02 | 7 | 1→1 | ○/○ | 1.1→1.2 |  | 1,230→1,230 |
 | SON_03 | 10 | 1→1 | ○/○ | 4.3→2.1 | PRI 90.9→100.0, OPI-V 54.5→50.0, T3I-L 60.9→60.2, WCI 61.8→62.4 | 460→460 |
@@ -35,6 +36,7 @@
 |---|---|---|---|---|
 | NGY_01 | 4 | 4 | 3 | BWI-L, CFIg-L, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, OPI-V, P2-AKI, P3-AKI, RFIg-L, RSI, SRI-L, T3I-L, TPI-L, W-AKI, ZAI-PLACE, ZAI-WIN |
 | NGY_02 | 3 | 9 | 1 | BWI-L, CFIg-L, DRS, P2-AKI, P3-AKI, RSI, W-AKI |
+| NGY_05 | 2 | 3 | 2 | BVIg-L, CFIg-L, DCR, EVI/CEV, F3S-L, JTI-L, NCI, RFIg-L, SRI-L, TPI-L, WCI, ZAI-PLACE, ZAI-WIN |
 | SON_05 | 5 | 5 | 5 | BVIg-L, BWI-L, CFIg-L, DRS, EVI/CEV, F3S-L, HCS, HPI-L, NCI, OPI-V, SRI-L, T3I-L, TPI-L, W-AKI, ZAI-PLACE, ZAI-WIN |
 | SON_06 | 1 | 4 | 1 | ASI, CFIg-L, DCR, DRS, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, NCI, OPI-V, PRI, RFIg-L, SRI-L, T3I-L, TPI-L, TRI, WCI, ZAI-PLACE, ZAI-WIN |
 | SON_10 | 10 | 6 | 2 | HPI-L, P2-AKI, P3-AKI, RSI, URP, W-AKI |
