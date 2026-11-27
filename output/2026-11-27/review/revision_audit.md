@@ -1,10 +1,10 @@
 # 修正版（Rev2）監査と勝ち馬漏れの診断 2026-11-27（証拠のみ）
 
-対象 24R、うちRev2 19R。勝ち馬の順位：改善 3R／悪化 1R。Rev2でWから外れた勝ち馬 0R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 61,120円 → Rev2 61,120円。
+対象 25R、うちRev2 20R。勝ち馬の順位：改善 3R／悪化 1R。Rev2でWから外れた勝ち馬 0R／Rev2でWに入った勝ち馬 0R。同じ60点の払戻：Rev1 61,120円 → Rev2 61,120円。
 
-直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）40頭：勝率 10.0%・3着内 40.0%／その他 175頭：勝率 8.6%・3着内 23.4%（1日分は参考）
+直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）42頭：勝率 11.9%・3着内 40.5%／その他 185頭：勝率 8.1%・3着内 23.2%（1日分は参考）
 
-勝ち馬がW外：10R（うち市場の上位3頭 6R）
+勝ち馬がW外：11R（うち市場の上位3頭 7R）
 
 | R | 勝ち馬 | 順位R1→R2 | W R1/R2 | 単勝R1→R2 | 動いた指数（勝ち馬） | 60点払戻R1→R2 |
 |---|---|---|---|---|---|---|
@@ -20,6 +20,7 @@
 | SON_07 | 7 | 2→1 | ○/○ | 3.8→4.7 |  | 12,310→12,310 |
 | SON_10 | 10 | 6→6 | ×/× | 6.9→5.5 | PRI 80.0→70.0, OPI-V 40.0→35.0, T3I-L 52.3→51.6, WCI 53.4→52.7 | 0→0 |
 | SON_11 | 2 | 1→1 | ○/○ | 2.6→4.5 | PRI 100.0→90.9, OPI-V 50.0→54.5, T3I-L 60.9→61.5, WCI 71.1→70.5 | 3,070→3,070 |
+| SON_12 | 7 | 4→4 | ×/× | 8.5→5.5 | PRI 63.6→90.9, OPI-V 68.2→54.5, T3I-L 67.9→66.0, WCI 62.9→64.7 | 0→0 |
 | URW_02 | 9 | 4→5 | ×/× | 2.2→2.0 |  | 0→0 |
 | URW_03 | 2 | 7→6 | ×/× | 13.1→17.1 | PRI 72.7→90.9, OPI-V 36.4→45.5, T3I-L 53.8→55.0, WCI 56.5→57.8 | 0→0 |
 | URW_05 | 8 | 8→7 | ×/× | 19.2→43.3 | PRI 63.6→81.8, OPI-V 31.8→40.9, T3I-L 40.0→41.3, WCI 50.8→52.0 | 0→0 |
@@ -37,6 +38,7 @@
 | SON_05 | 5 | 5 | 5 | BVIg-L, BWI-L, CFIg-L, DRS, EVI/CEV, F3S-L, HCS, HPI-L, NCI, OPI-V, SRI-L, T3I-L, TPI-L, W-AKI, ZAI-PLACE, ZAI-WIN |
 | SON_06 | 1 | 4 | 1 | ASI, CFIg-L, DCR, DRS, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, NCI, OPI-V, PRI, RFIg-L, SRI-L, T3I-L, TPI-L, TRI, WCI, ZAI-PLACE, ZAI-WIN |
 | SON_10 | 10 | 6 | 2 | HPI-L, P2-AKI, P3-AKI, RSI, URP, W-AKI |
+| SON_12 | 7 | 4 | 2 | CFIg-L, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, P2-AKI, P3-AKI, RFIg-L, RSI, SRI-L, T3I-L, TPI-L, TRI, URP, ZAI-PLACE, ZAI-WIN |
 | URW_01 | 3 | 4 | 2 | BVIg-L, CFIg-L, EVI/CEV, JTI-L, NCI, P2-AKI, P3-AKI, RSI, TRI, W-AKI |
 | URW_02 | 9 | 5 | 1 | CFIg-L, F3S-L, HCS, HPI-L, NCI, SRI-L, T3I-L, TPI-L, W-AKI, WCI, ZAI-PLACE, ZAI-WIN |
 | URW_03 | 2 | 6 | 5 | CCI, P2-AKI, P3-AKI, TRI, W-AKI |
