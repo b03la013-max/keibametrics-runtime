@@ -1,10 +1,10 @@
 # 修正版（Rev2）監査と勝ち馬漏れの診断 2026-11-27（証拠のみ）
 
-対象 34R、うちRev2 26R。勝ち馬の順位：改善 5R／悪化 1R。Rev2でWから外れた勝ち馬 1R／Rev2でWに入った勝ち馬 1R。同じ60点の払戻：Rev1 62,940円 → Rev2 62,940円。
+対象 35R、うちRev2 26R。勝ち馬の順位：改善 5R／悪化 1R。Rev2でWから外れた勝ち馬 1R／Rev2でWに入った勝ち馬 1R。同じ60点の払戻：Rev1 62,940円 → Rev2 62,940円。
 
 直前に買われた馬（Rev1→Rev2で単勝が25%以上短縮）57頭：勝率 10.5%・3着内 38.6%／その他 244頭：勝率 8.2%・3着内 23.0%（1日分は参考）
 
-勝ち馬がW外：15R（うち市場の上位3頭 9R）
+勝ち馬がW外：16R（うち市場の上位3頭 10R）
 
 | R | 勝ち馬 | 順位R1→R2 | W R1/R2 | 単勝R1→R2 | 動いた指数（勝ち馬） | 60点払戻R1→R2 |
 |---|---|---|---|---|---|---|
@@ -44,6 +44,7 @@
 | NGY_05 | 2 | 3 | 2 | BVIg-L, CFIg-L, DCR, EVI/CEV, F3S-L, JTI-L, NCI, RFIg-L, SRI-L, TPI-L, WCI, ZAI-PLACE, ZAI-WIN |
 | NGY_08 | 12 | 4 | 2 | ASI, HCS, HPI-L, NCI, WCI |
 | NGY_10 | 5 | 7 | 5 | BWI-L, DCR, P2-AKI, P3-AKI, RSI, URP |
+| NGY_11 | 1 | 11 | 2 | P2-AKI, P3-AKI, RSI, URP, W-AKI |
 | SON_05 | 5 | 5 | 5 | BVIg-L, BWI-L, CFIg-L, DRS, EVI/CEV, F3S-L, HCS, HPI-L, NCI, OPI-V, SRI-L, T3I-L, TPI-L, W-AKI, ZAI-PLACE, ZAI-WIN |
 | SON_06 | 1 | 4 | 1 | ASI, CFIg-L, DCR, DRS, EVI/CEV, F3S-L, HCS, HPI-L, JTI-L, NCI, OPI-V, PRI, RFIg-L, SRI-L, T3I-L, TPI-L, TRI, WCI, ZAI-PLACE, ZAI-WIN |
 | SON_10 | 10 | 6 | 2 | HPI-L, P2-AKI, P3-AKI, RSI, URP, W-AKI |
