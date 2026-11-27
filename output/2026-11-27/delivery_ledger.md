@@ -1,12 +1,12 @@
-# 地方版 配送台帳 2026-11-27（14:34時点）
+# 地方版 配送台帳 2026-11-27（14:42時点）
 
-- 管理Race 36／発走済み 13
-- PAPER：凍結 36・Push検証 36・送信 17（発走前 17）・読み戻し一致 17・本人確認 0
+- 管理Race 36／発走済み 14
+- PAPER：凍結 36・Push検証 35・送信 17（発走前 17）・読み戻し一致 17・本人確認 0
 - 正式：試行 17・Signed FINAL 17（NO-BET 0）・発走前送信 17・読み戻し一致 17・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
-- 10分前チェック：確認 14／重要変更 10／Revision 2署名 10
+- 10分前チェック：確認 15／重要変更 11／Revision 2署名 11
 - 停止工程：なし／配送再試行：なし
 
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
@@ -39,9 +39,9 @@
 | URW_02 | 12:50 | POSTRESULT_DIAGNOSTIC | 12:05 | ○ | SIGNED_FINAL | 12:40 | ○ |  |
 | URW_03 | 13:20 | POSTRESULT_DIAGNOSTIC | 12:37 | ○ | SIGNED_FINAL | 13:11 | ○ |  |
 | URW_04 | 13:50 | POSTRESULT_DIAGNOSTIC | 13:06 | ○ | SIGNED_FINAL | 13:07 | ○ |  |
-| URW_05 | 14:20 | PRESTART_PUSH_VERIFIED | 13:35 | ○ | SIGNED_FINAL | 14:10 | ○ |  |
-| URW_06 | 14:50 | PRESTART_PUSH_VERIFIED | 14:05 | ○ | SIGNED_FINAL | 14:06 | ○ |  |
-| URW_07 | 15:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| URW_05 | 14:20 | POSTRESULT_DIAGNOSTIC | 13:35 | ○ | SIGNED_FINAL | 14:10 | ○ |  |
+| URW_06 | 14:50 | PRESTART_PUSH_VERIFIED | 14:05 | ○ | SIGNED_FINAL | 14:42 | ○ |  |
+| URW_07 | 15:25 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | URW_08 | 16:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_09 | 16:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | URW_10 | 17:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
