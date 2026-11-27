@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-27'] ／ 1041R・11260出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-27'] ／ 1048R・11345出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -250,27 +250,27 @@
 | SON | S | 4 | 42 | 5 | 7 | 9 | 50.0% (36%–64%) | 101% | 86% |
 | SON | S | 5 | 42 | 2 | 5 | 5 | 28.6% (17%–44%) | 54% | 77% |
 | SON | S | 6-9 | 161 | 1 | 3 | 10 | 8.7% (5%–14%) | 12% | 42% |
-| URW | L | 1 | 6※ | 1 | 3 | 1 | 83.3% (44%–97%) | 40% | 112% |
-| URW | L | 10+ | 14※ | 0 | 0 | 0 | 0.0% (0%–22%) | 0% | 0% |
-| URW | L | 2 | 6※ | 1 | 0 | 0 | 16.7% (3%–56%) | 43% | 18% |
-| URW | L | 3 | 6※ | 1 | 1 | 1 | 50.0% (19%–81%) | 63% | 70% |
-| URW | L | 4 | 6※ | 0 | 1 | 2 | 50.0% (19%–81%) | 0% | 87% |
-| URW | L | 5 | 6※ | 2 | 0 | 0 | 33.3% (10%–70%) | 322% | 83% |
-| URW | L | 6-9 | 24※ | 1 | 1 | 2 | 16.7% (7%–36%) | 65% | 80% |
-| URW | M | 1 | 25※ | 11 | 4 | 0 | 60.0% (41%–77%) | 74% | 68% |
-| URW | M | 10+ | 80 | 0 | 2 | 2 | 5.0% (2%–12%) | 0% | 67% |
-| URW | M | 2 | 25※ | 6 | 6 | 3 | 60.0% (41%–77%) | 96% | 88% |
-| URW | M | 3 | 25※ | 4 | 4 | 3 | 44.0% (27%–63%) | 86% | 82% |
-| URW | M | 4 | 25※ | 0 | 4 | 6 | 40.0% (23%–59%) | 0% | 97% |
-| URW | M | 5 | 25※ | 2 | 2 | 2 | 24.0% (12%–43%) | 82% | 60% |
-| URW | M | 6-9 | 97 | 2 | 3 | 9 | 14.4% (9%–23%) | 68% | 67% |
-| URW | S | 1 | 8※ | 4 | 1 | 2 | 87.5% (53%–98%) | 85% | 96% |
-| URW | S | 10+ | 12※ | 0 | 0 | 2 | 16.7% (5%–45%) | 0% | 122% |
-| URW | S | 2 | 8※ | 2 | 3 | 0 | 62.5% (31%–86%) | 70% | 84% |
-| URW | S | 3 | 8※ | 2 | 1 | 0 | 37.5% (14%–69%) | 125% | 60% |
-| URW | S | 4 | 8※ | 0 | 2 | 1 | 37.5% (14%–69%) | 0% | 64% |
-| URW | S | 5 | 8※ | 0 | 1 | 1 | 25.0% (7%–59%) | 0% | 95% |
-| URW | S | 6-9 | 29※ | 0 | 0 | 2 | 6.9% (2%–22%) | 0% | 45% |
+| URW | L | 1 | 7※ | 1 | 4 | 1 | 85.7% (49%–97%) | 34% | 117% |
+| URW | L | 10+ | 17※ | 0 | 0 | 0 | 0.0% (0%–18%) | 0% | 0% |
+| URW | L | 2 | 7※ | 2 | 0 | 0 | 28.6% (8%–64%) | 91% | 36% |
+| URW | L | 3 | 7※ | 1 | 1 | 1 | 42.9% (16%–75%) | 54% | 60% |
+| URW | L | 4 | 7※ | 0 | 1 | 3 | 57.1% (25%–84%) | 0% | 99% |
+| URW | L | 5 | 7※ | 2 | 0 | 0 | 28.6% (8%–64%) | 276% | 71% |
+| URW | L | 6-9 | 28※ | 1 | 1 | 2 | 14.3% (6%–31%) | 56% | 68% |
+| URW | M | 1 | 29※ | 12 | 4 | 1 | 58.6% (41%–74%) | 70% | 68% |
+| URW | M | 10+ | 93 | 0 | 2 | 2 | 4.3% (2%–11%) | 0% | 57% |
+| URW | M | 2 | 29※ | 8 | 7 | 4 | 65.5% (47%–80%) | 105% | 97% |
+| URW | M | 3 | 29※ | 4 | 5 | 4 | 44.8% (28%–62%) | 74% | 82% |
+| URW | M | 4 | 29※ | 1 | 5 | 6 | 41.4% (26%–59%) | 30% | 98% |
+| URW | M | 5 | 29※ | 2 | 2 | 2 | 20.7% (10%–38%) | 70% | 51% |
+| URW | M | 6-9 | 113 | 2 | 4 | 10 | 14.2% (9%–22%) | 58% | 68% |
+| URW | S | 1 | 10※ | 4 | 1 | 2 | 70.0% (40%–89%) | 68% | 77% |
+| URW | S | 10+ | 18※ | 0 | 0 | 2 | 11.1% (3%–33%) | 0% | 81% |
+| URW | S | 2 | 10※ | 2 | 4 | 1 | 70.0% (40%–89%) | 56% | 96% |
+| URW | S | 3 | 10※ | 2 | 1 | 0 | 30.0% (11%–60%) | 100% | 48% |
+| URW | S | 4 | 10※ | 1 | 3 | 1 | 50.0% (24%–76%) | 179% | 104% |
+| URW | S | 5 | 10※ | 1 | 1 | 1 | 30.0% (11%–60%) | 110% | 91% |
+| URW | S | 6-9 | 37 | 0 | 0 | 3 | 8.1% (3%–21%) | 0% | 46% |
 
 ## 枠（A/E＝人気から見た期待3着内に対する実績）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -280,6 +280,7 @@
 | venue=MIZ / distance=1400 / going=WET / field_band=F9-11 / frame=8 | 34 | 20.6% | 0.58 | 13% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=5 | 44 | 18.2% | 0.63 | 34% |
 | venue=SAG / distance=1400 / going=DAMP / field_band=F9-11 / frame=8 | 36 | 44.4% | 1.58 | 14% |
+| venue=URW / distance=1400 / going=DRY / field_band=F12+ / frame=5 | 32 | 15.6% | 0.64 | 91% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=4 | 39 | 41.0% | 1.49 | 89% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=8 | 78 | 39.7% | 1.45 | 34% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=1 | 39 | 17.9% | 0.70 | 133% |
@@ -295,18 +296,18 @@
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=6 | 78 | 20.5% | 0.79 | 27% |
 | venue=SON / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 36 | 41.7% | 1.26 | 57% |
 | venue=SON / distance=1400 / going=DAMP / field_band=F9-11 / frame=6 | 34 | 20.6% | 0.80 | 0% |
-| venue=KSM / distance=1400 / going=DRY / field_band=F9-11 / frame=8 | 46 | 34.8% | 1.26 | 65% |
 
 ## 距離変更：A/E の偏りが大きい区分（30出走以上、上位20）
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=URW / band=M / distance_change=LONGER | 40 | 22.5% | 1.41 | 35% |
+| venue=URW / band=M / distance_change=LONGER | 48 | 20.8% | 1.34 | 29% |
+| venue=URW / band=M / distance_change=SAME | 31 | 22.6% | 1.29 | 71% |
+| venue=URW / band=M / distance_change=SHORTER | 52 | 23.1% | 1.25 | 40% |
 | venue=MIZ / band=M / distance_change=LONGER | 60 | 33.3% | 1.24 | 70% |
 | venue=NGY / band=M / distance_change=LONGER | 64 | 14.1% | 0.81 | 12% |
 | venue=MON / band=S / distance_change=SAME | 64 | 26.6% | 1.23 | 88% |
 | venue=NGY / band=M / distance_change=SHORTER | 51 | 31.4% | 1.23 | 239% |
-| venue=URW / band=M / distance_change=SHORTER | 43 | 20.9% | 1.23 | 18% |
 | venue=SON / band=M / distance_change=LONGER | 44 | 15.9% | 0.82 | 8% |
 | venue=KSM / band=M / distance_change=LONGER | 51 | 19.6% | 0.82 | 21% |
 | venue=SON / band=S / distance_change=SHORTER | 37 | 16.2% | 0.83 | 45% |
@@ -320,16 +321,15 @@
 | venue=KOC / band=M / distance_change=LONGER | 149 | 28.9% | 1.10 | 45% |
 | venue=SAG / band=S / distance_change=SHORTER | 65 | 24.6% | 1.08 | 17% |
 | venue=KSM / band=M / distance_change=SHORTER | 44 | 25.0% | 1.07 | 35% |
-| venue=KNZ / band=M / distance_change=SHORTER | 63 | 33.3% | 1.07 | 117% |
 
 ## 出走間隔：A/E の偏りが大きい区分（30出走以上、上位20）
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=URW / days_since_last=<=14d | 37 | 21.6% | 1.39 | 28% |
+| venue=URW / days_since_last=<=14d | 38 | 21.1% | 1.38 | 27% |
+| venue=URW / days_since_last=15-35d | 162 | 22.8% | 1.17 | 57% |
 | venue=MOR / days_since_last=<=14d | 76 | 21.1% | 0.86 | 30% |
 | venue=KNZ / days_since_last=15-35d | 38 | 39.5% | 1.15 | 26% |
-| venue=URW / days_since_last=15-35d | 124 | 22.6% | 1.15 | 50% |
 | venue=NGY / days_since_last=<=14d | 223 | 24.7% | 1.12 | 72% |
 | venue=SON / days_since_last=15-35d | 229 | 29.3% | 1.09 | 58% |
 | venue=SAG / days_since_last=<=14d | 343 | 25.1% | 1.08 | 46% |
@@ -471,11 +471,11 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=URW / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 36 | 5.6% | 0.47 | 0% |
 | venue=MIZ / distance=1300 / same_venue_distance_win_before=False / last_finish=7+ | 47 | 4.3% | 0.52 | 0% |
 | venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 106 | 7.5% | 0.62 | 37% |
 | venue=MIZ / distance=1600 / same_venue_distance_win_before=False / last_finish=7+ | 37 | 10.8% | 0.68 | 0% |
 | venue=KSM / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 77 | 10.4% | 0.71 | 6% |
+| venue=URW / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 42 | 9.5% | 0.72 | 21% |
 | venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 47 | 57.5% | 1.32 | 107% |
 | venue=KNZ / distance=1400 / same_venue_distance_win_before=False / last_finish=4-6 | 52 | 17.3% | 0.77 | 19% |
 | venue=MIZ / distance=850 / same_venue_distance_win_before=False / last_finish=7+ | 50 | 20.0% | 1.25 | 0% |
