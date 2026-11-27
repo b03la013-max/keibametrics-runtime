@@ -1,0 +1,901 @@
+{
+ "profile": "KM-LOCAL-KIEP-ACTUAL-CONSUMER-ABLATION-v1.0-20261126",
+ "races": 388,
+ "days": [
+  "2026-11-16",
+  "2026-11-17",
+  "2026-11-18",
+  "2026-11-19",
+  "2026-11-20",
+  "2026-11-21",
+  "2026-11-22",
+  "2026-11-23",
+  "2026-11-24",
+  "2026-11-25",
+  "2026-11-26",
+  "2026-11-27"
+ ],
+ "index_ids": [
+  "HPI-L",
+  "CFIg-L",
+  "RFIg-L",
+  "BVIg-L",
+  "JTI-L",
+  "CSI-L",
+  "BWI-L",
+  "DCR",
+  "NCI",
+  "TPI-L",
+  "EVI/CEV",
+  "CCI",
+  "TRI",
+  "PRI",
+  "OPI-V",
+  "DRS",
+  "URP",
+  "HCS",
+  "ZAI-WIN",
+  "ZAI-PLACE",
+  "SRI-L",
+  "T3I-L",
+  "F3S-L",
+  "WCI",
+  "W-AKI",
+  "P2-AKI",
+  "P3-AKI",
+  "ASI",
+  "RSI"
+ ],
+ "reproduced": {
+  "races": 388,
+  "identical_to_stored_formal_ranking": 383
+ },
+ "split": {
+  "train": "2026-11-16〜2026-11-22",
+  "test": "2026-11-23〜2026-11-27"
+ },
+ "baseline": {
+  "train": {
+   "races": 199,
+   "auc_top3": 0.6914,
+   "winner_rank_mean": 3.538,
+   "winner_top1": 66,
+   "winner_top3": 123
+  },
+  "test": {
+   "races": 189,
+   "auc_top3": 0.709,
+   "winner_rank_mean": 3.661,
+   "winner_top1": 60,
+   "winner_top3": 115
+  }
+ },
+ "ablation": {
+  "HPI-L": {
+   "n": 0,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6908,
+    "winner_rank_mean": 3.558,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": -0.0006
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7073,
+    "winner_rank_mean": 3.683,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": -0.0017
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "CFIg-L": {
+   "n": 1,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6752,
+    "winner_rank_mean": 3.779,
+    "winner_top1": 56,
+    "winner_top3": 118,
+    "auc_gain": -0.0162
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7028,
+    "winner_rank_mean": 3.751,
+    "winner_top1": 61,
+    "winner_top3": 113,
+    "auc_gain": -0.0062
+   },
+   "verdict": "NEEDED"
+  },
+  "RFIg-L": {
+   "n": 2,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6843,
+    "winner_rank_mean": 3.623,
+    "winner_top1": 63,
+    "winner_top3": 120,
+    "auc_gain": -0.0071
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7111,
+    "winner_rank_mean": 3.688,
+    "winner_top1": 59,
+    "winner_top3": 114,
+    "auc_gain": 0.0021
+   },
+   "verdict": "MIXED"
+  },
+  "BVIg-L": {
+   "n": 3,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7081,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 59,
+    "winner_top3": 115,
+    "auc_gain": -0.0009
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "JTI-L": {
+   "n": 4,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6895,
+    "winner_rank_mean": 3.553,
+    "winner_top1": 65,
+    "winner_top3": 125,
+    "auc_gain": -0.0019
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7071,
+    "winner_rank_mean": 3.677,
+    "winner_top1": 56,
+    "winner_top3": 115,
+    "auc_gain": -0.0019
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "CSI-L": {
+   "n": 5,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6923,
+    "winner_rank_mean": 3.528,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0009
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7086,
+    "winner_rank_mean": 3.656,
+    "winner_top1": 58,
+    "winner_top3": 117,
+    "auc_gain": -0.0004
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "BWI-L": {
+   "n": 6,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6916,
+    "winner_rank_mean": 3.548,
+    "winner_top1": 65,
+    "winner_top3": 124,
+    "auc_gain": 0.0002
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7104,
+    "winner_rank_mean": 3.635,
+    "winner_top1": 62,
+    "winner_top3": 117,
+    "auc_gain": 0.0014
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "DCR": {
+   "n": 7,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "NCI": {
+   "n": 8,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.693,
+    "winner_rank_mean": 3.523,
+    "winner_top1": 65,
+    "winner_top3": 125,
+    "auc_gain": 0.0016
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7082,
+    "winner_rank_mean": 3.677,
+    "winner_top1": 57,
+    "winner_top3": 116,
+    "auc_gain": -0.0008
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "TPI-L": {
+   "n": 9,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "EVI/CEV": {
+   "n": 10,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6777,
+    "winner_rank_mean": 3.739,
+    "winner_top1": 61,
+    "winner_top3": 118,
+    "auc_gain": -0.0137
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7065,
+    "winner_rank_mean": 3.735,
+    "winner_top1": 60,
+    "winner_top3": 113,
+    "auc_gain": -0.0025
+   },
+   "verdict": "MIXED"
+  },
+  "CCI": {
+   "n": 11,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "TRI": {
+   "n": 12,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "PRI": {
+   "n": 13,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "OPI-V": {
+   "n": 14,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "DRS": {
+   "n": 15,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "URP": {
+   "n": 16,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "HCS": {
+   "n": 17,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "ZAI-WIN": {
+   "n": 18,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6894,
+    "winner_rank_mean": 3.583,
+    "winner_top1": 66,
+    "winner_top3": 125,
+    "auc_gain": -0.002
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7097,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 116,
+    "auc_gain": 0.0007
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "ZAI-PLACE": {
+   "n": 19,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6837,
+    "winner_rank_mean": 3.633,
+    "winner_top1": 63,
+    "winner_top3": 122,
+    "auc_gain": -0.0077
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7095,
+    "winner_rank_mean": 3.677,
+    "winner_top1": 60,
+    "winner_top3": 116,
+    "auc_gain": 0.0005
+   },
+   "verdict": "MIXED"
+  },
+  "SRI-L": {
+   "n": 20,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6841,
+    "winner_rank_mean": 3.623,
+    "winner_top1": 63,
+    "winner_top3": 122,
+    "auc_gain": -0.0073
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7096,
+    "winner_rank_mean": 3.656,
+    "winner_top1": 61,
+    "winner_top3": 117,
+    "auc_gain": 0.0006
+   },
+   "verdict": "MIXED"
+  },
+  "T3I-L": {
+   "n": 21,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6935,
+    "winner_rank_mean": 3.508,
+    "winner_top1": 67,
+    "winner_top3": 124,
+    "auc_gain": 0.0021
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7142,
+    "winner_rank_mean": 3.608,
+    "winner_top1": 61,
+    "winner_top3": 116,
+    "auc_gain": 0.0052
+   },
+   "verdict": "MIXED"
+  },
+  "F3S-L": {
+   "n": 22,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6816,
+    "winner_rank_mean": 3.638,
+    "winner_top1": 63,
+    "winner_top3": 123,
+    "auc_gain": -0.0098
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.706,
+    "winner_rank_mean": 3.72,
+    "winner_top1": 59,
+    "winner_top3": 114,
+    "auc_gain": -0.003
+   },
+   "verdict": "MIXED"
+  },
+  "WCI": {
+   "n": 23,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6927,
+    "winner_rank_mean": 3.508,
+    "winner_top1": 67,
+    "winner_top3": 123,
+    "auc_gain": 0.0013
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7109,
+    "winner_rank_mean": 3.635,
+    "winner_top1": 59,
+    "winner_top3": 118,
+    "auc_gain": 0.0019
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "W-AKI": {
+   "n": 24,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6946,
+    "winner_rank_mean": 3.503,
+    "winner_top1": 69,
+    "winner_top3": 122,
+    "auc_gain": 0.0032
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7114,
+    "winner_rank_mean": 3.598,
+    "winner_top1": 59,
+    "winner_top3": 119,
+    "auc_gain": 0.0024
+   },
+   "verdict": "NO_EFFECT"
+  },
+  "P2-AKI": {
+   "n": 25,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6965,
+    "winner_rank_mean": 3.513,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0051
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7104,
+    "winner_rank_mean": 3.619,
+    "winner_top1": 59,
+    "winner_top3": 119,
+    "auc_gain": 0.0014
+   },
+   "verdict": "MIXED"
+  },
+  "P3-AKI": {
+   "n": 26,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6965,
+    "winner_rank_mean": 3.513,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0051
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7104,
+    "winner_rank_mean": 3.619,
+    "winner_top1": 59,
+    "winner_top3": 119,
+    "auc_gain": 0.0014
+   },
+   "verdict": "MIXED"
+  },
+  "ASI": {
+   "n": 27,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.7029,
+    "winner_rank_mean": 3.377,
+    "winner_top1": 69,
+    "winner_top3": 123,
+    "auc_gain": 0.0115
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.7185,
+    "winner_rank_mean": 3.497,
+    "winner_top1": 63,
+    "winner_top3": 125,
+    "auc_gain": 0.0095
+   },
+   "verdict": "DROP_HELPS"
+  },
+  "RSI": {
+   "n": 28,
+   "train": {
+    "races": 199,
+    "auc_top3": 0.6914,
+    "winner_rank_mean": 3.538,
+    "winner_top1": 66,
+    "winner_top3": 123,
+    "auc_gain": 0.0
+   },
+   "test": {
+    "races": 189,
+    "auc_top3": 0.709,
+    "winner_rank_mean": 3.661,
+    "winner_top1": 60,
+    "winner_top3": 115,
+    "auc_gain": 0.0
+   },
+   "verdict": "NO_EFFECT"
+  }
+ },
+ "scale": {
+  "factor": 1.5,
+  "rows": {
+   "CFIg-L": {
+    "n": 1,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6979,
+     "winner_rank_mean": 3.467,
+     "winner_top1": 67,
+     "winner_top3": 124,
+     "auc_gain": 0.0065
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7107,
+     "winner_rank_mean": 3.63,
+     "winner_top1": 59,
+     "winner_top3": 119,
+     "auc_gain": 0.0017
+    },
+    "verdict": "NO"
+   },
+   "RFIg-L": {
+    "n": 2,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6943,
+     "winner_rank_mean": 3.513,
+     "winner_top1": 67,
+     "winner_top3": 123,
+     "auc_gain": 0.0029
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7072,
+     "winner_rank_mean": 3.672,
+     "winner_top1": 57,
+     "winner_top3": 117,
+     "auc_gain": -0.0018
+    },
+    "verdict": "NO"
+   },
+   "EVI/CEV": {
+    "n": 10,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6972,
+     "winner_rank_mean": 3.487,
+     "winner_top1": 68,
+     "winner_top3": 124,
+     "auc_gain": 0.0058
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7074,
+     "winner_rank_mean": 3.64,
+     "winner_top1": 57,
+     "winner_top3": 117,
+     "auc_gain": -0.0016
+    },
+    "verdict": "NO"
+   },
+   "ZAI-WIN": {
+    "n": 18,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6931,
+     "winner_rank_mean": 3.508,
+     "winner_top1": 66,
+     "winner_top3": 123,
+     "auc_gain": 0.0017
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7082,
+     "winner_rank_mean": 3.661,
+     "winner_top1": 59,
+     "winner_top3": 116,
+     "auc_gain": -0.0008
+    },
+    "verdict": "NO"
+   },
+   "ZAI-PLACE": {
+    "n": 19,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.695,
+     "winner_rank_mean": 3.497,
+     "winner_top1": 66,
+     "winner_top3": 124,
+     "auc_gain": 0.0036
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7088,
+     "winner_rank_mean": 3.646,
+     "winner_top1": 59,
+     "winner_top3": 117,
+     "auc_gain": -0.0002
+    },
+    "verdict": "NO"
+   },
+   "SRI-L": {
+    "n": 20,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6945,
+     "winner_rank_mean": 3.497,
+     "winner_top1": 67,
+     "winner_top3": 123,
+     "auc_gain": 0.0031
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7089,
+     "winner_rank_mean": 3.656,
+     "winner_top1": 59,
+     "winner_top3": 116,
+     "auc_gain": -0.0001
+    },
+    "verdict": "NO"
+   },
+   "T3I-L": {
+    "n": 21,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6917,
+     "winner_rank_mean": 3.543,
+     "winner_top1": 65,
+     "winner_top3": 122,
+     "auc_gain": 0.0003
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7066,
+     "winner_rank_mean": 3.693,
+     "winner_top1": 60,
+     "winner_top3": 117,
+     "auc_gain": -0.0024
+    },
+    "verdict": "NO"
+   },
+   "F3S-L": {
+    "n": 22,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6976,
+     "winner_rank_mean": 3.482,
+     "winner_top1": 65,
+     "winner_top3": 124,
+     "auc_gain": 0.0062
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7083,
+     "winner_rank_mean": 3.651,
+     "winner_top1": 59,
+     "winner_top3": 117,
+     "auc_gain": -0.0007
+    },
+    "verdict": "NO"
+   },
+   "W-AKI": {
+    "n": 24,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6911,
+     "winner_rank_mean": 3.548,
+     "winner_top1": 67,
+     "winner_top3": 125,
+     "auc_gain": -0.0003
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7086,
+     "winner_rank_mean": 3.688,
+     "winner_top1": 60,
+     "winner_top3": 114,
+     "auc_gain": -0.0004
+    },
+    "verdict": "NO"
+   },
+   "P2-AKI": {
+    "n": 25,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6896,
+     "winner_rank_mean": 3.558,
+     "winner_top1": 67,
+     "winner_top3": 124,
+     "auc_gain": -0.0018
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7087,
+     "winner_rank_mean": 3.688,
+     "winner_top1": 60,
+     "winner_top3": 114,
+     "auc_gain": -0.0003
+    },
+    "verdict": "NO"
+   },
+   "P3-AKI": {
+    "n": 26,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6896,
+     "winner_rank_mean": 3.558,
+     "winner_top1": 67,
+     "winner_top3": 124,
+     "auc_gain": -0.0018
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7087,
+     "winner_rank_mean": 3.688,
+     "winner_top1": 60,
+     "winner_top3": 114,
+     "auc_gain": -0.0003
+    },
+    "verdict": "NO"
+   },
+   "ASI": {
+    "n": 27,
+    "train": {
+     "races": 199,
+     "auc_top3": 0.6853,
+     "winner_rank_mean": 3.638,
+     "winner_top1": 63,
+     "winner_top3": 120,
+     "auc_gain": -0.0061
+    },
+    "test": {
+     "races": 189,
+     "auc_top3": 0.7017,
+     "winner_rank_mean": 3.772,
+     "winner_top1": 55,
+     "winner_top3": 110,
+     "auc_gain": -0.0073
+    },
+    "verdict": "NO"
+   }
+  }
+ },
+ "day": "2026-11-27"
+}
