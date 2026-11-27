@@ -89,6 +89,13 @@ def gen_variant(summary, name, base=None):
                 if b != a:
                     third += [('TRIFECTA', [a, b, c]) for c in [x for x in rank if x not in (a, b)][:k['k']]]
         return third[:CAP] if third else base
+    if fam == 'KRSW':           # KAG Purple 2026-11-27 (Owner 22:53 「進めて」): W + KRS SSR-W top-n horses not in W
+        kv = summary.get('_krs') or {}
+        ssr = kv.get('ssr') or {}
+        if not ssr:
+            return base
+        top = sorted(ssr, key=lambda h: -(ssr[h][0] or 0))[:k['n']]
+        return w_plus_market(dict(summary, _market_order=top), base, rank, w, p2, add=k['n'])
     if fam == 'WPLUS':          # W + the `add` shortest-odds horses as extra heads (same rule as C24)
         return w_plus_market(summary, base, rank, w, p2, add=k['add'])
     if fam == 'P2PLUS':         # the `add` shortest-odds horses outside W/P2 as extra seconds behind each W head
@@ -352,11 +359,20 @@ def races(root, since=None):
 
 
 def _gen_names(root):
+    """Generated variants to compute: the auto candidates AND the fixed auto_promote candidates written as GEN names
+    (C29/C30/C31 ...; before 2026-11-27 these were missing here, so their rows were never computed)."""
+    names = []
     try:
         st = json.loads((Path(root) / 'auto_candidates.json').read_text())
-        return tuple(c['variant'] for c in (st.get('candidates') or {}).values())
+        names += [c['variant'] for c in (st.get('candidates') or {}).values()]
     except (OSError, ValueError, KeyError):
-        return ()
+        pass
+    try:
+        from runtime.local_autopilot import auto_promote
+        names += [v for v, _ in auto_promote.CANDIDATES.values() if str(v).startswith('GEN:')]
+    except Exception:
+        pass
+    return tuple(dict.fromkeys(names))
 
 
 def _market_order(day_dir, key):

@@ -39,6 +39,7 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C28-CORE-LAYER-60': ('CORE_LAYER_60', 'KM_LOCAL_FORWARD_OOS_PREREG_20261122_R12.json'),
     'C29-KRS-CAP-60': ('GEN:KRSCAP:mode=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261125_R13.json'),
     'C30-KRS-CAP-TEMPERED-60': ('GEN:KRSCAP:mode=1:t=165', 'KM_LOCAL_FORWARD_OOS_PREREG_20261127_R14.json'),
+    'C31-W-PLUS-KRS-TOP1-60': ('GEN:KRSW:n=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261128_R15.json'),
 }
 # Owner-decided promotions (not automatic). Applied once into the state: the variant becomes the delivered one from
 # effective_from, replacing whatever is active. Probation uses the pre-registered revert rule of the candidate.

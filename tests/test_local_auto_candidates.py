@@ -156,3 +156,13 @@ def test_kcp_registers_new_temperature_once(tmp_path):
     rep['temperature']['krs_w']['T_fitted_on_train'] = 1.65                              # = fixed C30: not again
     (d / '2026-12-07.json').write_text(json.dumps(rep))
     assert not [c for c in ac.daily(tmp_path, '2026-12-07')['new'] if 'KRSCAP' in c]
+
+
+def test_krsw_adds_krs_top_as_head_and_fixed_gen_names_computed(tmp_path):
+    s = _s()
+    util = {'top_trifecta_occurrence': [], 'top_exacta_occurrence': [],
+            'summary': [{'horse_no': h, 'SSR-W': 0.5 if h == 8 else 0.05, 'SSR-P2': 0.1, 'SSR-P3': 0.1} for h in range(1, 9)]}
+    s['_krs'] = fm.krs_view(util)
+    v = fm.variant_of(s, 'GEN:KRSW:n=1')
+    assert any(t[1][0] == 8 for t in v) and len(v) <= fm.CAP
+    assert 'GEN:KRSW:n=1' in fm._gen_names(tmp_path) and 'GEN:KRSCAP:mode=1' in fm._gen_names(tmp_path)
