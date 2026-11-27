@@ -64,6 +64,11 @@ def race(day_dir, key):
            'winner_rank_r1': rank1.index(w) + 1 if w in rank1 else None,
            'winner_in_W_r1': 'W' in roles1.get(w, [])}
     o1 = _odds(_j(d1 / f'{key}.source_receipt.json'))
+    if s2 and (s2.get('status') in ('HOLD', 'FAIL') or not s2.get('ranking')):
+        # a Rev2 attempt that did not become a signed FINAL (e.g. timeout -> HOLD): Rev1 stays effective, so this race
+        # is not a Rev1->Rev2 comparison (ChatGPT 11/27 P0-01: NGY_05 counted as "winner rank 3 -> None")
+        out['revision2_not_effective'] = {'status': s2.get('status'), 'error': str(s2.get('error') or '')[:80]}
+        s2 = None
     if s2:
         rank2 = [int(x) for x in s2.get('ranking') or []]
         roles2 = {int(h): v for h, v in (s2.get('roles') or {}).items()}
@@ -113,6 +118,7 @@ def day(day_dir):
             g[2] += h in r['order']
     rate = lambda a, i: round(100 * a[i] / a[0], 1) if a[0] else None
     summ = {'profile': PROFILE, 'races': len(rows), 'revision2': len(rev),
+            'revision2_not_effective': sorted(r['race'] for r in rows if r.get('revision2_not_effective')),
             'winner_rank_better': sum(1 for r in rev if r['winner_rank_r2'] and r['winner_rank_r1'] and r['winner_rank_r2'] < r['winner_rank_r1']),
             'winner_rank_worse': sum(1 for r in rev if r['winner_rank_r2'] and r['winner_rank_r1'] and r['winner_rank_r2'] > r['winner_rank_r1']),
             'w_lost_by_rev2': sum(1 for r in rev if r['winner_in_W_r1'] and not r['winner_in_W_r2']),

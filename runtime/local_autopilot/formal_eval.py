@@ -195,7 +195,17 @@ def evaluate_day(day_dir):
                                        for k in ('W', 'P2', 'P3_label', 'active', 'material_third_in_trifecta',
                                                  'mec_tickets', 'recommended_tickets')}
         agg['revisions'] = sum(1 for r in rows if r['revision'] == 2)
-    return {'profile': PROFILE, 'race_date': Path(day_dir).name,
+    try:   # which method the delivered 60 points were (ChatGPT 11/27 P0-02: R54_60 label vs C24)
+        from runtime.local_autopilot import auto_promote
+        act = auto_promote.active_for(Path(day_dir).parent, Path(day_dir).name) if hasattr(auto_promote, 'active_for') else None
+        if act is None:
+            st_ = auto_promote.load_state(Path(day_dir).parent)
+            a_ = st_.get('active') or {}
+            act = a_ if (a_.get('effective_from') or '') <= Path(day_dir).name else (a_.get('previous') or {})
+        delivered = f"{act.get('candidate')}（{act.get('variant')}）" if act and act.get('candidate') else 'R54_60'
+    except Exception:
+        delivered = None
+    return {'profile': PROFILE, 'race_date': Path(day_dir).name, 'delivered_variant': delivered,
             'note': 'REPLAY_CAP_ONLY applies the R54 cap to a pre-R54 MEC set on known results: research, not OOS.',
             'aggregate': agg, 'races': rows}
 
@@ -203,7 +213,8 @@ def evaluate_day(day_dir):
 def md(o):
     a = o['aggregate']
     L = [f"# 地方版 正式評価 {o['race_date']}（KRS改善/悪化・60点上限）", '', f"- 対象 {a['races']}R／KRS判定 {a['krs_verdicts']}"]
-    for mode, label in (('LIVE_R54', '実運用（R54）'), ('REPLAY_CAP_ONLY', '上限のみ再生（既知結果・OOSではない）')):
+    dv = o.get('delivered_variant') or '現行方式'
+    for mode, label in (('LIVE_R54', f'実運用（配信した60点＝{dv}。キー名 LIVE_R54/R54_60 は互換のため据え置き）'), ('REPLAY_CAP_ONLY', '上限のみ再生（既知結果・OOSではない）')):
         if mode in a:
             m = a[mode]
             L.append(f"- {label} {m['races']}R：全MEC {m['invest_full']:,}円→{m['payout_full']:,}円（{m['pfs_full']}%）／"
@@ -217,7 +228,7 @@ def md(o):
               '| 方式 | 投資 | 払戻 | 回収率 | 的中Race | 最大1R依存 |', '|---|---|---|---|---|---|']
         for k in ('C05', 'C10', 'C20', 'C30', 'R54_60', 'MEC_FULL'):
             v = sc[k]
-            L.append(f"| {k} | {v['invest']:,} | {v['payout']:,} | {v['pfs']}% | {v.get('hit_races', '-')} | "
+            L.append(f"| {'配信60点（' + dv + '）' if k == 'R54_60' else k} | {v['invest']:,} | {v['payout']:,} | {v['pfs']}% | {v.get('hit_races', '-')} | "
                      f"{v.get('top1_payout_share', '-')} |")
         for k in ('R54_60', 'MEC_FULL'):
             v = sc[k]
