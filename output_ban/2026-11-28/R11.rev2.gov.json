@@ -1,0 +1,41 @@
+{
+ "rules_at": "2026-11-27T23:00:00+09:00",
+ "independence": "LEVEL-1（機械検査、Claude のコード）",
+ "frozen_at": "2026-11-28T19:15:18.945300+09:00",
+ "ticket_sha256": "0ae361887180481c2707187f8881e8a768eb4848f9003a5b24b6e069d4203cdd",
+ "challenges": [
+  {
+   "id": "C1_MULTI_W_SINGLE_HEAD",
+   "layer": "RED-4",
+   "severity": "P1",
+   "what": "1着候補が2頭以上なのに三連単の頭が1頭だけ（判断の複数を資金で1頭にまとめている）",
+   "evidence": {
+    "w": [
+     1,
+     3,
+     5,
+     6
+    ],
+    "heads": [
+     5
+    ]
+   },
+   "blue_response": "EXISTING",
+   "purple": "SHADOW"
+  },
+  {
+   "id": "C3_HUB_ALL_TRIO",
+   "layer": "RED-4",
+   "severity": "P2",
+   "what": "三連複がすべて◎を含む（◎が3着外なら全滅）",
+   "evidence": {
+    "honmei": 5,
+    "trio": 13
+   },
+   "blue_response": "EXISTING",
+   "purple": "SHADOW"
+  }
+ ],
+ "production_changed": false,
+ "note": "発走前の機械反証。本番を変える裁定はしない（Rev2・取消の反映は既存の直前見直しが担う）"
+}
