@@ -83,6 +83,32 @@
      }
     }
    ]
+  },
+  {
+   "race": "SAG_03",
+   "blue": {
+    "first_material_failure": "PREDICTION_ROLE_P2",
+    "pfs": 0.0
+   },
+   "red": [
+    {
+     "type": "R3_P2_MISS_WITH_W",
+     "layer": "RED-3 Role/Semantic",
+     "evidence": {
+      "second_pre_rank": 10
+     }
+    },
+    {
+     "type": "R4_CAP_DROPPED_HIT",
+     "layer": "RED-4 Decision/Capital",
+     "evidence": {
+      "hits_lost": [
+       "TRIO:4-6-9"
+      ],
+      "payout_lost": 2040
+     }
+    }
+   ]
   }
  ],
  "pre_race_red": [
@@ -177,15 +203,46 @@
     9,
     6
    ]
+  },
+  {
+   "race": "SAG_03",
+   "flagged": [],
+   "winner": 6,
+   "top3": [
+    6,
+    9,
+    4
+   ],
+   "peer": {},
+   "rank": [
+    6,
+    10,
+    8,
+    4,
+    11,
+    2,
+    1,
+    7,
+    3,
+    5,
+    9
+   ]
   }
  ],
  "adjudication": {
   "window_days": 1,
   "purple": {
    "R3_P2_MISS_WITH_W": {
-    "races_7d": 2,
+    "races_7d": 3,
     "blue_response": "EXISTING",
     "existing_mechanism": "MKTP2・P2PLUS・role_shadow（勝ち馬別2着）",
+    "purple": "EXISTING-RULE-ABSORBED",
+    "owner_needed": false
+   },
+   "R4_CAP_DROPPED_HIT": {
+    "races_7d": 2,
+    "blue_response": "EXISTING",
+    "existing_mechanism": "auto_candidates CAP_LOST_HIT → PAIRFULL・CORE・KRSCAP",
     "purple": "EXISTING-RULE-ABSORBED",
     "owner_needed": false
    },
@@ -193,13 +250,6 @@
     "races_7d": 2,
     "blue_response": "EXISTING",
     "existing_mechanism": "KSP 予算系列（B1〜B6）・robustness の的中赤字",
-    "purple": "EXISTING-RULE-ABSORBED",
-    "owner_needed": false
-   },
-   "R4_CAP_DROPPED_HIT": {
-    "races_7d": 1,
-    "blue_response": "EXISTING",
-    "existing_mechanism": "auto_candidates CAP_LOST_HIT → PAIRFULL・CORE・KRSCAP",
     "purple": "EXISTING-RULE-ABSORBED",
     "owner_needed": false
    },
