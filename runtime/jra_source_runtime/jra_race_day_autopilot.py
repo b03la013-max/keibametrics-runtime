@@ -1559,6 +1559,42 @@ def _research_freeze_dispatch(root: Path, race_date: str, now=None, run=None) ->
     return sorted(waiting)
 
 
+_EOD_DISPATCHED: set = set()
+_TERMINAL = ('SETTLED', 'NO_BET', 'AKI_NO_BET', 'SCOPE_HOLD', 'SOURCE_FAILED', 'CUTOFF', 'NO_OFFICIAL', 'CANCEL')
+
+
+def _end_of_day_research_dispatch(root: Path, race_date: str, now=None, run=None) -> list:
+    """Owner 2026-11-28 17:56: everything that only ran on GitHub cron must run reliably. When every race of
+    the card is terminal and the last post is 40+ minutes ago, dispatch once per day: the full research run
+    (index research, KCP, governance, delivery ledger, Rev2 audit) and the Source Candidate closed loop."""
+    if race_date in _EOD_DISPATCHED:
+        return []
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    p = root / 'runtime/jra_race_day_status' / f'{race_date}.json'
+    if not p.exists():
+        return []
+    st = json.loads(p.read_text())
+    races = st.get('races') or []
+    races = races if isinstance(races, list) else list(races.values())
+    if not races or any(not any(t in str(r.get('state') or '') for t in _TERMINAL) for r in races):
+        return []
+    posts = [_dt.datetime.fromisoformat(r['post']) for r in races if r.get('post')]
+    if not posts or now < max(posts) + _dt.timedelta(minutes=40):
+        return []
+    done = []
+    for wf in ('km-jra-index-research.yml', 'km-jra-candidate-auto-postresult-closedloop.yml'):
+        try:
+            (run or subprocess.run)(['gh', 'workflow', 'run', wf, '--ref', 'main'], check=True, timeout=30,
+                                    capture_output=True, text=True)
+            done.append(wf)
+        except Exception as exc:  # noqa: BLE001
+            print(json.dumps({'stage': 'END_OF_DAY_RESEARCH_DISPATCH', 'workflow': wf, 'error': str(exc)[:200]}), flush=True)
+    if done:
+        _EOD_DISPATCHED.add(race_date)
+    print(json.dumps({'stage': 'END_OF_DAY_RESEARCH_DISPATCH', 'dispatched': done}), flush=True)
+    return done
+
+
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
@@ -1781,6 +1817,10 @@ def main(argv=None):
                 _research_freeze_dispatch(root,a.date)
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"stage":"RESEARCH_FREEZE_DISPATCH","error":str(exc)[:300]}),flush=True)
+            try:  # end-of-day research once all races are terminal (cron proved unreliable); research only
+                _end_of_day_research_dispatch(root,a.date)
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"stage":"END_OF_DAY_RESEARCH_DISPATCH","error":str(exc)[:300]}),flush=True)
         if (root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').exists():
             try:
                 _commit(root,a.date)

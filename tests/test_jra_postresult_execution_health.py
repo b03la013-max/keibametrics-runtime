@@ -336,3 +336,18 @@ def test_workflows_preserve_good_lanes_then_upload_and_enforce_health():
         assert steps[-1]['run']=='test "${{ steps.health.outputs.exit_code }}" = "0"'
         assert steps[-2]['uses']=='actions/upload-artifact@v4'
         assert steps[-2]['if']=='always()' and ids['health']['if']=='always()'
+
+
+def test_acknowledged_holds_do_not_fail_but_new_blocks_do():
+    import jra_postresult_health as H
+    ack = {"KM-JRA-TKY-20261031-R05": {"status": "BLOCKED_OWNER_APPROVAL"}}
+    old = {"race_id": "KM-JRA-TKY-20261031-R05", "status": "BLOCKED_OWNER_APPROVAL"}
+    new = {"race_id": "KM-JRA-TKY-20261129-R01", "status": "BLOCKED_RESULT_INTEGRITY"}
+    ok = {"race_id": "KM-JRA-TKY-20261129-R02", "status": "SETTLED"}
+    rep = H.build_execution_health("NO_BET", [old, ok])
+    assert H.health_exit_code(rep, ack) == 0 and rep["material_failure_count"] == 1
+    assert H.health_exit_code(H.build_execution_health("NO_BET", [old, new]), ack) == 2
+    changed = {"race_id": "KM-JRA-TKY-20261031-R05", "status": "BLOCKED_RESULT_INTEGRITY"}
+    assert H.health_exit_code(H.build_execution_health("NO_BET", [changed]), ack) == 2
+    assert H.health_exit_code(H.build_execution_health("NO_BET", [old]), {}) == 2
+    assert set(H.acknowledged_holds()) >= {"KM-JRA-TKY-20261031-R05"}

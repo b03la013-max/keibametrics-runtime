@@ -377,3 +377,25 @@ def test_research_freeze_dispatch_only_for_waiting_finals_and_throttled(tmp_path
     A._RESEARCH_DISPATCHED.update(at=None, races=frozenset())
     assert A._research_freeze_dispatch(tmp_path, "2026-11-29", late, run) == []
     assert len(calls) == 1
+
+
+def test_end_of_day_research_dispatches_once_after_all_terminal(tmp_path):
+    import datetime as dt
+    import json as _json
+    import jra_race_day_autopilot as A
+    A._EOD_DISPATCHED.clear()
+    d = tmp_path / "runtime/jra_race_day_status"; d.mkdir(parents=True)
+    rows = [{"race_id": "a", "post": "2026-11-29T15:40:00+09:00", "state": "SETTLED_SIGNED_RESULT_LEARNED"},
+            {"race_id": "b", "post": "2026-11-29T16:25:00+09:00", "state": "FINAL"}]
+    (d / "2026-11-29.json").write_text(_json.dumps({"races": rows}))
+    calls = []
+    run = lambda cmd, **k: calls.append(cmd[3])
+    jst = dt.timezone(dt.timedelta(hours=9))
+    late = dt.datetime(2026, 11, 29, 17, 30, tzinfo=jst)
+    assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", late, run) == []  # one race not terminal
+    rows[1]["state"] = "AKI_NO_BET"
+    (d / "2026-11-29.json").write_text(_json.dumps({"races": rows}))
+    assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", dt.datetime(2026, 11, 29, 16, 50, tzinfo=jst), run) == []
+    assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", late, run) == calls == [
+        "km-jra-index-research.yml", "km-jra-candidate-auto-postresult-closedloop.yml"]
+    assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", late, run) == []  # once per day
