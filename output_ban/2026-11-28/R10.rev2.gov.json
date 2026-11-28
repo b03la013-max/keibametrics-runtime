@@ -1,0 +1,65 @@
+{
+ "rules_at": "2026-11-27T23:00:00+09:00",
+ "independence": "LEVEL-1（機械検査、Claude のコード）",
+ "frozen_at": "2026-11-28T18:45:16.970354+09:00",
+ "ticket_sha256": "b98332f00eeb23d202e3363faa4c9f2d45fcf9edba81fb860f01c9e0c7c87369",
+ "challenges": [
+  {
+   "id": "P2_LOW_DISCRIMINATION",
+   "layer": "RED-2",
+   "severity": "P2",
+   "what": "1着の点の1位と2位の差が1未満（区別がついていないのに◎を1頭に決めている）",
+   "evidence": {
+    "gap": 0.21
+   },
+   "blue_response": "PARTIAL",
+   "purple": "SHADOW"
+  },
+  {
+   "id": "R2_MARKET_TOP3_NO_ROLE",
+   "layer": "RED-3",
+   "severity": "P1",
+   "what": "人気上位3頭のうち、どの役割にも入っていない馬がいる",
+   "evidence": {
+    "horses": [
+     7
+    ]
+   },
+   "blue_response": "REBUT",
+   "purple": "SHADOW"
+  },
+  {
+   "id": "C1_MULTI_W_SINGLE_HEAD",
+   "layer": "RED-4",
+   "severity": "P1",
+   "what": "1着候補が2頭以上なのに三連単の頭が1頭だけ（判断の複数を資金で1頭にまとめている）",
+   "evidence": {
+    "w": [
+     1,
+     4,
+     6,
+     10
+    ],
+    "heads": [
+     10
+    ]
+   },
+   "blue_response": "EXISTING",
+   "purple": "SHADOW"
+  },
+  {
+   "id": "C3_HUB_ALL_TRIO",
+   "layer": "RED-4",
+   "severity": "P2",
+   "what": "三連複がすべて◎を含む（◎が3着外なら全滅）",
+   "evidence": {
+    "honmei": 10,
+    "trio": 13
+   },
+   "blue_response": "EXISTING",
+   "purple": "SHADOW"
+  }
+ ],
+ "production_changed": false,
+ "note": "発走前の機械反証。本番を変える裁定はしない（Rev2・取消の反映は既存の直前見直しが担う）"
+}
