@@ -107,7 +107,9 @@ jobs:
                   if t.get('source_execution_id') not in (None,path.stem):
                       raise ValueError('NO_BET_FILE_SOURCE_EXECUTION_MISMATCH')
                   post=datetime.fromisoformat(i["scheduled_post_at"].replace("Z","+00:00"))
-                  if not (post+timedelta(minutes=10)<=now<=post+timedelta(days=7)):continue
+                  # An Owner B approved recovery (exact scope, committed record) is the only case allowed
+                  # outside the 7-day window; it may only rebuild the review/learning state of its record.
+                  if not (post+timedelta(minutes=10)<=now<=post+timedelta(days=7)) and not (recovery and target.exists()):continue
                   if target.exists():
                       race=t["race_id"]
                       if not (Path("runtime/reviews_auto")/(race+"-AUTO.json")).exists() or not (Path("runtime/learning_states")/(race+".json")).exists():
