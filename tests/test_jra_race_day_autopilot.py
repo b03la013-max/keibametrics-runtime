@@ -397,5 +397,5 @@ def test_end_of_day_research_dispatches_once_after_all_terminal(tmp_path):
     (d / "2026-11-29.json").write_text(_json.dumps({"races": rows}))
     assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", dt.datetime(2026, 11, 29, 16, 50, tzinfo=jst), run) == []
     assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", late, run) == calls == [
-        "km-jra-index-research.yml", "km-jra-candidate-auto-postresult-closedloop.yml"]
+        "km-jra-index-research.yml", "km-jra-candidate-auto-postresult-closedloop.yml", "km-jra-multi-primary.yml"]
     assert A._end_of_day_research_dispatch(tmp_path, "2026-11-29", late, run) == []  # once per day

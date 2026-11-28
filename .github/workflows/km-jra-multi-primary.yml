@@ -1,0 +1,61 @@
+name: JRA Multi-Primary Shadow Settlement
+run-name: JRA 複系主戦 same-budget shadow settlement (record only)
+
+# Owner 2026-11-28 19:1x「まず同予算で並走（推奨）」. Record only: reads signed FINALs, the frozen shadow
+# tickets and the Production RESULT, re-reads the JRA official payout table (all bet types) and writes only
+# runtime/jra_multi_primary. Never touches the Production prediction, ticket, result or delivery path.
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Also fetch payouts for up to N past races (known-result context only)"
+        required: false
+        default: "0"
+  schedule:
+    # Backstop only (GitHub cron is unreliable); the race-day loop dispatches this after the last race.
+    - cron: "40 9,12 * * 0,6"
+
+concurrency:
+  group: jra-multi-primary
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tests
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest
+          python -m pytest -q tests/test_jra_multi_primary_shadow.py
+      - name: Settle and summarise
+        env:
+          BACKFILL: ${{ inputs.backfill || '0' }}
+        run: |
+          set -euo pipefail
+          python runtime/analysis/jra_multi_primary_shadow.py settle --backfill "$BACKFILL" | tee settle.txt
+          python runtime/analysis/jra_multi_primary_shadow.py summary > /dev/null
+          { echo "## 複系主戦 shadow"; cat settle.txt; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Persist shadow artefacts only
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/jra_multi_primary ]; then git add runtime/jra_multi_primary; fi
+          if git diff --cached --quiet; then echo "NO_CHANGE"; exit 0; fi
+          git commit -m "research: JRA 複系主戦 same-budget shadow settlement [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1

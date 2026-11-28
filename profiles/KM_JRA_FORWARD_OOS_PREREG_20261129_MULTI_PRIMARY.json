@@ -1,0 +1,28 @@
+{
+ "profile": "KM-JRA-FORWARD-OOS-PREREG-MULTI-PRIMARY-v1",
+ "registered_at": "2026-11-28T19:40:00+09:00",
+ "task": "ChatGPT 11/28 review (中央版の券面が単系偏重：11/28 は馬単88点・三連単188点を全17Rで採用、三連複92点は8Rだけ、複勝・ワイド・馬連0点)。Owner 2026-11-28 19:10「実装してください」、同 19:1x「まず同予算で並走（推奨）」",
+ "production_effect": "NONE",
+ "first_eligible_card": "2026-11-29",
+ "tracker": "runtime/analysis/jra_multi_primary_shadow.py (freeze: race-day loop and km-jra-index-research.yml; settle: km-jra-multi-primary.yml, dispatched by the loop after the last race)",
+ "spec_source": "ケイバメトリクス中央版 v1.1 §39-§43 (三連複の型と軸構造の決定表) and §68 (券種別の推奨配分 三連複50%/馬連25%/ワイド15%/複勝10%)",
+ "arms": {
+  "MP-A": "複系のみ。ASI と P-AKI（FINAL の公式 AKI-JRA v2.1）で三連複の型を決め、同じ予算を三連複50・馬連25・ワイド15・複勝10 に100円単位で配分（最大剰余）。馬連・ワイドは軸×2列目（二本柱は◎○▲の3組、BOX は上位3〜4頭の組）、複勝は軸馬（BOX は◎）。点数が単位より多いときは評価順位の上位の組から残す",
+  "MP-B": "MP-A に加え、ASI>=80 かつ W-AKI<=29 のとき（絶対的で頭が安定）だけ、三連複の単位の1/3を馬単 ◎→2列目へ移す"
+ },
+ "control": "同じレースの本番 FINAL の券面（同じ予算）。本番の券面・精算は変えない",
+ "budget_rule": "本番 FINAL の推薦投資額と同額。本番が見送りのレースは対象外（同予算0）",
+ "axis_table_fixed": {"ASI>=80": "P-AKI <30:1-2-4, <50:1-2-6, <65:1-3-7, else 1-4-8",
+                      "65<=ASI<80": "P-AKI <30:1-2-4, <50:2-3-6, <65:1-3-7, else 2-4-7",
+                      "50<=ASI<65": "P-AKI <50:2-3-6, else 2-4-7",
+                      "ASI<50": "P-AKI <50:5頭BOX, else 6頭BOX"},
+ "primary": "1レースあたりの損益差（各案 − 本番、同じレース・同じ予算）の平均と95%区間",
+ "secondary": ["的中レース率（払戻>0のレースの割合）", "回収率（PFS）と最高配当1本を除いた PFS", "最大ドローダウン", "的中しても赤字の件数", "券種別の回収率", "三連複の型別の成績"],
+ "stages": ["2026-12-06/07 中間（約70R）", 100, 300],
+ "decision": "本番への切り替えは Owner の判断のみ（目安 12/6〜7 の中間報告）。自動昇格なし",
+ "promotion_eligible": ">= 100 forward races, 損益差の95%区間の下限 > -（本番の平均投資額の5%）かつ 的中レース率が本番より高い、かつ最高配当1本除外の PFS が本番を下回らない。Owner decision only",
+ "reject": ">= 100 forward races で損益差の95%区間の上限 < 0 かつ 的中レース率の差が5ポイント未満",
+ "forward_eligibility": "2026-11-29 以降、frozen_at と git への初回追加がともに発走前のレースだけ。発走後の凍結はしない。結果を見て型・配分・閾値を変えない",
+ "known_result_context_only": "11/28 以前の FINAL を同じ規則で作り直した参考値（km-jra-multi-primary.yml の backfill で公式払戻を取得）。前向き成績には数えない",
+ "not_claimed": "確率・EV・Kelly は使わない。購入しない"
+}
