@@ -216,12 +216,19 @@ def _all_reviews(root):
     return revs
 
 
-# 購入方針（券種・予算）を変える候補は自動昇格させない（Owner 承認が要る）。条件を満たしたら OWNER_REVIEW として知らせる。
-OWNER_GATED = (('tpatch', 'SINGLE_MODE'),)
+# Owner 2026-11-28 23:33「改善は承認無しで進めて欲しい」：Owner の承認による止めは無し。
+# ただし本番でまだ扱えない券種を使う候補は、本番の対応（オッズ・券面・精算・FORMAL）が入るまで昇格を待つ。
+# 待っている間は NEEDS_PRODUCTION_SUPPORT を1回記録し、毎晩の反省会がその対応を実装して旗を True にする。
+PRODUCTION_SUPPORT = (('tpatch', 'SINGLE_MODE', 'EXACTA_PRODUCTION_READY'),)
 
 
-def owner_gated(cfg):
-    return any((cfg or {}).get(w, {}).get(k) is not None for w, k in OWNER_GATED)
+def needs_support(cfg):
+    """本番でまだ扱えない設定を使う候補なら、足りない旗の名前を返す（無ければ None）。"""
+    import tickets as T
+    for where, key, flag in PRODUCTION_SUPPORT:
+        if (cfg or {}).get(where, {}).get(key) is not None and not getattr(T, flag, False):
+            return flag
+    return None
 
 
 def step(root, log=lambda *a: None):
@@ -233,13 +240,14 @@ def step(root, log=lambda *a: None):
     table = {cid: compare(revs, cid, max(since or '', (c.get('registered') or '')[:10]), len(active))
              for cid, c in active.items()}
     events = []
-    for cid, t in table.items():                                  # 購入方針を変える候補は Owner の判断へ
+    for cid, t in table.items():                                  # 本番の対応待ち（承認待ちではない）
         c = reg['candidates'][cid]
-        if t.get('promote') and owner_gated(c.get('config')) and not c.get('owner_review_at'):
-            c['owner_review_at'] = _now()
-            events.append(('OWNER_REVIEW', cid, t))
+        flag = needs_support(c.get('config'))
+        if t.get('promote') and flag and not c.get('support_needed_at'):
+            c['support_needed_at'] = _now()
+            events.append(('NEEDS_PRODUCTION_SUPPORT', cid, dict(t, flag=flag)))
     winners = sorted([(t['mean_rank_diff'], cid) for cid, t in table.items()
-                      if t.get('promote') and not owner_gated(reg['candidates'][cid].get('config'))])
+                      if t.get('promote') and not needs_support(reg['candidates'][cid].get('config'))])
     if winners:
         cid = winners[0][1]
         prev = reg['production']

@@ -116,3 +116,7 @@ Blue の応答＝ACCEPT／REBUT／PARTIAL／EXISTING／UNKNOWN／OUT-OF-SCOPE。
 | 2026-11-28 | 全体 | KAP の誤検知の見込み（bsi・isv の欠損率 0.734 は非公開値を公開記録に入れていないため） | RED-1 | ACCEPT | NO-CHANGE | intel.DRIFT は変えない。FLAGGED のとき原因として報告する | なし |
 | 2026-11-28 | 全体 | 最高1本を除いた回収率が 累計要約 49.5% と KSP 48.4% で違う | RED-5 | UNKNOWN（除き方の定義の違いと思われるが未確認） | NO-CHANGE | 両方を併記して報告。定義の確認は次回 | なし |
 | 2026-11-28 | 全体 | 影の候補 EXACT_BY_W・AXIS2_EXACT_BY_W が同じ30点で比べられていない | RED-5 | ACCEPT | REJECT-WITH-REASON → Owner 承認（2026-11-28「不採用とします」） | Owner の判断。registry.OWNER_DECISIONS で status を REJECTED に（記録は残す、本番は不変） | 本PR |
+
+## 2026-11-28 23:33 Owner「改善は承認無しで進めて欲しい」
+- 承認待ちの止め（registry.OWNER_GATED）をやめ、本番の対応待ち（registry.PRODUCTION_SUPPORT）に置き換えた。SINGLE_A/B/C は昇格条件（100R・片側ボンフェローニ）を満たし、かつ tickets.EXACTA_PRODUCTION_READY が True なら自動で昇格する。対応が無いうちに条件を満たしたら NEEDS_PRODUCTION_SUPPORT を記録し、毎晩の反省会が馬単の本番対応（発走前オッズ・券面ツリー・精算・FORMAL）を実装する。
+- KAG-BAN の Purple の不採用（REJECT-WITH-REASON）も毎晩の反省会が自分で実行する（registry.OWNER_DECISIONS と同じ形で記録）。昇格・戻す・引退の統計の条件は変えない。
