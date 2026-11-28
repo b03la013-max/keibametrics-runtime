@@ -38,6 +38,16 @@ FAMILY_GRID = {   # family -> parameter sets in the order they are tried (the fi
     'PAIRFULL': [{'pairs': 6}, {'pairs': 4}],
     'MKTP2': [{'blend': 50}, {'blend': 75}],
     'KRSCAP': [{'mode': 1}, {'mode': 2}],
+    'KRSW': [{'n': 1}, {'n': 2}],
+    'TRIOPROT': [{'k': 6}, {'k': 12}, {'k': 18}],
+}
+KAG_FAMILIES = {   # KAG Purple SHADOW challenge type -> same-budget families (Owner 2026-11-28 23:32: improvements without approval)
+    'R3_KRS_NOT_CONNECTED': ['KRSW', 'KRSCAP'],
+    'R2_INDEX_CONFLICT': ['MKTP2', 'WPLUS'],
+    'R3_P2_MISS_WITH_W': ['P2PLUS', 'MKTP2'],
+    'R4_CAP_DROPPED_HIT': ['PAIRFULL', 'KRSCAP'],
+    'R4_HIT_BUT_LOSS': ['TRIOPROT', 'CORE'],
+    'R2_MARKET_WINNER_LOW': ['WPLUS'],
 }
 PRIORITY_FAMILIES = {   # reflection priority id -> families that address it (same budget)
     'P1:HIT_BUT_LOSS': ['CORE', 'TRIOBOX', 'WAXTRIO'],
@@ -206,6 +216,50 @@ def _kiep(st, root, today, slots):
     return new
 
 
+def _kag(st, root, today, slots):
+    """KAG (Owner 2026-11-27 22:49 永続; 2026-11-28 23:32 「改善は承認無しで進めて欲しい」): every challenge type that the
+    latest Purple adjudication (<root>/<day>/review/kag.json, day <= today) marks SHADOW becomes, without any Owner
+    review, the first not-yet-registered same-budget parameter set of its families. auto_promote then decides alone."""
+    from runtime.local_autopilot import auto_promote
+    if slots <= 0:
+        return []
+    reps = sorted(p for p in Path(root).glob('20??-??-??/review/kag.json') if p.parent.parent.name <= today)
+    if not reps:
+        return []
+    try:
+        pur = (json.loads(reps[-1].read_text()).get('adjudication') or {}).get('purple') or {}
+    except (OSError, ValueError):
+        return []
+    used = {c['variant'] for c in st['candidates'].values()} | {v for v, _ in auto_promote.CANDIDATES.values()}
+    nxt = (date.fromisoformat(today) + timedelta(days=1)).isoformat() + 'T00:00:00+09:00'
+    new = []
+    for t, x in sorted(pur.items(), key=lambda kv: -(kv[1].get('races_7d') or 0)):
+        if x.get('purple') != 'SHADOW' or len(new) >= slots:
+            continue
+        if any(c.get('status') == 'EVALUATING' and c.get('origin', {}).get('priority') == 'KAG:' + t
+               for c in st['candidates'].values()):
+            continue   # one candidate per challenge type at a time; the next parameter set only after it is decided
+        done = False
+        for fam in KAG_FAMILIES.get(t, []):
+            for params in FAMILY_GRID.get(fam, []):
+                name = formal_mix.gen_name(fam, **params)
+                if name in used:
+                    continue
+                cid = f"G{len(st['candidates']) + 1:03d}-{fam}-" + '-'.join(f'{k}{v}' for k, v in sorted(params.items()))
+                st['candidates'][cid] = {
+                    'variant': name, 'family': fam, 'params': params, 'status': 'EVALUATING',
+                    'registered_at': datetime.now().astimezone().isoformat(), 'first_eligible_post': nxt,
+                    'origin': {'day': today, 'priority': 'KAG:' + t, 'count': x.get('races_7d'), 'impact_yen': 0,
+                               'report': str(reps[-1].relative_to(root))}}
+                used.add(name)
+                new.append(cid)
+                done = True
+                break
+            if done:
+                break
+    return new
+
+
 def daily(root, today, decision=None, rows_fn=None):
     """Run after auto_promote.decide(root, today). Returns {'retired': [...], 'new': [...]} and saves the state."""
     st = load(root)
@@ -217,6 +271,8 @@ def daily(root, today, decision=None, rows_fn=None):
     new += _kcp(st, root, today, min(MAX_NEW_PER_DAY - len(new), MAX_EVALUATING - ev))
     ev = sum(c.get('status') == 'EVALUATING' for c in st['candidates'].values())
     new += _kiep(st, root, today, min(MAX_NEW_PER_DAY - len(new), MAX_EVALUATING - ev))
+    ev = sum(c.get('status') == 'EVALUATING' for c in st['candidates'].values())
+    new += _kag(st, root, today, min(MAX_NEW_PER_DAY + 1 - len(new), MAX_EVALUATING - ev))
     st.setdefault('log', []).append({'day': today, 'retired': retired, 'new': new,
                                      'at': datetime.now().astimezone().isoformat()})
     st['log'] = st['log'][-200:]
@@ -239,6 +295,10 @@ def md(root, res):
         if c['origin']['priority'].startswith('KCP'):
             L.append(f"- 新規登録：{cid}（{c['variant']}）← KRS 較正測定 {c['origin']['report']}（T={c['origin']['T']}、"
                      f"試験の対数損失 {c['origin']['test_log_loss'][0]}→{c['origin']['test_log_loss'][1]}）、{c['first_eligible_post'][:10]} から比較")
+            continue
+        if c['origin']['priority'].startswith('KAG:'):
+            L.append(f"- 新規登録：{cid}（{c['variant']}）← 三チーム統治 Purple の SHADOW 裁定 {c['origin']['priority'][4:]}"
+                     f"（直近7日 {c['origin']['count']}件、承認不要）、{c['first_eligible_post'][:10]} から比較")
             continue
         L.append(f"- 新規登録：{cid}（{c['variant']}）← 反省 {c['origin']['priority']}（{c['origin']['count']}件・"
                  f"{c['origin']['impact_yen']:,}円）、{c['first_eligible_post'][:10]} から比較")

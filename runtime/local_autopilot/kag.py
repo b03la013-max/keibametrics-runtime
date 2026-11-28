@@ -136,7 +136,7 @@ def adjudicate(root, today, cur):
         resp, mech, when_freq = RESPONSE[t]
         disp = (when_freq if (resp != 'PARTIAL' or n >= SHADOW_MIN) else 'EXISTING-RULE-ABSORBED') if resp != 'ACCEPT' else 'SHADOW'
         dec[t] = {'races_7d': n, 'blue_response': resp, 'existing_mechanism': mech, 'purple': disp,
-                  'owner_needed': disp == 'SHADOW'}
+                  'owner_needed': False, 'auto_candidate': disp == 'SHADOW'}   # Owner 2026-11-28 23:32: no approval
     # pre-race RED-2 shadow precision over the window (flagged horse vs. same formal rank horses)
     fw = ft3 = fn = bw = bt3 = bn = 0
     for d in win:
@@ -182,7 +182,7 @@ def _prec_word(p):
 
 
 def md(cur, adj):
-    J = {'EXISTING-RULE-ABSORBED': '既存の仕組みで吸収', 'REGRESSION-ONLY': '再発防止の記録', 'SHADOW': '**研究候補化（Owner 審査）**',
+    J = {'EXISTING-RULE-ABSORBED': '既存の仕組みで吸収', 'REGRESSION-ONLY': '再発防止の記録', 'SHADOW': '**自動で研究候補化（承認不要・同予算100Rで自動採否）**',
          'NO-CHANGE': '変更なし'}
     nm = {'R1_REV2_NOT_EFFECTIVE': '直前修正版が署名されず Rev1 のまま', 'R1_NEUTRAL_HEAVY': '勝ち馬の指数の3割以上が中立',
           'R2_INDEX_CONFLICT': '主要指数3つ以上で1位の勝ち馬を正式4位以下', 'R2_MARKET_WINNER_LOW': '人気3位内の勝ち馬を正式6位以下',
@@ -207,7 +207,7 @@ def md(cur, adj):
              f"{'、注意：' + '・'.join(m['flags']) if m['flags'] else ''}")
     sh = [nm[t] for t, x in adj['purple'].items() if x['purple'] == 'SHADOW']
     if sh:
-        L.append(f"- Purple が Owner 審査に回す研究：{'、'.join(sh)}")
+        L.append(f"- Purple が自動の研究候補に回したもの（承認不要。auto_candidates が翌日から同予算で比較し、auto_promote が自動で採否）：{'、'.join(sh)}")
     return '\n'.join(L) + '\n'
 
 

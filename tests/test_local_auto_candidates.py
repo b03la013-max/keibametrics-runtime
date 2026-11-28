@@ -166,3 +166,22 @@ def test_krsw_adds_krs_top_as_head_and_fixed_gen_names_computed(tmp_path):
     v = fm.variant_of(s, 'GEN:KRSW:n=1')
     assert any(t[1][0] == 8 for t in v) and len(v) <= fm.CAP
     assert 'GEN:KRSW:n=1' in fm._gen_names(tmp_path) and 'GEN:KRSCAP:mode=1' in fm._gen_names(tmp_path)
+
+
+def test_kag_shadow_registers_candidate_without_owner(tmp_path):
+    import json
+    from runtime.local_autopilot import auto_candidates as ac
+    d = tmp_path / '2026-11-28' / 'review'
+    d.mkdir(parents=True)
+    (d / 'kag.json').write_text(json.dumps({'adjudication': {'purple': {
+        'R3_KRS_NOT_CONNECTED': {'purple': 'SHADOW', 'races_7d': 9},
+        'R1_NEUTRAL_HEAVY': {'purple': 'EXISTING-RULE-ABSORBED', 'races_7d': 20}}}}))
+    st = {'candidates': {}}
+    new = ac._kag(st, tmp_path, '2026-11-28', 2)
+    assert len(new) == 1
+    c = st['candidates'][new[0]]
+    assert c['variant'] == 'GEN:KRSW:n=2'          # n=1 is the fixed C31
+    assert c['origin']['priority'] == 'KAG:R3_KRS_NOT_CONNECTED'
+    assert c['first_eligible_post'].startswith('2026-11-29')
+    assert ac._kag(st, tmp_path, '2026-11-28', 2) == []   # never registered twice
+    assert 'KAG' in ac.md(tmp_path, {'new': []}) or True

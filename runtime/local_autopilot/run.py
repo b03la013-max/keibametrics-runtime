@@ -1374,11 +1374,9 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                         rev_audit.write_daily(out)        # Rev2 audit + winner-outside-W diagnosis (evidence only)
                     except Exception as e:
                         log('REV_AUDIT_FAIL', f'{type(e).__name__}:{e}')
-                    try:   # Blue/Red/Purple governance (KAG; Owner 2026-11-27 22:49): ledger daily, mail only when Purple
-                        from runtime.local_autopilot import kag   # sends a research request to the Owner
-                        kt = kag.write_daily(ROOT, out.name)
-                        if '研究候補化（Owner 審査）' in kt and os.environ.get('KM_LOCAL_DELIVERY_ISSUE'):
-                            _gh('POST', f"/repos/{DELIVERY_REPO}/issues/{os.environ['KM_LOCAL_DELIVERY_ISSUE']}/comments", {'body': kt})
+                    try:   # Blue/Red/Purple governance (KAG; Owner 2026-11-27 22:49): ledger daily. Purple SHADOW becomes an
+                        from runtime.local_autopilot import kag   # automatic candidate (Owner 2026-11-28 23:32 「改善は承認無しで」)
+                        kag.write_daily(ROOT, out.name)
                     except Exception as e:
                         log('KAG_FAIL', f'{type(e).__name__}:{str(e)[:160]}')
                     from runtime.local_autopilot import forward_oos
