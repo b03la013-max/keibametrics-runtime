@@ -379,7 +379,7 @@ def _race_review_core(out, key, r):
             'trio_hit': trio_ret > 0, 'exact_hit': ex_ret > 0,
             'role_coverage': role_set_coverage(ev['rows'], res['order']), 'top2_gap': top2_gap(ev['rows']),
             'info_coverage': info_coverage(ev['rows']), 'role_counts': role_counts(ev['rows']),
-            'flat_components': flat_components(ev['rows']),
+            'flat_components': flat_components_full(out, key, eff, ev['rows']),
             'market_drift': market_drift((r.get('check10') or {}).get('changes'), res['order'], ev.get('honmei')),
             'components': {'trio': [trio_st, trio_ret], 'exact': [ex_st, ex_ret]}, 'proposals': P}
 
@@ -587,6 +587,13 @@ def flat_components(rows, keys=FLAT_KEYS):
 COMPONENT_KEYS = ('idx', 'bsi', 'isv', 'lis', 'bta', 'mpa', 'brs', 'wda', 'front_bonus', 'jbr', 'adf', 'bwl', 'cci',
                   'cpu', 'tpi', 'win_score', 'place_score', 'dcr', 'pop')
 LOWER_IS_BETTER = {'isv', 'pop'}          # pop＝市場（人気）。指数の各成分と同じ物差しで並べる参考の基準線
+
+
+def flat_components_full(out, key, eff, rows):
+    """flat_components を AUC・健康診断と同じ行（非公開キャッシュの BSI・指数・ISV を含む行）で判定する。
+    公開の行だけで判定すると idx・bsi・isv が毎回「未判定」と出て、欠損と誤読される（ChatGPT 11/28 帯広反省 P0-5 の指摘。
+    同じ日の AUC では bsi・isv が12Rで計算できていた）。記録に残るのは成分名だけで、生の値は出ない。証拠のみ。"""
+    return flat_components(_full_rows(out, key, eff, rows))
 
 
 def _full_rows(out, key, eff, rows):
