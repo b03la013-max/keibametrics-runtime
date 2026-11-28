@@ -115,3 +115,4 @@ Blue の応答＝ACCEPT／REBUT／PARTIAL／EXISTING／UNKNOWN／OUT-OF-SCOPE。
 | 2026-11-28 | 全体 | 集計の時刻差：improvement_status.md が 12R・取得率 0.267 と表示 | RED-1 | ACCEPT（20:12 の集計が 21:37 の付け直しより前。45R では取得率 1.0） | NO-CHANGE | 次の registry.step で自動で直る。コード欠陥ではない | なし |
 | 2026-11-28 | 全体 | KAP の誤検知の見込み（bsi・isv の欠損率 0.734 は非公開値を公開記録に入れていないため） | RED-1 | ACCEPT | NO-CHANGE | intel.DRIFT は変えない。FLAGGED のとき原因として報告する | なし |
 | 2026-11-28 | 全体 | 最高1本を除いた回収率が 累計要約 49.5% と KSP 48.4% で違う | RED-5 | UNKNOWN（除き方の定義の違いと思われるが未確認） | NO-CHANGE | 両方を併記して報告。定義の確認は次回 | なし |
+| 2026-11-28 | 全体 | 影の候補 EXACT_BY_W・AXIS2_EXACT_BY_W が同じ30点で比べられていない | RED-5 | ACCEPT | REJECT-WITH-REASON → Owner 承認（2026-11-28「不採用とします」） | Owner の判断。registry.OWNER_DECISIONS で status を REJECTED に（記録は残す、本番は不変） | 本PR |

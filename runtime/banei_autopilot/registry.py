@@ -84,15 +84,35 @@ def _merge_queue(reg):
     return reg
 
 
+# Owner の採否（registry の自動規則の外で Owner が決めたもの）。記録は消さず status だけを変える（試して落とした候補も残す）。
+OWNER_DECISIONS = {
+    'EXACT_BY_W': {'status': 'REJECTED', 'at': '2026-11-28T23:10+09:00',
+                   'reason': 'Owner 2026-11-28「不採用とします」。W3頭以上で三連単を外したあと三連複を足さず 2〜7点しか買わない'
+                             '（24R中22R）ため同じ30点の比較になっていない（KAG-BAN Purple REJECT-WITH-REASON）。狙いどおりの版は EXACT_BY_W_FILL'},
+    'AXIS2_EXACT_BY_W': {'status': 'REJECTED', 'at': '2026-11-28T23:10+09:00',
+                         'reason': 'Owner 2026-11-28「不採用とします」。EXACT_BY_W と同じ欠陥で 11〜24点しか買わず同じ30点の比較になっていない'},
+}
+
+
+def _apply_owner_decisions(reg):
+    for cid, d in OWNER_DECISIONS.items():
+        c = reg['candidates'].get(cid)
+        if c and c.get('status') == 'SHADOW':
+            c.update(status=d['status'], decided_at=d['at'], decision_reason=d['reason'])
+            reg.setdefault('history', []).append({'at': d['at'], 'event': 'OWNER_' + d['status'], 'candidate': cid,
+                                                  'evidence': {'reason': d['reason']}})
+    return reg
+
+
 def load(root):
     p = path(root)
     if p.exists():
-        return _merge_queue(json.loads(p.read_text()))
+        return _apply_owner_decisions(_merge_queue(json.loads(p.read_text())))
     cands = {cid: {'what': c['what'], 'config': challengers.config_of(c), 'status': c['status'],
                    'registered': c.get('registered', challengers.PREREG['registered_at'])}
              for cid, c in challengers.PREREG['candidates'].items()}
-    return _merge_queue({'production': {'id': 'BASE', 'version': 'KM-BAN-v4.0-static-r1', 'config': {}, 'since': None},
-                         'candidates': cands, 'history': [], 'promote_rule': PROMOTE})
+    return _apply_owner_decisions(_merge_queue({'production': {'id': 'BASE', 'version': 'KM-BAN-v4.0-static-r1', 'config': {}, 'since': None},
+                                                'candidates': cands, 'history': [], 'promote_rule': PROMOTE}))
 
 
 def save(root, reg):
