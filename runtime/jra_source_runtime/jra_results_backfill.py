@@ -30,6 +30,7 @@ import os
 import re
 import sys
 import time
+import http.client
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -287,6 +288,13 @@ def run(until: dt.date, minutes: float, client=None, now=None, start: dt.date | 
                 done.add(d8); state["done_days"] = sorted(done); saved += 1
                 save_state(state)
             month = (month - dt.timedelta(days=1)).replace(day=1)
+    except (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError) as e:
+        # 2026-11-28: one RemoteDisconnected after ~3 h ended the night run as a failure. A transient
+        # network stop is not a refusal: keep every finished day, record it, resume from the cursor next run.
+        ev = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "reason": f"NETWORK:{type(e).__name__}:{str(e)[:120]}"}
+        state["network_stops"] = (state.get("network_stops") or [])[-29:] + [ev]
+        save_state(state)
+        return {"status": "NETWORK_STOP_RESUME_NEXT_RUN", "saved_days": saved, "stop": ev, "requests": client.requests}
     except Refused as e:
         ev = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "reason": str(e)}
         state["refusals"] = (state.get("refusals") or [])[-29:] + [ev]
