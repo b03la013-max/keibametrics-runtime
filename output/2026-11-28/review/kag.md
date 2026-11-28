@@ -1,4 +1,4 @@
-### 三チーム統治（Blue／Red／Purple）2026-11-28・12R
+### 三チーム統治（Blue／Red／Purple）2026-11-28・13R
 
 Red は固定の機械検査（独立性 LEVEL-1）。ChatGPT の日次総括は外部の Red（LEVEL-3）として扱う。Purple は本番を変えない。
 
