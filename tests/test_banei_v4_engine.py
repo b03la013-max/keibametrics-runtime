@@ -130,6 +130,13 @@ def test_single_mode_shadow_keeps_cap_and_production_identity():
     assert sorted(ex[0]) in [sorted(t) for t in tri]                               # 三連単の組は三連複で保護
 
 
-def test_single_mode_is_owner_gated():
-    import registry
-    assert registry.owner_gated({'tpatch': {'SINGLE_MODE': 'A'}}) and not registry.owner_gated({'tpatch': {'EXACT_PICK': 'UNIVERSE'}})
+def test_single_mode_waits_for_production_support_not_owner():
+    import tickets, registry
+    assert registry.needs_support({'tpatch': {'SINGLE_MODE': 'A'}}) == 'EXACTA_PRODUCTION_READY'
+    assert registry.needs_support({'tpatch': {'EXACT_PICK': 'UNIVERSE'}}) is None
+    old = tickets.EXACTA_PRODUCTION_READY
+    try:
+        tickets.EXACTA_PRODUCTION_READY = True
+        assert registry.needs_support({'tpatch': {'SINGLE_MODE': 'A'}}) is None
+    finally:
+        tickets.EXACTA_PRODUCTION_READY = old

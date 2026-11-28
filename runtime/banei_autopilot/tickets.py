@@ -10,6 +10,7 @@ from itertools import combinations, permutations
 
 CAP_TOTAL = 30
 EXACT_RULE = None               # production None（1着固定）; shadow: 'BY_W'（正本 BAN-TAG: W1頭→1-3-5、2頭→2-3-4、3頭以上→三連単なし）/'2HEAD'（常に上位W2頭を頭に 2-3-4）
+EXACTA_PRODUCTION_READY = False  # 馬単の本番対応（発走前オッズ・券面ツリー・精算・FORMAL）が入ったら True。registry はそれまで SINGLE_MODE を昇格させない
 SINGLE_MODE = None              # production None（三連複・三連単のまま）。shadow 'A'/'B'/'C'：馬単・三連単主戦／三連複保険（Owner 2026-11-28 21:46、同じ30点）
 # 同じ30点の配分（2026-11-28 事前固定の研究用。本番の購入方針ではない）: (馬単, 三連単, 三連複) の上限
 SINGLE_BUDGET = {'A': (12, 8, 10), 'B': (6, 16, 8), 'PROTECT': (8, 8, 14)}
