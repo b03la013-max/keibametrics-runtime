@@ -64,3 +64,18 @@ def test_jra_delivery_card_never_blocks(tmp_path):
     sys.path.insert(0, 'runtime')
     import jra_owner_issue_delivery as j
     assert j.card('KM-JRA-TKY-20261123-R12', tmp_path / 'missing.json') == ''
+
+
+def test_jra_card_marks_follow_the_signed_static_ranking():
+    final = {'scheduled_post_at': '2026-11-29T15:40:00+09:00', 'prediction_cutoff': '2026-11-29T15:30:00+09:00',
+             'final_prediction_package': {'ranking': ['7', '3', '12', '1', '5'],
+                                          'roles': {'7': ['W', 'P2', 'P3'], '3': ['W', 'P2', 'P3'], '12': ['P2', 'P3'],
+                                                    '1': ['P3'], '5': []}},
+             'final_ticket': {'tickets': [{'bet_type': 'EXACTA', 'selection': [7, 3]}], 'total_investment': 100}}
+    env = {'artifact': {'jra_official_race_card_detail': {
+        'race_context': {'venue_name': '東京', 'race_no': 12, 'surface': '芝', 'distance_m': 2400},
+        'runners': [{'horse_no': n, 'horse_name': f'H{n}'} for n in (1, 3, 5, 7, 12)]}}}
+    c = mail_card.jra_card(final, env)
+    assert c['marks'][:3] == [('◎', 7), ('○', 3), ('▲', 12)] and ('△', 1) in c['marks']
+    assert all(no != 5 for _, no in c['marks'])  # △ only for role holders
+    assert {h['no']: h['mark'] for h in c['horses']} == {7: '◎', 3: '○', 12: '▲', 1: '△'}

@@ -206,7 +206,9 @@ def publish(png_path, repo_path, token, repo, branch='local-autopilot-data'):
 
 def jra_card(final, envelope, edition=''):
     """中央版 Signed FINAL (runtime/final_artifacts/<race_id>.json) + its source envelope (names, frames, course).
-    中央版 has no 印 in the delivery, so only roles are drawn."""
+    印 (Owner 2026-11-28 15:53「地方版と同じく予想印をつけるべき」): the same rule as 地方版 FORMAL
+    (formal_rakuten): ◎○▲ to the first three of the signed Static ranking, △ to the rest; the card shows △
+    only for role holders. Display only: taken from the frozen ranking, no new judgement."""
     art = (envelope or {}).get('artifact') or {}
     det = art.get('jra_official_race_card_detail') or {}
     ctx = det.get('race_context') or {}
@@ -214,7 +216,9 @@ def jra_card(final, envelope, edition=''):
              for r in det.get('runners') or [] if r.get('horse_no')}
     fp = final.get('final_prediction_package') or {}
     ft = final.get('final_ticket') or {}
-    sm = {'marks': {}, 'roles': fp.get('roles') or {}, 'ranking': fp.get('ranking') or [], 'tickets': ft.get('tickets') or []}
+    ranking = [str(x) for x in fp.get('ranking') or []]
+    marks = {h: '◎' if i == 0 else '○' if i == 1 else '▲' if i == 2 else '△' for i, h in enumerate(ranking)}
+    sm = {'marks': marks, 'roles': fp.get('roles') or {}, 'ranking': ranking, 'tickets': ft.get('tickets') or []}
     post = str(final.get('scheduled_post_at') or '')[11:16]
     cut = str(final.get('prediction_cutoff') or '')[11:16]
     title = f"{ctx.get('venue_name', '')}{ctx.get('race_no', '')}R"
