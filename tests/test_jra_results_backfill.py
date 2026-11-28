@@ -70,3 +70,17 @@ def test_venue_codes_match_the_canonical_race_ids():
     import jra_race_day_resolver as R
     m = next(v for v in vars(R).values() if isinstance(v, dict) and v.get("04") == ("NGT", "新潟"))
     assert B.VENUES == {k: v[0] for k, v in m.items()}
+
+
+def test_run_stops_cleanly_on_a_transient_network_drop(tmp_path, monkeypatch):
+    import http.client
+    monkeypatch.setattr(B, "OUT", tmp_path)
+    class C:
+        requests = 0
+        def get(self, path):
+            self.requests += 1
+            raise http.client.RemoteDisconnected("Remote end closed connection without response")
+    out = B.run(dt.date(2026, 11, 1), 1, client=C(), start=dt.date(2026, 11, 20))
+    assert out["status"] == "NETWORK_STOP_RESUME_NEXT_RUN"
+    st = json.loads((tmp_path / "state.json").read_text())
+    assert st["network_stops"][-1]["reason"].startswith("NETWORK:RemoteDisconnected") and not st.get("hold_until")
