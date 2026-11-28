@@ -92,3 +92,8 @@ def test_payout_page_must_agree_with_production():
     assert M._check_against_production(p, res)
     res["official_result"]["payouts"]["EXACTA"]["per_100_yen"] = 12000
     assert not M._check_against_production(p, res)
+
+
+def test_workflow_installs_result_reader_dependencies():
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/km-jra-multi-primary.yml").read_text()
+    assert "runtime/jra_source_runtime/requirements.txt" in wf
