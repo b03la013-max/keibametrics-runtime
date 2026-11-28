@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-28（17:56時点）
+# 地方版 配送台帳 2026-11-28（18:00時点）
 
 - 管理Race 24／発走済み 12
-- PAPER：凍結 24・Push検証 24・送信 15（発走前 15）・読み戻し一致 15・本人確認 0
+- PAPER：凍結 24・Push検証 23・送信 15（発走前 15）・読み戻し一致 15・本人確認 0
 - 正式：試行 15・Signed FINAL 15（NO-BET 0）・発走前送信 15・読み戻し一致 15・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -18,7 +18,7 @@
 | KOC_05 | 17:10 | POSTRESULT_DIAGNOSTIC | 16:29 | ○ | SIGNED_FINAL | 17:02 | ○ |  |
 | KOC_06 | 17:45 | PRESTART_PUSH_VERIFIED | 17:04 | ○ | SIGNED_FINAL | 17:04 | ○ |  |
 | KOC_07 | 18:15 | PRESTART_PUSH_VERIFIED | 17:31 | ○ | SIGNED_FINAL | 17:32 | ○ |  |
-| KOC_08 | 18:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KOC_08 | 18:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KOC_09 | 19:15 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_10 | 19:45 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KOC_11 | 20:20 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
