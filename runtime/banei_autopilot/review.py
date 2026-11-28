@@ -400,11 +400,15 @@ def shadow_metrics(out, key, eff, res, rec):
         wo, po = c['win_order'], c['place_order']
         tr = sum(pay.get('TRIO', {}).get('-'.join(map(str, x)), 0) for x in c['trio'])
         ex = sum(pay.get('TRIFECTA', {}).get('-'.join(map(str, x)), 0) for x in c['exact'])
+        ea = sum(pay.get('EXACTA', {}).get('-'.join(map(str, x)), 0) for x in c.get('exacta') or [])
         m[cid] = {'winner_win_rank': wo.index(w) + 1 if w in wo else None,
                   'top3_in_place5': sum(1 for n in (w, s, t) if n in po[:5]),
                   'honmei_top3': c['honmei'] in (w, s, t),
                   'trio_hit': tr > 0, 'exact_hit': ex > 0,
-                  'stake': c['points'] * 100, 'return': tr + ex,
+                  **({'exacta_hit': ea > 0, 'by_kind': {'exacta': [len(c['exacta']) * 100, ea], 'trifecta': [len(c['exact']) * 100, ex],
+                                                        'trio': [len(c['trio']) * 100, tr]}, 'single': c.get('single')}
+                     if 'exacta' in c else {}),
+                  'stake': c['points'] * 100, 'return': tr + ex + ea,
                   'differs': bool(base) and (c['trio'] != base.get('trio') or c['exact'] != base.get('exact')
                                              or wo != base.get('win_order'))}
     return m

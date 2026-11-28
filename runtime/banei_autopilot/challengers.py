@@ -58,7 +58,8 @@ def _summary(ev, tk):
     return {'win_order': [r['no'] for r in sorted(rows, key=lambda r: r['win_rank'])],
             'place_order': [r['no'] for r in sorted(rows, key=lambda r: r['place_rank'])],
             'honmei': ev.get('honmei'), 'marks': ev.get('marks'),
-            'trio': tk['trio'], 'exact': tk['exact'], 'points': tk['points'], 'shape': tk.get('shape')}
+            'trio': tk['trio'], 'exact': tk['exact'], 'points': tk['points'], 'shape': tk.get('shape'),
+            **({'exacta': tk['exacta'], 'single': tk.get('single')} if 'exacta' in tk else {})}
 
 
 def config_of(c):
