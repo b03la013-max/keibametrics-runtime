@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: false
+      freeze_only:
+        description: "Freeze Challengers for waiting FINALs (dispatched by the race-day loop)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: jra-index-research
@@ -57,6 +62,9 @@ jobs:
           FREEZE_ONLY_TRIGGER=false
           if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" != "20 18 * * 0" ]; then FREEZE_ONLY_TRIGGER=true; fi
           if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.name }}" = "KeibaMetrics Formal Request Runner" ]; then FREEZE_ONLY_TRIGGER=true; fi
+          # 2026-11-28 P0: FORMAL runs started with GITHUB_TOKEN never emit workflow_run, so the race-day
+          # loop dispatches this workflow with freeze_only=true when a FINAL is waiting before its post.
+          if [ "${{ inputs.freeze_only }}" = "true" ]; then FREEZE_ONLY_TRIGGER=true; fi
           if [ "$FREEZE_ONLY_TRIGGER" = "true" ] && [ ! -f "runtime/jra_race_day_plan/$D.schedule.json" ]; then
             echo "NO_RACE_DAY_SCHEDULE $D"; exit 0
           fi

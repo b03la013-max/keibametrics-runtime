@@ -1527,6 +1527,38 @@ def _rev2_shadow_check(root: Path, race_date: str, now=None) -> list:
     return R2.check(race_date, now)
 
 
+_RESEARCH_DISPATCHED = {"at": None, "races": frozenset()}
+
+
+def _research_freeze_dispatch(root: Path, race_date: str, now=None, run=None) -> list:
+    """Dispatch the research freeze (km-jra-index-research.yml, freeze_only) when a signed FINAL is waiting
+    for its pre-post Challenger freeze. Found 2026-11-28: the workflow_run trigger added in #466 never fires
+    for FORMAL runs started with GITHUB_TOKEN, and the 15-min cron ran once, so no Challenger was frozen.
+    Research only; at most one dispatch per 8 minutes and only for a new set of waiting races."""
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    waiting = []
+    for p in sorted((root / 'runtime/final_artifacts').glob(f"KM-JRA-*-{race_date.replace('-', '')}-R*.json")):
+        rid = p.stem
+        if (root / 'runtime/jra_role_candidate_forward' / rid / 'pre_result.json').exists():
+            continue
+        try:
+            post = _dt.datetime.fromisoformat(json.loads(p.read_text()).get('scheduled_post_at'))
+        except Exception:  # noqa: BLE001
+            continue
+        if now + _dt.timedelta(minutes=4) < post:
+            waiting.append(rid)
+    key = frozenset(waiting)
+    last = _RESEARCH_DISPATCHED["at"]
+    if not waiting or (key <= _RESEARCH_DISPATCHED["races"] and last and now - last < _dt.timedelta(minutes=20)) \
+            or (last and now - last < _dt.timedelta(minutes=8)):
+        return []
+    (run or subprocess.run)(["gh", "workflow", "run", "km-jra-index-research.yml", "--ref", "main",
+                             "-f", "freeze_only=true"], check=True, timeout=30, capture_output=True, text=True)
+    _RESEARCH_DISPATCHED.update(at=now, races=key)
+    print(json.dumps({"stage": "RESEARCH_FREEZE_DISPATCH", "races": sorted(waiting)}), flush=True)
+    return sorted(waiting)
+
+
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
@@ -1745,6 +1777,10 @@ def main(argv=None):
                 _rev2_shadow_check(root,a.date)
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"stage":"REV2_SHADOW","error":str(exc)[:300]}),flush=True)
+            try:  # research Challenger freeze before post (2026-11-28 P0); never affects dispatch
+                _research_freeze_dispatch(root,a.date)
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"stage":"RESEARCH_FREEZE_DISPATCH","error":str(exc)[:300]}),flush=True)
         if (root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').exists():
             try:
                 _commit(root,a.date)

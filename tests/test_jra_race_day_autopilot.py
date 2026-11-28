@@ -353,3 +353,27 @@ def test_display_marks_dispatched_running_after_post_without_touching_state():
     done = {"race_id": "x", "post": "2026-11-28T10:05:00+09:00", "state": "FINAL"}
     A._display_deadline_passed(done, dt.datetime(2026, 11, 28, 11, 0, tzinfo=jst))
     assert "display_state" not in done
+
+
+def test_research_freeze_dispatch_only_for_waiting_finals_and_throttled(tmp_path):
+    import datetime as dt
+    import json as _json
+    import jra_race_day_autopilot as A
+    A._RESEARCH_DISPATCHED.update(at=None, races=frozenset())
+    fa = tmp_path / "runtime/final_artifacts"; fa.mkdir(parents=True)
+    for r, post in (("R01", "2026-11-29T10:05:00+09:00"), ("R02", "2026-11-29T10:35:00+09:00")):
+        (fa / f"KM-JRA-TKY-20261129-{r}.json").write_text(_json.dumps({"scheduled_post_at": post}))
+    (tmp_path / "runtime/jra_role_candidate_forward/KM-JRA-TKY-20261129-R02").mkdir(parents=True)
+    (tmp_path / "runtime/jra_role_candidate_forward/KM-JRA-TKY-20261129-R02/pre_result.json").write_text("{}")
+    calls = []
+    run = lambda cmd, **k: calls.append(cmd)
+    jst = dt.timezone(dt.timedelta(hours=9))
+    t0 = dt.datetime(2026, 11, 29, 9, 30, tzinfo=jst)
+    assert A._research_freeze_dispatch(tmp_path, "2026-11-29", t0, run) == ["KM-JRA-TKY-20261129-R01"]
+    assert "freeze_only=true" in calls[0]
+    assert A._research_freeze_dispatch(tmp_path, "2026-11-29", t0 + dt.timedelta(minutes=5), run) == []
+    assert A._research_freeze_dispatch(tmp_path, "2026-11-29", t0 + dt.timedelta(minutes=12), run) == []  # same set, < 20 min
+    late = dt.datetime(2026, 11, 29, 10, 2, tzinfo=jst)  # post in 3 min: too late, no dispatch
+    A._RESEARCH_DISPATCHED.update(at=None, races=frozenset())
+    assert A._research_freeze_dispatch(tmp_path, "2026-11-29", late, run) == []
+    assert len(calls) == 1
