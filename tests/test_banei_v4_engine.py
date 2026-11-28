@@ -109,3 +109,27 @@ def test_exact_rule_by_w_follows_ban_tag():
 def test_shadow_switches_default_off():
     import engine, tickets
     assert engine.MARKET_FREE is False and tickets.EXACT_PICK is None
+
+
+def test_single_mode_shadow_keeps_cap_and_production_identity():
+    import json, glob, tickets
+    from pathlib import Path
+    files = sorted(glob.glob('tests/fixtures/banei/*.json'))
+    rows = {i: {'no': i, 'win_rank': i, 'place_rank': i, 'hole_rank': i, 'role_w': 'STRONG' if i <= 2 else None,
+                'role_p2': 'BUY' if i <= 4 else None, 'role_p3': 'BUY' if i <= 6 else None} for i in range(1, 9)}
+    import intel
+    assert tickets.SINGLE_MODE is None
+    tickets.SINGLE_MODE = 'B'
+    try:
+        tri, ex, exa, single = tickets._single_alloc({'honmei': 1}, rows, [[1, 2, 3], [1, 2, 4]], [])
+    finally:
+        tickets.SINGLE_MODE = None
+    assert len(tri) + len(ex) + len(exa) <= tickets.CAP_TOTAL
+    assert {e[0] for e in ex} == {1, 2} and {e[0] for e in exa} == {1, 2}        # ◎だけを1着に固定しない
+    assert all(len(set(e)) == 3 for e in ex) and all(e[0] != e[1] for e in exa)
+    assert sorted(ex[0]) in [sorted(t) for t in tri]                               # 三連単の組は三連複で保護
+
+
+def test_single_mode_is_owner_gated():
+    import registry
+    assert registry.owner_gated({'tpatch': {'SINGLE_MODE': 'A'}}) and not registry.owner_gated({'tpatch': {'EXACT_PICK': 'UNIVERSE'}})

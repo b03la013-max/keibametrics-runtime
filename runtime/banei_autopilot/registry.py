@@ -196,6 +196,14 @@ def _all_reviews(root):
     return revs
 
 
+# 購入方針（券種・予算）を変える候補は自動昇格させない（Owner 承認が要る）。条件を満たしたら OWNER_REVIEW として知らせる。
+OWNER_GATED = (('tpatch', 'SINGLE_MODE'),)
+
+
+def owner_gated(cfg):
+    return any((cfg or {}).get(w, {}).get(k) is not None for w, k in OWNER_GATED)
+
+
 def step(root, log=lambda *a: None):
     """毎日の反省会の後に呼ぶ。昇格・戻す・引退・新候補の生成を行い、registry と improvement_status.md を書く。"""
     reg = load(root)
@@ -205,7 +213,13 @@ def step(root, log=lambda *a: None):
     table = {cid: compare(revs, cid, max(since or '', (c.get('registered') or '')[:10]), len(active))
              for cid, c in active.items()}
     events = []
-    winners = sorted([(t['mean_rank_diff'], cid) for cid, t in table.items() if t.get('promote')])
+    for cid, t in table.items():                                  # 購入方針を変える候補は Owner の判断へ
+        c = reg['candidates'][cid]
+        if t.get('promote') and owner_gated(c.get('config')) and not c.get('owner_review_at'):
+            c['owner_review_at'] = _now()
+            events.append(('OWNER_REVIEW', cid, t))
+    winners = sorted([(t['mean_rank_diff'], cid) for cid, t in table.items()
+                      if t.get('promote') and not owner_gated(reg['candidates'][cid].get('config'))])
     if winners:
         cid = winners[0][1]
         prev = reg['production']

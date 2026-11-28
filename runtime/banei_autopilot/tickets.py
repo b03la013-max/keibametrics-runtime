@@ -10,6 +10,9 @@ from itertools import combinations, permutations
 
 CAP_TOTAL = 30
 EXACT_RULE = None               # production None（1着固定）; shadow: 'BY_W'（正本 BAN-TAG: W1頭→1-3-5、2頭→2-3-4、3頭以上→三連単なし）/'2HEAD'（常に上位W2頭を頭に 2-3-4）
+SINGLE_MODE = None              # production None（三連複・三連単のまま）。shadow 'A'/'B'/'C'：馬単・三連単主戦／三連複保険（Owner 2026-11-28 21:46、同じ30点）
+# 同じ30点の配分（2026-11-28 事前固定の研究用。本番の購入方針ではない）: (馬単, 三連単, 三連複) の上限
+SINGLE_BUDGET = {'A': (12, 8, 10), 'B': (6, 16, 8), 'PROTECT': (8, 8, 14)}
 EXACT_PICK = None               # production None; shadow 'UNIVERSE': 同じ点数のまま三連単を W×P2×P3 の全組合せから強い順に選ぶ（◎頭固定をやめる）
 FORCE_TRIO_AXIS = None          # production None; challengers AXIS2 sets 2 (◎○2頭軸＋◎抜き○ライン)                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
 UNIT = 100
@@ -153,6 +156,16 @@ def compile_race(ev):
         'G-CAPITAL': 'PASS' if len(trio_l) + len(exact) <= CAP_TOTAL else 'FAIL',
         'G-HOLE': 'PASS' if all(hole_link.values()) else 'GUARDED',
     }
+    if SINGLE_MODE:                                                    # shadow only
+        trio_l, exact, exacta, single = _single_alloc(ev, rows, trio_l, exact)
+        out = {'shape': label, 'trio_shape': tshape, 'exact_shape': eshape, 'axis': axis, 'second': second, 'third': third,
+               'trio': trio_l, 'exact': exact, 'exacta': exacta, 'single': single, 'removed': removed,
+               'pess_u': sorted(pess_u), 'terminal': terminal, 'hole_link': hole_link, 'gates': gates,
+               'universe': {'trio': len(universe_trio), 'exact': len(universe_exact)},
+               'exposure': _exposure(trio_l, exact),
+               'points': len(trio_l) + len(exact) + len(exacta), 'stake': (len(trio_l) + len(exact) + len(exacta)) * UNIT,
+               'formality': 'REFERENCE-RENDERED'}
+        return out
     return {'shape': label, 'trio_shape': tshape, 'exact_shape': eshape,
             'axis': axis, 'second': second, 'third': third,
             'trio': trio_l, 'exact': exact, 'removed': removed, 'pess_u': sorted(pess_u),
@@ -162,6 +175,46 @@ def compile_race(ev):
             'points': len(trio_l) + len(exact), 'stake': (len(trio_l) + len(exact)) * UNIT,
             'formality': 'FORMAL' if all(v in ('PASS', 'GUARDED', 'NOT-APPLICABLE') for v in gates.values())
             else 'REFERENCE-RENDERED'}
+
+
+def _single_alloc(ev, rows, base_trio, base_exact):
+    """馬単・三連単を主戦、三連複を保険にした同じ30点の配分（SINGLE_MODE の影の候補だけ）。
+
+    予想（印・役割・順位）は本番と同じものを使い、券面だけを組み替える。
+    - 1着候補: W（role_w）を勝ちの順位で全部。◎だけを1着に固定しない
+    - 馬単: 1着候補 × 2着候補（role_p2 か role_w）を、勝ち順位＋複勝順位の小さい順
+    - 三連単: 1着候補 × 2着候補 × 3着候補（role_p3・p2・w）を、勝ち順位＋複勝順位×2 の小さい順
+    - 三連複（保険）: 選んだ三連単の3頭の組を先に入れ（着順の入れ替わりを守る）、残りを本番の三連複の順で足す
+    - モード: A＝馬単重点、B＝三連単重点、C＝レースの型（intel.race_structure）で 一強→B・二強/三強→A・混戦→保護（三連複厚め）
+    点数は合計30点以内。足りない券種の余りは三連複に回す。
+    """
+    import intel
+    mode = SINGLE_MODE
+    struct = intel.race_structure(list(rows.values()))
+    if mode == 'C':
+        key = {'ONE': 'B', 'TWO': 'A', 'THREE': 'A'}.get(struct, 'PROTECT')
+    else:
+        key = mode
+    b_ex, b_tri, b_trio = SINGLE_BUDGET[key]
+    hon = ev.get('honmei')
+    wr = lambda n: rows[n]['win_rank']
+    pr = lambda n: rows[n]['place_rank']
+    heads = sorted([n for n, r in rows.items() if r.get('role_w')], key=wr) or ([hon] if hon in rows else [])
+    seconds = sorted([n for n, r in rows.items() if r.get('role_p2') or r.get('role_w')], key=pr)
+    thirds = sorted([n for n, r in rows.items() if r.get('role_p3') or r.get('role_p2') or r.get('role_w')], key=pr)
+    exacta_u = sorted({(a, b) for a in heads for b in seconds if a != b}, key=lambda c: (wr(c[0]) + pr(c[1]), c))
+    tri_u = sorted({(a, b, c) for a in heads for b in seconds for c in thirds if len({a, b, c}) == 3},
+                   key=lambda c: (wr(c[0]) + 2 * pr(c[1]) + pr(c[2]), c))
+    exacta = exacta_u[:b_ex]
+    exact = tri_u[:b_tri]
+    trio_room = CAP_TOTAL - len(exacta) - len(exact)
+    trio = []
+    for t in [tuple(sorted(e)) for e in exact] + [tuple(x) for x in base_trio]:
+        if t not in trio and len(trio) < min(trio_room, b_trio + (b_ex - len(exacta)) + (b_tri - len(exact))):
+            trio.append(t)
+    single = {'mode': mode, 'used': key, 'structure': struct, 'budget': {'exacta': b_ex, 'trifecta': b_tri, 'trio': b_trio},
+              'heads': heads, 'points': {'exacta': len(exacta), 'trifecta': len(exact), 'trio': len(trio)}}
+    return [list(t) for t in trio], [tuple(e) for e in exact], [tuple(e) for e in exacta], single
 
 
 def _exposure(trio, exact):
