@@ -464,7 +464,11 @@ def main():
         print(json.dumps(freeze(x.date, dt.datetime.fromisoformat(x.now) if x.now else None), ensure_ascii=False))
     elif x.cmd == "settle":
         r = settle(x.date, x.backfill)
-        print(json.dumps({"races": len(r), "errors": [e for e in r if "error" in e][:10]}, ensure_ascii=False))
+        errors = [e for e in r if "error" in e]
+        print(json.dumps({"races": len(r), "payouts": sum(1 for e in r if e.get("payouts")),
+                          "errors": len(errors), "first_errors": errors[:10]}, ensure_ascii=False))
+        if errors and not any(e.get("payouts") for e in r):
+            sys.exit(2)  # every fetch failed: surface it instead of a silent green run
     else:
         o = summary()
         print(json.dumps({k: o[k] for k in ("forward", "forward_paired_vs_production")}, ensure_ascii=False)[:3000])
