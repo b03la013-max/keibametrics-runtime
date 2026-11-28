@@ -1,6 +1,6 @@
-# 地方版 配送台帳 2026-11-28（20:43時点）
+# 地方版 配送台帳 2026-11-28（21:00時点）
 
-- 管理Race 24／発走済み 23
+- 管理Race 24／発走済み 24
 - PAPER：凍結 24・Push検証 24・送信 24（発走前 24）・読み戻し一致 24・本人確認 0
 - 正式：試行 24・Signed FINAL 24（NO-BET 0）・発走前送信 24・読み戻し一致 24・本人確認 0
 - 発走前PAPER配送なしで発走：なし
@@ -34,6 +34,6 @@
 | SAG_09 | 19:05 | POSTRESULT_DIAGNOSTIC | 18:21 | ○ | SIGNED_FINAL | 18:22 | ○ |  |
 | SAG_10 | 19:35 | POSTRESULT_DIAGNOSTIC | 18:51 | ○ | SIGNED_FINAL | 19:27 | ○ |  |
 | SAG_11 | 20:10 | POSTRESULT_DIAGNOSTIC | 19:28 | ○ | SIGNED_FINAL | 20:00 | ○ |  |
-| SAG_12 | 20:40 | PRESTART_PUSH_VERIFIED | 19:56 | ○ | SIGNED_FINAL | 20:31 | ○ |  |
+| SAG_12 | 20:40 | POSTRESULT_DIAGNOSTIC | 19:56 | ○ | SIGNED_FINAL | 20:31 | ○ |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
