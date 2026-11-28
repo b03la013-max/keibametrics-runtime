@@ -419,6 +419,15 @@ def run_formal(r, out_dir, deadline):
         kin.setdefault('race', {})['race_id'] = race['formal_race_id']
         kin.setdefault('simulation', {}).update({'run_count': 5000, 'master_seed': req['seed']})
         arts['krs_input'] = copy.deepcopy(kin)   # kept for the KRS calibration re-runs (KCP 2026-11-26; derived values only)
+        try:   # automatic KRS input variant (auto_policy, Owner 2026-11-28 「改善は承認無しで」); base input kept above
+            from runtime.local_autopilot import auto_policy
+            kin2, kvar = auto_policy.krs_input_for(kin, Path(out_dir).parent, r['race_date'])
+            if kvar:
+                kin = kin2
+                arts['krs_input_variant'] = kvar
+                mark('AUTO_POLICY_KRS', variant=kvar)
+        except Exception as exc:
+            mark('AUTO_POLICY_KRS', status=f'ERROR_BASE_INPUT_KEPT:{type(exc).__name__}:{str(exc)[:120]}')
         guard('PRE_KRS')
         pc, pre = _call(base, '/pre-krs', {'family_id': 'LOCAL', 'race_id': race['formal_race_id'], 'source_receipt': src,
                                           'krs_input_data': kin, 'full_terminalization': True,
@@ -500,6 +509,21 @@ def run_formal(r, out_dir, deadline):
             except Exception as exc:   # never block the formal prediction: keep the R54_60 cap
                 promo = None
                 mark('AUTO_PROMOTION', status=f'ERROR_R54_60_KEPT:{type(exc).__name__}:{str(exc)[:120]}')
+        budget = None
+        if capped and not no_bet:   # automatic point-reducing series (auto_policy, Owner 2026-11-28); never adds points
+            try:
+                from runtime.local_autopilot import auto_policy
+                capped2, budget = auto_policy.apply_budget(capped, req['static_prediction']['ranking'],
+                                                           arts.get('numerical_prediction'), arts.get('krs_prediction_utility'),
+                                                           Path(out_dir).parent, r['race_date'])
+                if capped2 is not capped:
+                    capped = capped2
+                    capped['sha256'] = _sha(capped)
+                if budget:
+                    mark('AUTO_POLICY_BUDGET', **{k: budget.get(k) for k in ('series', 'applied')}, tickets=len(capped['tickets']))
+            except Exception as exc:
+                budget = None
+                mark('AUTO_POLICY_BUDGET', status=f'ERROR_TICKETS_KEPT:{type(exc).__name__}:{str(exc)[:120]}')
         if capped:
             mark('LOCAL_TICKET_CAP', max_tickets=capped['max_tickets'], mec_ticket_count=capped['mec_ticket_count'],
                  kept=capped['kept_count'], kept_investment=capped['kept_investment'], sha256=capped['sha256'])
@@ -545,6 +569,8 @@ def run_formal(r, out_dir, deadline):
                        ranking=fpp['ranking'], marks=fpp['marks'], ranking_base=num_rank_base,
                        auto_promotion=(capped or {}).get('auto_promotion'),
                        tickets_r54_60=(capped or {}).get('champion_r54_60_tickets'),
+                       tickets_before_budget=(capped or {}).get('tickets_before_budget'), budget_policy=budget,
+                       krs_input_variant=arts.get('krs_input_variant'),
                        ext_connection=(None if 'ext_connection' not in arts else
                                        {k: arts['ext_connection'].get(k) for k in ('profile', 'status', 'sbo', 'keibabook',
                                                                                    'changed_top3', 'changed_top6', 'error')}),

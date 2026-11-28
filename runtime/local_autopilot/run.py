@@ -614,6 +614,18 @@ def auto_promotion_daily(q, out):
         log('AUTO_CANDIDATES', 'new', ','.join(gen['new']) or '-', 'retired', ','.join(gen['retired']) or '-')
     except Exception as exc:
         log('AUTO_CANDIDATES_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
+    try:   # automatic adoption of the point-reducing series and the KRS input variant (Owner 2026-11-28 23:37)
+        from runtime.local_autopilot import auto_policy
+        if auto_policy._enabled():
+            pr = [auto_policy.decide_budget(ROOT, out.name), auto_policy.decide_krs(ROOT, out.name)]
+            text += auto_policy.md(pr)
+            log('AUTO_POLICY', ','.join(f"{x['kind']}:{x['action']}" for x in pr))
+            sw = [x for x in pr if x['action'] in ('ADOPT', 'REVERT')]
+            issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+            if sw and issue:
+                _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': auto_policy.md(sw)})
+    except Exception as exc:
+        log('AUTO_POLICY_FAIL', f'{type(exc).__name__}:{str(exc)[:160]}')
     try:   # weekly 29-index health check (diagnosis only; Owner 2026-11-25 21:54)
         from runtime.local_autopilot import index_health
         ih = index_health.weekly(ROOT, out.name)

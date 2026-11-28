@@ -256,7 +256,7 @@ def compare_variants(root):
     """Formal KRS vs each research variant on exactly the same races (CAL-01/02 shadow comparison)."""
     from runtime.local_autopilot import krs_research
     out = {}
-    for name in krs_research.VARIANTS:
+    for name in list(krs_research.VARIANTS) + ['BASE']:
         V = races(root, name)
         if not V:
             continue

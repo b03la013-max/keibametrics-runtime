@@ -22,6 +22,8 @@ MAX_PER_NIGHT = 40
 
 
 def variant_input(kin, name):
+    if name == 'BASE':   # the unmodified input: re-run while auto_policy has adopted a variant (probation)
+        return copy.deepcopy(kin)
     add = VARIANTS[name]
     out = copy.deepcopy(kin)
     for h in out.get('horses') or []:
@@ -38,6 +40,13 @@ def nightly(root, day, runner=None, limit=MAX_PER_NIGHT):
         from runtime.local_autopilot.shadow29 import research_krs as runner
     dd = Path(root) / day
     done = 0
+    names = list(VARIANTS)
+    try:
+        from runtime.local_autopilot import auto_policy
+        if auto_policy.active(auto_policy.load(root), 'krs', day):
+            names.append('BASE')
+    except Exception:
+        pass
     for kp in sorted((dd / 'formal').glob('*.krs_input.json')):
         key = kp.name.split('.')[0]
         if not (dd / f'{key}.result.json').exists():
@@ -45,13 +54,13 @@ def nightly(root, day, runner=None, limit=MAX_PER_NIGHT):
         kin = json.loads(kp.read_text())
         seed = int((kin.get('simulation') or {}).get('master_seed') or 1)
         rid = str((kin.get('race') or {}).get('race_id') or key)
-        for name in VARIANTS:
+        for name in names:
             outp = dd / 'formal' / f'{key}.krs_research_{name}.json'
             if outp.exists() or done >= limit:
                 continue
             meta, res = runner(variant_input(kin, name), f'{rid}-RESEARCH-{name}', 5000, seed)
             raw = ((res or {}).get('artifact') or {}).get('raw_output') or {}
-            outp.write_text(json.dumps({'profile': PROFILE, 'variant': name, 'add': VARIANTS[name],
+            outp.write_text(json.dumps({'profile': PROFILE, 'variant': name, 'add': VARIANTS.get(name, {}),
                                         'classification': 'NON_PRODUCTION_RESEARCH_RERUN_AFTER_RESULT',
                                         'run': {k: meta.get(k) for k in ('http_status', 'receipt_status', 'actual_run_count',
                                                                          'input_sha256', 'output_sha256', 'elapsed_s')},
