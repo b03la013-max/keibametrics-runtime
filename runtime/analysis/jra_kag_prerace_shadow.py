@@ -111,11 +111,13 @@ def analyze_final(final, *, race_id, now, artifact_sha256):
     # RED-3: material W/P2 relationships; Pair-local Third is explicitly UNKNOWN.
     p2 = {h for h, rr in role_names.items() if 'P2' in rr}
     uncovered = [h for h in w_candidates if not (p2 - {h})]
-    record('RED-3', 'HEAD_LOCAL_P2_EMPTY', 'CHALLENGE' if uncovered and wagered else 'PASS', 'P1',
-           {'uncovered_w': uncovered if wagered else [], 'w_count': len(w_candidates)},
-           'PARTIAL' if uncovered and wagered else 'EXISTING',
+    record('RED-3', 'GLOBAL_P2_CANDIDATE_GAP',
+           'CHALLENGE' if uncovered and wagered else 'UNKNOWN', 'P1',
+           {'uncovered_w': uncovered if wagered else [], 'w_count': len(w_candidates),
+            'note': 'global P2 membership does not establish head-local Pair closure'},
+           'PARTIAL' if uncovered and wagered else 'UNKNOWN',
            'SHADOW' if uncovered and wagered else 'NO-CHANGE',
-           'requires head-local P2 evidence; rank alone is insufficient')
+           'requires independently bound head-local P2 evidence')
     record('RED-3', 'PAIR_THIRD_SOURCE', 'UNKNOWN', 'INFO',
            {'reason': 'final headline roles alone cannot prove Pair-local Third closure'},
            'UNKNOWN', 'NO-CHANGE', 'require verified semantic graph readback')
