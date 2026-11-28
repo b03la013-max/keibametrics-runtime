@@ -160,6 +160,119 @@
    "status": "PROMOTION_ELIGIBLE",
    "registered_at": "2026-11-14T16:26:58.667977+00:00",
    "forward_from_race_date": "20261115"
+  },
+  {
+   "hypothesis": "re-weight ZAI-WIN toward indices with stronger standalone discrimination, shrunk 50% toward the Champion to limit overfitting",
+   "change": {
+    "type": "DISCRIMINATION_REWEIGHT",
+    "shrink": 0.5
+   },
+   "weights": {
+    "BVI": 0.08699,
+    "BWI": 0.030157,
+    "CFI": 0.078484,
+    "CSI": 0.065824,
+    "GCI": 0.059301,
+    "HPI": 0.134336,
+    "JTI": 0.072073,
+    "KGI": 0.070388,
+    "PRI": 0.076334,
+    "RFI": 0.056219,
+    "SSI": 0.118375,
+    "TRI": 0.050077,
+    "VMI": 0.101443
+   },
+   "parent_formula": "JRA-ZAI-WIN-v1.1",
+   "parent_formula_sha256": "245a29adc2dd87984130bfd9f5a2d90be412cec5113dbc6607fbaf3137c7b88c",
+   "train_window": [
+    "20261011",
+    "20261128"
+   ],
+   "train_races": 375,
+   "expected_effect": "lower paired top3_mean_rank vs Champion",
+   "rejection": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+   "pre_registered": {
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better; 95% bootstrap CI upper bound < 0",
+    "secondary": [
+     "winner_pct (0=top, 0.5=random)",
+     "winner_in_top3",
+     "top3_in_top5",
+     "ordered_pair_top2",
+     "exact_triple_top3"
+    ],
+    "promotion_eligible": "forward OOS >= 100 eligible races AND primary CI upper < 0 AND winner_in_top3 not worse by more than 2 points AND no condition (surface) with >= 30 races worse by > 0.3 rank",
+    "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+    "pfs": "Challengers have no frozen tickets; counterfactual PFS is NOT computed (Production PFS only)"
+   },
+   "candidate_id": "CAND-ZAIW-e505adb417",
+   "status": "SHADOW",
+   "registered_at": "2026-11-28T08:51:38.301329+00:00",
+   "forward_from_race_date": "20261129"
+  },
+  {
+   "hypothesis": "turf and dirt reward different abilities; surface-specific discrimination re-weighting (50% shrink) improves ranking",
+   "change": {
+    "type": "SURFACE_SPLIT_REWEIGHT",
+    "shrink": 0.5
+   },
+   "weights_by_surface": {
+    "芝": {
+     "BVI": 0.08476,
+     "BWI": 0.03044,
+     "CFI": 0.072942,
+     "CSI": 0.066188,
+     "GCI": 0.062585,
+     "HPI": 0.136412,
+     "JTI": 0.070644,
+     "KGI": 0.068456,
+     "PRI": 0.078835,
+     "RFI": 0.057095,
+     "SSI": 0.120517,
+     "TRI": 0.051677,
+     "VMI": 0.09945
+    },
+    "ダ": {
+     "BVI": 0.089872,
+     "BWI": 0.02979,
+     "CFI": 0.085645,
+     "CSI": 0.065353,
+     "GCI": 0.055057,
+     "HPI": 0.131654,
+     "JTI": 0.073919,
+     "KGI": 0.072884,
+     "PRI": 0.073103,
+     "RFI": 0.055087,
+     "SSI": 0.115608,
+     "TRI": 0.04801,
+     "VMI": 0.104018
+    }
+   },
+   "parent_formula": "JRA-ZAI-WIN-v1.1",
+   "parent_formula_sha256": "245a29adc2dd87984130bfd9f5a2d90be412cec5113dbc6607fbaf3137c7b88c",
+   "train_window": [
+    "20261011",
+    "20261128"
+   ],
+   "train_races": 375,
+   "expected_effect": "lower paired top3_mean_rank vs Champion",
+   "rejection": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+   "pre_registered": {
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better; 95% bootstrap CI upper bound < 0",
+    "secondary": [
+     "winner_pct (0=top, 0.5=random)",
+     "winner_in_top3",
+     "top3_in_top5",
+     "ordered_pair_top2",
+     "exact_triple_top3"
+    ],
+    "promotion_eligible": "forward OOS >= 100 eligible races AND primary CI upper < 0 AND winner_in_top3 not worse by more than 2 points AND no condition (surface) with >= 30 races worse by > 0.3 rank",
+    "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+    "pfs": "Challengers have no frozen tickets; counterfactual PFS is NOT computed (Production PFS only)"
+   },
+   "candidate_id": "CAND-ZAIW-8955624512",
+   "status": "SHADOW",
+   "registered_at": "2026-11-28T08:51:38.301388+00:00",
+   "forward_from_race_date": "20261129"
   }
  ]
 }
