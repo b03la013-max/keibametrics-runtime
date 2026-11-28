@@ -96,6 +96,8 @@ def gen_variant(summary, name, base=None):
             return base
         top = sorted(ssr, key=lambda h: -(ssr[h][0] or 0))[:k['n']]
         return w_plus_market(dict(summary, _market_order=top), base, rank, w, p2, add=k['n'])
+    if fam == 'TRIOPROT':       # SCTP (Owner 2026-11-28 「実装してください」): C24 with k 三連複 protection tickets
+        return trio_protect(w_plus_market(summary, base, rank, w, p2), rank, w, p2, k['k'])
     if fam == 'WPLUS':          # W + the `add` shortest-odds horses as extra heads (same rule as C24)
         return w_plus_market(summary, base, rank, w, p2, add=k['add'])
     if fam == 'P2PLUS':         # the `add` shortest-odds horses outside W/P2 as extra seconds behind each W head
@@ -270,6 +272,23 @@ def core_layer(summary, base, w, p2, core_n=3):
         if len(out) >= CAP:
             break
     return out
+
+
+def trio_protect(main, rank, w, p2, k):
+    """SCTP 単系主戦・三連複保護層 (same budget): the k lowest-priority 三連単 of `main` (largest sum of formal ranking
+    positions, later first on ties) are replaced by k 三連複 not already in `main`, taken first from W∪P2 and then
+    from the ranking top-6 (fewest horses outside W∪P2, then smallest ranking-position sum). Points never grow."""
+    pos = {h: i for i, h in enumerate(rank)}
+    core = list(dict.fromkeys(list(w) + list(p2)))
+    pool = list(dict.fromkeys(core + list(rank[:6])))
+    have = {tuple(sorted(t[1])) for t in main if t[0] == 'TRIO'}
+    trios = sorted((tuple(sorted(c)) for c in combinations(pool, 3)),
+                   key=lambda c: (sum(1 for x in c if x not in core), sum(pos.get(x, 99) for x in c), c))
+    add = [('TRIO', list(c)) for c in trios if c not in have][:k]
+    tri = [i for i, t in enumerate(main) if t[0] == 'TRIFECTA']
+    drop = set(sorted(tri, key=lambda i: (-sum(pos.get(x, 99) for x in main[i][1]), -i))[:len(add)])
+    add = add[:len(drop)]
+    return [t for i, t in enumerate(main) if i not in drop] + add
 
 
 def w_plus_market(summary, base, rank, w, p2, add=2):

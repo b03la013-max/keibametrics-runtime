@@ -40,6 +40,9 @@ CANDIDATES = {   # id -> (formal_mix variant, prereg file)
     'C29-KRS-CAP-60': ('GEN:KRSCAP:mode=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261125_R13.json'),
     'C30-KRS-CAP-TEMPERED-60': ('GEN:KRSCAP:mode=1:t=165', 'KM_LOCAL_FORWARD_OOS_PREREG_20261127_R14.json'),
     'C31-W-PLUS-KRS-TOP1-60': ('GEN:KRSW:n=1', 'KM_LOCAL_FORWARD_OOS_PREREG_20261128_R15.json'),
+    'C32-SCTP-TRIO10-60': ('GEN:TRIOPROT:k=6', 'KM_LOCAL_FORWARD_OOS_PREREG_20261129_R16.json'),
+    'C33-SCTP-TRIO20-60': ('GEN:TRIOPROT:k=12', 'KM_LOCAL_FORWARD_OOS_PREREG_20261129_R16.json'),
+    'C34-SCTP-TRIO30-60': ('GEN:TRIOPROT:k=18', 'KM_LOCAL_FORWARD_OOS_PREREG_20261129_R16.json'),
 }
 # Owner-decided promotions (not automatic). Applied once into the state: the variant becomes the delivered one from
 # effective_from, replacing whatever is active. Probation uses the pre-registered revert rule of the candidate.

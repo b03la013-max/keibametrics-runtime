@@ -1,0 +1,22 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261129-R16",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-28T23:30:00+09:00",
+ "first_eligible_post": "2026-11-29T00:00:00+09:00",
+ "origin": "Owner 2026-11-28「どうしますか？実装してください」（SCTP 単系主戦・三連複保護層）",
+ "candidates": {
+  "C32-SCTP-TRIO10-60": {"variant": "GEN:TRIOPROT:k=6 (formal_mix.trio_protect)"},
+  "C33-SCTP-TRIO20-60": {"variant": "GEN:TRIOPROT:k=12 (formal_mix.trio_protect)"},
+  "C34-SCTP-TRIO30-60": {"variant": "GEN:TRIOPROT:k=18 (formal_mix.trio_protect)"}
+ },
+ "rule": "配信中 C24 の60点のうち、正式順位の位置和が最も大きい（優先度の低い）三連単 k 点を、C24 に無い三連複 k 点（W∪P2 の組を優先、足りなければ正式順位上位6頭から、順位和の小さい順）に置き換える。点数は増やさない（同一予算）。k=6/12/18 は60点の10/20/30%。",
+ "kind": "AUTO_PROMOTION（auto_promote.CANDIDATES、KM-LOCAL-AUTO-PROMOTION-v1.0 のまま。100R・PFS・上位1R除外PFS・的中R・2場以上の同予算規則）",
+ "measurement": "sctp.py（週次 five レポートに追記）：救済（C24 払戻0で候補>0）、機会損失（C24 の払戻が候補より大きい）、差引、場別・頭数別。C13（MIX_P2BOX20）を既存の三連複込み対照として併記",
+ "note": "確率・期待値・Kelly には使わない。配信・購入方針・60点上限は変えない",
+ "in_sample_reference": {"note": "結果を知った上の再計算（正式408R・11/16〜11/28）。判断には使わない",
+   "C24_W_PLUS_TOP2POP_60": {"pfs": 77.2, "hit_races": 223},
+   "C32_k6": {"pfs": 77.8, "hit_races": 221, "rescue": 7, "opp_cost": 13, "net": 14150},
+   "C33_k12": {"pfs": 77.6, "hit_races": 229, "rescue": 14, "opp_cost": 25, "net": 9430},
+   "C34_k18": {"pfs": 78.6, "hit_races": 242, "rescue": 23, "opp_cost": 44, "net": 34540},
+   "C13_MIX_P2BOX20": {"pfs": 78.2, "hit_races": 222, "rescue": 25, "opp_cost": 76, "net": 25330}}
+}

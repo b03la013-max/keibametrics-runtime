@@ -231,6 +231,11 @@ def evaluate(root):
         rep['budget_series'] = budget_series.report(root)
     except Exception as exc:
         rep['budget_series_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
+    try:   # SCTP 三連複保護層 (Owner 2026-11-28)
+        from runtime.local_autopilot import sctp
+        rep['sctp'] = sctp.report(root)
+    except Exception as exc:
+        rep['sctp_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
     return rep
 
 
@@ -265,6 +270,9 @@ def md(rep):
     if rep.get('budget_series'):
         from runtime.local_autopilot import budget_series
         L.append(budget_series.md(rep['budget_series']))
+    if rep.get('sctp'):
+        from runtime.local_autopilot import sctp
+        L.append(sctp.md(rep['sctp']))
     return '\n'.join(L) + '\n'
 
 
