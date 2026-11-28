@@ -350,4 +350,4 @@ def test_acknowledged_holds_do_not_fail_but_new_blocks_do():
     changed = {"race_id": "KM-JRA-TKY-20261031-R05", "status": "BLOCKED_RESULT_INTEGRITY"}
     assert H.health_exit_code(H.build_execution_health("NO_BET", [changed]), ack) == 2
     assert H.health_exit_code(H.build_execution_health("NO_BET", [old]), {}) == 2
-    assert set(H.acknowledged_holds()) >= {"KM-JRA-TKY-20261031-R05"}
+    assert set(H.acknowledged_holds()) >= {"KM-JRA-TKY-20261010-R11-INTEGRATION"}
