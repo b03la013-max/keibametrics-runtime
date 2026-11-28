@@ -1,6 +1,6 @@
 # 地方 統計表（HISTORICAL_BACKFILL_LEARNING (not Forward OOS)）
 
-出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-27'] ／ 1050R・11367出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
+出典 RAKUTEN_RESULT_PAGE ／ 期間 ['2026-11-01', '2026-11-28'] ／ 1056R・11434出走。30出走未満は参考値。popularity / odds are FINAL (post-race); at prediction time compare with the pre-race odds snapshot
 
 ## 人気別 着順の内訳（場×距離帯）
 
@@ -208,27 +208,27 @@
 | OHI | S | 4 | 22※ | 0 | 3 | 0 | 13.6% (5%–33%) | 0% | 37% |
 | OHI | S | 5 | 22※ | 0 | 7 | 2 | 40.9% (23%–61%) | 0% | 93% |
 | OHI | S | 6-9 | 87 | 0 | 2 | 6 | 9.2% (5%–17%) | 0% | 39% |
-| SAG | L | 1 | 8※ | 5 | 2 | 0 | 87.5% (53%–98%) | 141% | 108% |
-| SAG | L | 10+ | 12※ | 0 | 0 | 0 | 0.0% (0%–24%) | 0% | 0% |
-| SAG | L | 2 | 8※ | 1 | 3 | 2 | 75.0% (41%–93%) | 38% | 99% |
-| SAG | L | 3 | 8※ | 2 | 1 | 0 | 37.5% (14%–69%) | 166% | 52% |
-| SAG | L | 4 | 8※ | 0 | 2 | 2 | 50.0% (22%–78%) | 0% | 78% |
-| SAG | L | 5 | 8※ | 0 | 0 | 0 | 0.0% (0%–32%) | 0% | 0% |
-| SAG | L | 6-9 | 31 | 0 | 0 | 4 | 12.9% (5%–29%) | 0% | 60% |
-| SAG | M | 1 | 61 | 33 | 10 | 4 | 77.0% (65%–86%) | 80% | 85% |
-| SAG | M | 10+ | 119 | 0 | 1 | 3 | 3.4% (1%–8%) | 0% | 44% |
-| SAG | M | 2 | 61 | 10 | 19 | 10 | 63.9% (51%–75%) | 51% | 86% |
-| SAG | M | 3 | 61 | 9 | 13 | 11 | 54.1% (42%–66%) | 72% | 89% |
-| SAG | M | 4 | 61 | 6 | 5 | 12 | 37.7% (27%–50%) | 107% | 79% |
-| SAG | M | 5 | 62 | 2 | 7 | 5 | 22.6% (14%–34%) | 34% | 52% |
-| SAG | M | 6-9 | 237 | 1 | 6 | 16 | 9.7% (7%–14%) | 15% | 53% |
-| SAG | S | 1 | 32 | 16 | 8 | 2 | 81.2% (65%–91%) | 70% | 89% |
-| SAG | S | 10+ | 44 | 0 | 1 | 2 | 6.8% (2%–18%) | 0% | 142% |
-| SAG | S | 2 | 32 | 9 | 9 | 2 | 62.5% (45%–77%) | 88% | 77% |
-| SAG | S | 3 | 32 | 5 | 5 | 7 | 53.1% (36%–69%) | 111% | 81% |
-| SAG | S | 4 | 32 | 0 | 4 | 8 | 37.5% (23%–55%) | 0% | 67% |
-| SAG | S | 5 | 32 | 1 | 2 | 5 | 25.0% (13%–42%) | 44% | 83% |
-| SAG | S | 6-9 | 124 | 1 | 3 | 6 | 8.1% (4%–14%) | 70% | 58% |
+| SAG | L | 1 | 9※ | 6 | 2 | 0 | 88.9% (56%–98%) | 138% | 108% |
+| SAG | L | 10+ | 15※ | 0 | 0 | 0 | 0.0% (-0%–20%) | 0% | 0% |
+| SAG | L | 2 | 9※ | 1 | 3 | 2 | 66.7% (35%–88%) | 33% | 88% |
+| SAG | L | 3 | 9※ | 2 | 1 | 0 | 33.3% (12%–65%) | 148% | 47% |
+| SAG | L | 4 | 9※ | 0 | 2 | 3 | 55.6% (27%–81%) | 0% | 84% |
+| SAG | L | 5 | 9※ | 0 | 1 | 0 | 11.1% (2%–44%) | 0% | 21% |
+| SAG | L | 6-9 | 35 | 0 | 0 | 4 | 11.4% (5%–26%) | 0% | 53% |
+| SAG | M | 1 | 65 | 36 | 11 | 4 | 78.5% (67%–87%) | 84% | 87% |
+| SAG | M | 10+ | 127 | 0 | 1 | 3 | 3.1% (1%–8%) | 0% | 42% |
+| SAG | M | 2 | 65 | 11 | 19 | 10 | 61.5% (49%–72%) | 51% | 82% |
+| SAG | M | 3 | 65 | 9 | 15 | 11 | 53.8% (42%–65%) | 68% | 88% |
+| SAG | M | 4 | 65 | 6 | 5 | 14 | 38.5% (28%–51%) | 100% | 79% |
+| SAG | M | 5 | 66 | 2 | 8 | 5 | 22.7% (14%–34%) | 32% | 54% |
+| SAG | M | 6-9 | 252 | 1 | 6 | 18 | 9.9% (7%–14%) | 14% | 53% |
+| SAG | S | 1 | 33 | 17 | 8 | 2 | 81.8% (66%–91%) | 71% | 89% |
+| SAG | S | 10+ | 46 | 0 | 1 | 2 | 6.5% (2%–18%) | 0% | 136% |
+| SAG | S | 2 | 33 | 9 | 10 | 2 | 63.6% (47%–78%) | 86% | 78% |
+| SAG | S | 3 | 33 | 5 | 5 | 7 | 51.5% (35%–68%) | 107% | 78% |
+| SAG | S | 4 | 33 | 0 | 4 | 8 | 36.4% (22%–53%) | 0% | 65% |
+| SAG | S | 5 | 33 | 1 | 2 | 6 | 27.3% (15%–44%) | 42% | 86% |
+| SAG | S | 6-9 | 128 | 1 | 3 | 6 | 7.8% (4%–14%) | 68% | 56% |
 | SON | L | 1 | 5※ | 2 | 1 | 2 | 100.0% (57%–100%) | 58% | 118% |
 | SON | L | 10+ | 5※ | 0 | 0 | 0 | 0.0% (-0%–43%) | 0% | 0% |
 | SON | L | 2 | 5※ | 1 | 1 | 1 | 60.0% (23%–88%) | 84% | 92% |
@@ -279,9 +279,9 @@
 | venue=MON / distance=1200 / going=DAMP / field_band=F12+ / frame=5 | 34 | 5.9% | 0.30 | 0% |
 | venue=MIZ / distance=1400 / going=WET / field_band=F9-11 / frame=8 | 34 | 20.6% | 0.58 | 13% |
 | venue=MON / distance=1000 / going=DAMP / field_band=F12+ / frame=5 | 44 | 18.2% | 0.63 | 34% |
-| venue=SAG / distance=1400 / going=DAMP / field_band=F9-11 / frame=8 | 36 | 44.4% | 1.58 | 14% |
 | venue=URW / distance=1400 / going=DRY / field_band=F12+ / frame=5 | 32 | 15.6% | 0.64 | 91% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=4 | 39 | 41.0% | 1.49 | 89% |
+| venue=SAG / distance=1400 / going=DAMP / field_band=F9-11 / frame=8 | 40 | 40.0% | 1.49 | 12% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=8 | 78 | 39.7% | 1.45 | 34% |
 | venue=NGY / distance=1500 / going=DAMP / field_band=F12+ / frame=1 | 39 | 17.9% | 0.70 | 133% |
 | venue=NGY / distance=1500 / going=DRY / field_band=F12+ / frame=5 | 36 | 16.7% | 0.70 | 31% |
@@ -316,11 +316,11 @@
 | venue=KOC / band=M / distance_change=SAME | 31 | 22.6% | 0.85 | 274% |
 | venue=KNZ / band=M / distance_change=LONGER | 87 | 21.8% | 0.87 | 13% |
 | venue=NGY / band=M / distance_change=SAME | 286 | 25.9% | 1.14 | 56% |
-| venue=SAG / band=S / distance_change=SAME | 72 | 31.9% | 1.11 | 32% |
+| venue=SAG / band=S / distance_change=SAME | 80 | 31.2% | 1.12 | 28% |
 | venue=MOR / band=S / distance_change=SAME | 43 | 20.9% | 0.90 | 25% |
 | venue=KOC / band=M / distance_change=LONGER | 149 | 28.9% | 1.10 | 45% |
-| venue=SAG / band=S / distance_change=SHORTER | 65 | 24.6% | 1.08 | 17% |
 | venue=KSM / band=M / distance_change=SHORTER | 44 | 25.0% | 1.07 | 35% |
+| venue=KNZ / band=M / distance_change=SHORTER | 63 | 33.3% | 1.07 | 117% |
 
 ## 出走間隔：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -332,17 +332,17 @@
 | venue=KNZ / days_since_last=15-35d | 38 | 39.5% | 1.15 | 26% |
 | venue=NGY / days_since_last=<=14d | 223 | 24.7% | 1.12 | 72% |
 | venue=SON / days_since_last=15-35d | 229 | 29.3% | 1.09 | 58% |
-| venue=SAG / days_since_last=<=14d | 343 | 25.1% | 1.08 | 46% |
 | venue=KSM / days_since_last=<=14d | 103 | 28.2% | 1.08 | 97% |
 | venue=MON / days_since_last=<=14d | 120 | 22.5% | 1.08 | 60% |
 | venue=KAW / days_since_last=<=14d | 33 | 24.2% | 1.08 | 35% |
 | venue=KSM / days_since_last=15-35d | 152 | 26.3% | 0.93 | 49% |
 | venue=KOC / days_since_last=<=14d | 256 | 28.9% | 1.07 | 84% |
 | venue=SON / days_since_last=<=14d | 207 | 19.8% | 0.93 | 71% |
-| venue=SAG / days_since_last=15-35d | 51 | 33.3% | 0.95 | 34% |
+| venue=SAG / days_since_last=<=14d | 387 | 24.0% | 1.06 | 41% |
 | venue=MIZ / days_since_last=15-35d | 123 | 30.1% | 1.05 | 77% |
 | venue=NGY / days_since_last=15-35d | 216 | 23.6% | 1.05 | 63% |
 | venue=KNZ / days_since_last=<=14d | 286 | 28.7% | 0.96 | 49% |
+| venue=SAG / days_since_last=15-35d | 66 | 33.3% | 0.96 | 33% |
 | venue=MIZ / days_since_last=<=14d | 468 | 25.2% | 0.98 | 32% |
 
 ## 4角位置→着順：A/E の偏りが大きい区分（30出走以上、上位20）
@@ -374,26 +374,26 @@
 
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
-| venue=SAG / distance=1400 / jockey=青海大 | 33 | 3.0% | 0.31 | 0% |
-| venue=SAG / distance=1400 / jockey=川島拓 | 33 | 9.1% | 0.39 | 4% |
+| venue=SAG / distance=1400 / jockey=青海大 | 33 | 3.0% | 0.32 | 0% |
+| venue=SAG / distance=1400 / jockey=中山蓮 | 36 | 8.3% | 0.43 | 0% |
 | venue=NGY / distance=1500 / jockey=丹羽克 | 48 | 4.2% | 0.45 | 0% |
 | venue=NGY / distance=1500 / jockey=丸山真 | 30 | 6.7% | 0.47 | 0% |
-| venue=SAG / distance=1400 / jockey=中山蓮 | 33 | 9.1% | 0.48 | 0% |
+| venue=SAG / distance=1400 / jockey=川島拓 | 36 | 11.1% | 0.51 | 4% |
 | venue=SON / distance=1400 / jockey=土方颯 | 31 | 9.7% | 0.54 | 60% |
 | venue=SAG / distance=1400 / jockey=田中純 | 34 | 23.5% | 1.75 | 122% |
 | venue=SON / distance=1400 / jockey=田野豊 | 60 | 18.3% | 0.61 | 13% |
 | venue=KSM / distance=1400 / jockey=藤原幹 | 31 | 16.1% | 0.62 | 11% |
 | venue=SON / distance=1400 / jockey=南部楓 | 41 | 12.2% | 0.62 | 6% |
-| venue=SAG / distance=1400 / jockey=長田進 | 32 | 31.2% | 1.41 | 22% |
+| venue=SAG / distance=1400 / jockey=後藤武 | 34 | 8.8% | 0.65 | 0% |
+| venue=SAG / distance=1400 / jockey=加茂飛 | 42 | 9.5% | 0.69 | 0% |
 | venue=KNZ / distance=1500 / jockey=栗原大 | 36 | 27.8% | 0.71 | 17% |
 | venue=KSM / distance=1400 / jockey=赤津和 | 32 | 15.6% | 0.71 | 8% |
-| venue=SAG / distance=1400 / jockey=加茂飛 | 39 | 10.3% | 0.72 | 0% |
 | venue=NGY / distance=1500 / jockey=細川智 | 52 | 30.8% | 1.39 | 30% |
+| venue=SAG / distance=1400 / jockey=長田進 | 33 | 30.3% | 1.38 | 22% |
 | venue=NGY / distance=1500 / jockey=村上弘 | 40 | 15.0% | 0.74 | 18% |
 | venue=SON / distance=1400 / jockey=廣瀬航 | 62 | 48.4% | 1.34 | 128% |
 | venue=KSM / distance=1400 / jockey=東川慎 | 32 | 21.9% | 0.75 | 24% |
-| venue=SAG / distance=1400 / jockey=後藤武 | 31 | 9.7% | 0.76 | 0% |
-| venue=KNZ / distance=1500 / jockey=青柳正 | 36 | 27.8% | 0.77 | 15% |
+| venue=SAG / distance=1400 / jockey=竹吉徹 | 50 | 28.0% | 1.30 | 13% |
 
 ## 上がり最速×4角位置（YouTube主張の検証用・未検証）：A/E の偏りが大きい区分（30出走以上、上位20）
 
@@ -472,20 +472,20 @@
 | 条件 | 出走 | 3着内率 | A/E | 単回収 |
 |---|---|---|---|---|
 | venue=MIZ / distance=1300 / same_venue_distance_win_before=False / last_finish=7+ | 47 | 4.3% | 0.52 | 0% |
-| venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 106 | 7.5% | 0.62 | 37% |
+| venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 121 | 7.4% | 0.64 | 33% |
 | venue=MIZ / distance=1600 / same_venue_distance_win_before=False / last_finish=7+ | 37 | 10.8% | 0.68 | 0% |
 | venue=KSM / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 77 | 10.4% | 0.71 | 6% |
 | venue=URW / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 42 | 9.5% | 0.73 | 21% |
-| venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 47 | 57.5% | 1.32 | 107% |
 | venue=KNZ / distance=1400 / same_venue_distance_win_before=False / last_finish=4-6 | 52 | 17.3% | 0.77 | 19% |
 | venue=MIZ / distance=850 / same_venue_distance_win_before=False / last_finish=7+ | 50 | 20.0% | 1.25 | 0% |
 | venue=KNZ / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 33 | 51.5% | 1.25 | 43% |
 | venue=KNZ / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 53 | 17.0% | 0.81 | 108% |
 | venue=MIZ / distance=1300 / same_venue_distance_win_before=False / last_finish=4-6 | 31 | 25.8% | 0.82 | 36% |
 | venue=KSM / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 45 | 46.7% | 1.19 | 160% |
+| venue=SAG / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 56 | 53.6% | 1.19 | 94% |
 | venue=KNZ / distance=1500 / same_venue_distance_win_before=False / last_finish=4-6 | 47 | 29.8% | 0.84 | 36% |
 | venue=NGY / distance=1500 / same_venue_distance_win_before=False / last_finish=7+ | 163 | 15.3% | 1.16 | 15% |
-| venue=SAG / distance=1300 / same_venue_distance_win_before=False / last_finish=7+ | 46 | 10.9% | 0.87 | 0% |
+| venue=SAG / distance=1300 / same_venue_distance_win_before=False / last_finish=7+ | 46 | 10.9% | 0.86 | 0% |
 | venue=KOC / distance=1400 / same_venue_distance_win_before=False / last_finish=1-3 | 59 | 47.5% | 1.15 | 66% |
 | venue=MIZ / distance=1400 / same_venue_distance_win_before=False / last_finish=7+ | 118 | 12.7% | 0.87 | 16% |
 | venue=SAG / distance=1300 / same_venue_distance_win_before=False / last_finish=4-6 | 32 | 31.2% | 1.10 | 49% |
