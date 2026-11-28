@@ -1,12 +1,12 @@
-### 三チーム統治（Blue／Red／Purple）2026-11-28・2R
+### 三チーム統治（Blue／Red／Purple）2026-11-28・3R
 
 Red は固定の機械検査（独立性 LEVEL-1）。ChatGPT の日次総括は外部の Red（LEVEL-3）として扱う。Purple は本番を変えない。
 
-- Red の指摘：本日 3 件
+- Red の指摘：本日 4 件
 
 | Red の指摘（層） | 本日 | 直近7日 | Blue の応答 | 既存の仕組み | Purple 裁定 |
 |---|---|---|---|---|---|
-| 勝ち馬は W 内なのに2着が P2 外（RED-3 Role/Semantic） | 1 | 1 | EXISTING | MKTP2・P2PLUS・role_shadow（勝ち馬別2着） | 既存の仕組みで吸収 |
+| 勝ち馬は W 内なのに2着が P2 外（RED-3 Role/Semantic） | 2 | 2 | EXISTING | MKTP2・P2PLUS・role_shadow（勝ち馬別2着） | 既存の仕組みで吸収 |
 | 人気3位内の勝ち馬を正式6位以下（RED-2 Prediction） | 1 | 1 | EXISTING | C24（W＋人気上位2・配信中）・WPLUS・MKTP2 | 既存の仕組みで吸収 |
 | 的中したのに赤字（RED-4 Decision/Capital） | 1 | 1 | EXISTING | KSP 予算系列（B1〜B6）・robustness の的中赤字 | 既存の仕組みで吸収 |
 
