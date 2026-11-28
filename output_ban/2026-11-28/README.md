@@ -3,7 +3,7 @@
 | R | 発走 | 状態 | 点数 | 区分 | 配信 | 直前見直し | PFS | 最初の断線 |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 14:10 | SETTLED | 28 | FORMAL | 済 | 修正版 | 19.3 | EXACT |
-| 2 | 14:40 | PREDICTION_COMPLETE | 28 | FORMAL | 済 |  |  |  |
+| 2 | 14:40 | PREDICTION_COMPLETE | 27 | FORMAL | 済 | 修正版 |  |  |
 | 3 | 15:15 | DISCOVERED |  |  |  |  |  |  |
 | 4 | 15:50 | DISCOVERED |  |  |  |  |  |  |
 | 5 | 16:20 | DISCOVERED |  |  |  |  |  |  |
