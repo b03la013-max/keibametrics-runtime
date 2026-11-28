@@ -14,6 +14,7 @@ SINGLE_MODE = None              # production None（三連複・三連単のま�
 # 同じ30点の配分（2026-11-28 事前固定の研究用。本番の購入方針ではない）: (馬単, 三連単, 三連複) の上限
 SINGLE_BUDGET = {'A': (12, 8, 10), 'B': (6, 16, 8), 'PROTECT': (8, 8, 14)}
 EXACT_PICK = None               # production None; shadow 'UNIVERSE': 同じ点数のまま三連単を W×P2×P3 の全組合せから強い順に選ぶ（◎頭固定をやめる）
+TRIO_FILL = None                # production None; shadow True: 圧縮後に上限30点に満たなければ、役割の全組合せ（W×P2×P3）の三連複を強い順に足す（EXACT_BY_W の「三連単なし→30点は三連複へ」を同じ30点で測る、2026-11-28 反省会）
 FORCE_TRIO_AXIS = None          # production None; challengers AXIS2 sets 2 (◎○2頭軸＋◎抜き○ライン)                      # Owner 2026-11-18 (= v2.2-BAN 標準型 総実点数30)
 UNIT = 100
 
@@ -139,6 +140,13 @@ def compile_race(ev):
     while total() > CAP_TOTAL and exact:
         e = exact.pop()
         removed.append(('三連単', e, 'CAP-STOP-EXACT'))
+    if TRIO_FILL:                                                  # shadow only (production None)
+        roled = sorted(set(W) | set(P2) | set(P3))                # 役割のある馬だけ（W×P2×P3 → 役割馬3頭の組の順）
+        extra = sorted(set(combinations(roled, 3)) - set(universe_trio), key=lambda c: (weight(c), c))
+        for t in sorted(universe_trio, key=lambda c: (weight(c), c)) + extra:
+            if total() >= CAP_TOTAL:
+                break
+            trio.add(tuple(t))
 
     # terminal ledger: every W has a head terminal; every BUY P3 appears somewhere or has a reason
     terminal = {}

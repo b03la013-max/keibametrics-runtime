@@ -70,3 +70,48 @@
 - 購入方針（券種）の変更なので自動昇格しない（registry.OWNER_GATED）。100R の昇格条件を満たしたら OWNER_REVIEW として Owner の判断へ
 - 保存済みの評価で 11/21〜28 の45R を券面だけ組み直した参考値（結果を知った上の再計算、判断には使わない）: 本番 77.1%（最高1本除く 48.4%）、A 73.6%（64.1%）、B 113.8%（81.5%）、C 101.2%（68.8%）。三連単の的中は本番3R→B 8R、馬単は B 11R
 - 未実装（本番に入れる前に必要）: 馬単の発走前オッズの取得、配信の買い目ツリー（馬単の表示）、本番精算の馬単対応
+
+## 2026-11-28 反省会（Blue・Red・Purple、Claude による LEVEL-1〜2、ChatGPT の独立反証 LEVEL-3 待ち）
+- 実績: 12R すべて FORMAL・締切超過 0・警告 0（11R が直前見直しで Rev2、1R は変更なし）。投資 33,600円・払戻 11,560円・PFS 34.4%（最高1本除き 12.5%）。三連複 4的中（1・4・9・10R）・三連単 0。◎ 1着 2・3着内 8。最初の断線 EXACT 4・ROLE 4・HEAD-P2 1・PAIR-P3 3
+- 集計の時刻差（コード欠陥ではない）: improvement_status.md（20:12）は 11/21〜23 の反省記録への診断欄の付け直し（21:37）より前に書かれたため、KCP・KIEP・KDP の表が 12R、情報源の取得率が 0.267 と出た。手元で同じ関数を 45R に当てると取得率は 3源とも 1.0。次の開催日の registry.step で自動で直る
+
+| 日付 | レース | 区分 | 仮説 | 検証方法 | 状態 |
+|---|---|---|---|---|---|
+| 2026-11-28 | 1,4,9,10R | P1 | 三連複は当たり三連単を外した4Rはすべて券面の断線。1・4・10R は◎が2着で勝ち馬はW内（勝ち順位2〜3位）だが三連単の頭が◎1頭、9R は◎1着でも2着馬（P2）が三連単2列目の外。発走前 Red の C1_MULTI_W_SINGLE_HEAD が4Rとも当たり | 既存の EXACT_2HEAD・EXACT_UNIV・SINGLE_A/B/C と新しい EXACT_BY_W_FILL を registry の昇格条件（100R）で比較。新しい仮説の候補は作らない（研究の重複） | 影で計測中 |
+| 2026-11-28 | 2,5,8,11R | P1 | ◎が3着外の4Rは三連複が全滅（軸依存の券 113点）。11R は1-2-8 の3頭とも役割内なのに◎抜きの組が無い | 既存の AXIS2（36R で回収率 29.5% 対 本番 50.8%、悪い）と SINGLE_* で比較中。1日の結果から◎抜きの線を足す候補は作らない（後知恵） | 影で計測中（既存） |
+| 2026-11-28 | 2,3,5,8R | P1 | 勝ち馬W外4R。うち3Rは4番人気の勝ち馬が勝ち順位5〜9位、8R は1〜3着が全頭役割外で◎は9番人気（三強型） | 既存の MKT30・MKT50・MKT30_PICKS・PICKS（45R で勝ち馬の評価順位 −0.17〜−0.5）を 100R まで継続 | 影で計測中（既存） |
+| 2026-11-28 | 全体 | KDP | 三強型が 8R で三連複 0・回収 0%（一強 19R は 136.0%） | 型ごとの配分は既存の SINGLE_C で比較。標本が少ないので型の定義は変えない | 影で計測中（既存） |
+| 2026-11-28 | 全体 | KIEP | 45R で単調でない成分は brs・mpa・wda・lis・isv。lis は上位群の3着内率 0.279 が下位群 0.5 より低い（逆向き、26R）。wda（AUC 0.502）と front_bonus（0.505）は識別力がほぼ無く、両者の順位相関 0.604 で重複 | 100R で 3着内 AUC 0.55 未満なら registry が KCP_ABLATE_* を自動登録する（同時3本）。mpa・brs は NOPOS・POS_NOBACK で比較中。同じ狙いの候補は作らない | KCP の自動登録待ち |
+| 2026-11-28 | 全体 | KAP | bsi・isv の欠損率 0.734 は 11/21〜23 の公開記録に非公開の値を入れていないためで、実際の欠損ではない。72R で KAP の窓がたまると欠損率の変化として FLAGGED になる見込み | FLAGGED が出たらこの理由かどうかを最初に確かめて報告する（intel.DRIFT の条件は変えない） | 監視 |
+| 2026-11-28 | 全体 | 影の候補 | EXACT_BY_W は W3頭以上で三連単を外したあと三連複を足さず、11/23・11/28 の24R中22Rで 2〜7点しか買っていない（本番 27〜30点）。AXIS2_EXACT_BY_W も 11〜24点。説明文の「30点は三連複へ」を同じ点数で測れていない | 狙いどおりの版 EXACT_BY_W_FILL（tickets.TRIO_FILL、本番 None）を新しい登録日で追加。既存の2本は書き換えず、Purple が REJECT-WITH-REASON の候補として Owner に報告 | 候補追加 |
+
+## 修復の効果確認
+
+3開催日続けて再発なしなら確認済み。再発したら P0 として直す。
+
+| 直した日 | PR | 何を直したか | 確かめ方 | その後の開催日での結果 | 状態 |
+|---|---|---|---|---|---|
+| 2026-11-23 | #470 | 出走取消を non_starters に、騎手変更を jockey_changed_from に | 全馬の jockey が空欄でない（発走前 Red の E3_JOCKEY_MISSING が出ない）、騎手変更の馬に jockey_changed_from、取消馬が non_starters | 11/28：12R・114頭すべて jockey あり、E3・E4 は 0件。取消・騎手変更は無し（該当なし）。競走中止 3頭（1R 1番・2R 5番・6R 10番）は did_not_finish で返還なし（正しい）＝再発なし | 確認待ち（1/3） |
+| 2026-11-24 | #481 | レース別の未完了監視と警告（alerts） | 警告が実際の異常のときだけ出る | 11/28：alerts 0件、実際の異常も 0（締切超過・配信遅れ・GOV_FAIL・ERROR なし）＝再発なし | 確認待ち（1/3） |
+| 2026-11-26 | #501・#507 | KCP-BAN（成分の識別力・外す候補の自動登録） | review の component_auc に bsi がある、improvement_status.md に KCP-BAN の表 | 11/28：12R すべて component_auc に bsi、表あり＝再発なし | 確認待ち（1/3） |
+| 2026-11-26 | #509 | KIEP-BAN（Formula Ledger・健康診断） | formula_ledger.json が毎晩更新、KIEP-BAN の表、component_health に bsi | 11/28：formula_ledger.json 20:12 更新（formula_sha 3579c269394f、変化なし）、表あり、bsi の欠損 0＝再発なし | 確認待ち（1/3） |
+| 2026-11-26 | #511 | KDP・KSP・KAP | review に structure、表あり | 11/28：12R すべて structure、表あり＝再発なし | 確認待ち（1/3） |
+| 2026-11-27 | #514 | KAG-BAN（発走前の機械反証） | 全予想レースに R*.gov.json、review に governance、KAG-BAN の表、締切・配信に遅れなし | 11/28：R*.gov.json 12/12（Rev2 の .rev2.gov.json も 12/12）、governance 12/12、表あり、凍結は発走の約33分前・配信は凍結の3秒以内、締切超過 0＝再発なし | 確認待ち（1/3） |
+| 2026-11-28 | 本PR | 影の候補 EXACT_BY_W が同じ30点で測れていない（TRIO_FILL を追加し EXACT_BY_W_FILL を登録） | 次の開催日の R*.shadow.json で EXACT_BY_W_FILL の点数が 20〜30点（役割馬の組が尽きたらそこまで）、本番の券面 SHA・formula_sha が不変 | 該当なし（次の開催日から） | 確認待ち（0/3） |
+
+## KAG-BAN 裁定台帳
+
+Blue の応答＝ACCEPT／REBUT／PARTIAL／EXISTING／UNKNOWN／OUT-OF-SCOPE。Purple の裁定＝ADOPT-BEFORE-FREEZE／REJECT-WITH-REASON／SHADOW／EXISTING-RULE-ABSORBED／REGRESSION-ONLY／NO-CHANGE。同じAI（Claude）による LEVEL-1〜2 で、独立監査ではない。Purple の裁定は Owner の承認の代わりにならず、本番の数値・算式・券面・購入方針は変えない。
+
+| 日付 | レース | 指摘 | 層 | Blueの応答 | 裁定 | 理由 | 行動 |
+|---|---|---|---|---|---|---|---|
+| 2026-11-28 | 全12R | 精算の点検（投資＝点数×100−返還、払戻、取消・中止・同着） | RED-1 | ACCEPT（誤りなし：投資は点数×100・返還 0、払戻は確定三連複、競走中止3頭は did_not_finish、取消・同着 0） | NO-CHANGE | 再精算は不要 | なし |
+| 2026-11-28 | 全12R | 都合の悪い結果の省略：PFS 34.4% の 67% が 9R の1本、最高1本除き 12.5%、的中4Rのうち3Rが投資割れ | RED-5 | ACCEPT | NO-CHANGE | daily_summary・KSP に併記済み。購入方針は変えない | なし |
+| 2026-11-28 | 1,4,9,10R | 因果：EXACT の断線は予想ではなく券面（勝ち馬W内・2着P2内で三連単の頭が◎1頭） | RED-4 | ACCEPT | SHADOW | EXACT_2HEAD・EXACT_UNIV・SINGLE_*・EXACT_BY_W_FILL で同じ30点比較 | EXACT_BY_W_FILL（本PR） |
+| 2026-11-28 | 2,5,8,11R | 後知恵：◎3着外の全滅4Rから◎抜きの線を足す案 | RED-4 | PARTIAL（一極集中は事実だが、1日の結果で作る候補は後知恵。AXIS2 は 36R で悪い） | EXISTING-RULE-ABSORBED | AXIS2・SINGLE_* が同じ狙い | なし |
+| 2026-11-28 | 2,3,5,8R | 研究の重複：勝ち馬W外（中位人気の勝ち馬が勝ち順位で沈む）に新候補を作るか | RED-3 | EXISTING | EXISTING-RULE-ABSORBED | MKT30・MKT50・PICKS・MKT30_PICKS が比較中 | なし |
+| 2026-11-28 | 全体 | 影の候補の欠陥：EXACT_BY_W・AXIS2_EXACT_BY_W は W3頭以上で 2〜24点しか買わず同じ30点の比較になっていない（24R中22R） | RED-5 | ACCEPT | REJECT-WITH-REASON（候補、Owner 判断） | 方式の比較は同じレース・同じ30点で行う（KSP-03）。既存の記録は書き換えず、引退は registry の規則に任せる | EXACT_BY_W_FILL を追加（本PR） |
+| 2026-11-28 | 全体 | 発走前 Red の C1_MULTI_W_SINGLE_HEAD・C3_HUB_ALL_TRIO が 12/12R で発火、倍率 1.0、指摘の無いレース 0R | RED-5 | EXISTING（今の券面の型そのもので見分ける力が無い） | SHADOW | まだ 12R。100R で倍率が1前後なら REJECT-WITH-REASON の候補（規則を変えるときは RULES_AT の新版） | なし |
+| 2026-11-28 | 全体 | 集計の時刻差：improvement_status.md が 12R・取得率 0.267 と表示 | RED-1 | ACCEPT（20:12 の集計が 21:37 の付け直しより前。45R では取得率 1.0） | NO-CHANGE | 次の registry.step で自動で直る。コード欠陥ではない | なし |
+| 2026-11-28 | 全体 | KAP の誤検知の見込み（bsi・isv の欠損率 0.734 は非公開値を公開記録に入れていないため） | RED-1 | ACCEPT | NO-CHANGE | intel.DRIFT は変えない。FLAGGED のとき原因として報告する | なし |
+| 2026-11-28 | 全体 | 最高1本を除いた回収率が 累計要約 49.5% と KSP 48.4% で違う | RED-5 | UNKNOWN（除き方の定義の違いと思われるが未確認） | NO-CHANGE | 両方を併記して報告。定義の確認は次回 | なし |
