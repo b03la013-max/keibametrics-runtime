@@ -31,3 +31,22 @@ def test_flat_summary_and_markdown():
             'hit_but_loss': 0, 'extreme_hub': 0, 'hub_failed': 0, 'p0p1': {}, 'rev_audit': None}
     md = review._md('t', dict(base, flat_components=s))
     assert 'cci 1/2・0' in md
+
+
+def test_flat_components_full_uses_private_cache(tmp_path, monkeypatch):
+    import json
+    out = tmp_path / 'output_ban' / '2026-11-28'
+    out.mkdir(parents=True)
+    public = [{'no': i, 'tpi': 50.0 + i, 'dcr': 90} for i in range(1, 6)]   # bsi/idx/isv redacted in public rows
+    assert {'idx', 'bsi', 'isv'} <= set(review.flat_components(public)['unjudged'])
+    cache = tmp_path / 'cache' / '2026-11-28'
+    cache.mkdir(parents=True)
+    full = [dict(r, bsi=40.0 + r['no'], idx=55.0, isv=1.0 + r['no']) for r in public]
+    (cache / 'R01.full.json').write_text(json.dumps({'evaluation': {'rows': full}}))
+    monkeypatch.setenv('KM_BAN_CACHE', str(tmp_path / 'cache'))
+    fc = review.flat_components_full(out, '01', '', public)
+    assert fc['unjudged'] == [k for k in review.FLAT_KEYS if k not in ('idx', 'bsi', 'isv', 'tpi', 'dcr')]
+    assert 'idx' in fc['flat'] and 'dcr' in fc['flat'] and 'bsi' not in fc['flat'] and 'isv' not in fc['flat']
+    assert '40.0' not in json.dumps(fc)                                    # names only, no raw values
+    monkeypatch.setenv('KM_BAN_CACHE', str(tmp_path / 'nocache'))
+    assert review.flat_components_full(out, '01', '', public) == review.flat_components(public)   # falls back
