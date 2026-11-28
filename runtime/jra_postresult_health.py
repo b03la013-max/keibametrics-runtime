@@ -110,8 +110,26 @@ def build_execution_health(lane, rows, *, observed_at=None):
             'evidence_scope': 'EXECUTION_DIAGNOSTIC_NOT_RESULT_OR_OOS_ADMISSION'}
 
 
-def health_exit_code(report):
-    return 2 if report.get('material_failure_count', 0) else 0
+ACK_PATH = Path(__file__).resolve().parents[1] / 'profiles/KM_JRA_POSTRESULT_ACKNOWLEDGED_HOLDS.json'
+
+
+def acknowledged_holds(path=None):
+    """Owner 2026-11-28 17:56: long-standing holds that must not turn every later run red."""
+    p = Path(path) if path else ACK_PATH
+    try:
+        return json.loads(p.read_text()).get('holds') or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def health_exit_code(report, acknowledged=None):
+    ack = acknowledged_holds() if acknowledged is None else acknowledged
+    fresh = [r for r in report.get('processed') or []
+             if str(_category(r)).startswith(('BLOCKED', 'FAILURE'))
+             and not (r.get('race_id') in ack and _category(r) == ack[r['race_id']].get('status'))]
+    if not report.get('processed'):
+        return 2 if report.get('material_failure_count', 0) else 0
+    return 2 if fresh else 0
 
 
 def _semantic(report):

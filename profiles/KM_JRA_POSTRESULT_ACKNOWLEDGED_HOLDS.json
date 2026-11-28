@@ -1,0 +1,11 @@
+{
+  "profile": "KM-JRA-POSTRESULT-ACKNOWLEDGED-HOLDS-v1",
+  "registered_at": "2026-11-28T18:30:00+09:00",
+  "task": "Owner 2026-11-28 17:56「作動していないものは永続的に作動できるように直してください」",
+  "rule": "A hold listed here stays BLOCKED in the report and is never processed or settled, but it no longer turns every later run red. Any NEW blocked race still fails the job. Removing an entry restores the old behaviour.",
+  "holds": {
+    "KM-JRA-TKY-20261010-R11-INTEGRATION": {"status": "BLOCKED_RESULT_INTEGRITY", "reason": "2026-10-10 integration-test fixture, not a real race; NO_BET_FILE_PAYLOAD_IDENTITY_MISMATCH by design"},
+    "KM-JRA-TKY-20261010-R12-FULLPIPELINE-VALIDATION": {"status": "BLOCKED_RESULT_INTEGRITY", "reason": "2026-10-10 full-pipeline validation fixture, not a real race"},
+    "KM-JRA-TKY-20261031-R05": {"status": "BLOCKED_OWNER_APPROVAL", "reason": "OWNER_B_APPROVAL_REQUIRED since 2026-10-31; waits for an Owner decision, reported in the daily review instead of failing every run"}
+  }
+}
