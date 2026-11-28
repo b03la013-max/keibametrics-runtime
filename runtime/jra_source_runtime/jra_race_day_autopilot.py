@@ -1527,6 +1527,14 @@ def _rev2_shadow_check(root: Path, race_date: str, now=None) -> list:
     return R2.check(race_date, now)
 
 
+def _multi_primary_freeze(root: Path, race_date: str, now=None) -> list:
+    """複系主戦 same-budget shadow (Owner 2026-11-28 19:1x「まず同予算で並走」), frozen before post, record only."""
+    import sys as _sys
+    _sys.path.insert(0, str(root / 'runtime/analysis'))
+    import jra_multi_primary_shadow as MP
+    return MP.freeze(race_date, now)
+
+
 _RESEARCH_DISPATCHED = {"at": None, "races": frozenset()}
 
 
@@ -1582,7 +1590,8 @@ def _end_of_day_research_dispatch(root: Path, race_date: str, now=None, run=None
     if not posts or now < max(posts) + _dt.timedelta(minutes=40):
         return []
     done = []
-    for wf in ('km-jra-index-research.yml', 'km-jra-candidate-auto-postresult-closedloop.yml'):
+    for wf in ('km-jra-index-research.yml', 'km-jra-candidate-auto-postresult-closedloop.yml',
+               'km-jra-multi-primary.yml'):
         try:
             (run or subprocess.run)(['gh', 'workflow', 'run', wf, '--ref', 'main'], check=True, timeout=30,
                                     capture_output=True, text=True)
@@ -1602,6 +1611,8 @@ def _commit(root: Path, race_date: str) -> None:
         paths.append(f"runtime/jra_official_daily/{race_date}.json")
     if (root/'runtime/jra_rev2_shadow'/race_date).is_dir():
         paths.append(f"runtime/jra_rev2_shadow/{race_date}")
+    if (root/'runtime/jra_multi_primary'/race_date).is_dir():
+        paths.append(f"runtime/jra_multi_primary/{race_date}")
     plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
     if plan_path.exists():
         plan=json.loads(plan_path.read_text())
@@ -1813,6 +1824,10 @@ def main(argv=None):
                 _rev2_shadow_check(root,a.date)
             except Exception as exc:  # noqa: BLE001
                 print(json.dumps({"stage":"REV2_SHADOW","error":str(exc)[:300]}),flush=True)
+            try:  # 複系主戦 same-budget shadow, frozen before post (Owner 2026-11-28); never affects dispatch
+                _multi_primary_freeze(root,a.date)
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"stage":"MULTI_PRIMARY_FREEZE","error":str(exc)[:300]}),flush=True)
             try:  # research Challenger freeze before post (2026-11-28 P0); never affects dispatch
                 _research_freeze_dispatch(root,a.date)
             except Exception as exc:  # noqa: BLE001
