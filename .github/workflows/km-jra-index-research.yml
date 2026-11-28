@@ -52,7 +52,7 @@ jobs:
       - name: Tests
         run: |
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_index_evolution.py tests/test_jra_index_research_triggers.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py tests/test_jra_delivery_ledger.py tests/test_jra_krs_calibration.py tests/test_jra_rev2_shadow.py tests/test_jra_governance_review.py tests/test_jra_multi_primary_shadow.py
+          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_index_evolution.py tests/test_jra_index_research_triggers.py tests/test_jra_zai_version_forward_oos.py tests/test_jra_role_candidate_replay.py tests/test_jra_keibabook_forward_oos.py tests/test_jra_oos_strata.py tests/test_jra_feature_challenger.py tests/test_jra_conversion_challenger.py tests/test_jra_nobet_shadow.py tests/test_jra_delivery_ledger.py tests/test_jra_krs_calibration.py tests/test_jra_rev2_shadow.py tests/test_jra_governance_review.py tests/test_jra_kag_prerace_shadow.py tests/test_jra_multi_primary_shadow.py
       - name: Reflect, analyse, freeze Shadow, evaluate forward OOS
         env:
           WEEKLY: ${{ github.event.schedule == '20 18 * * 0' || inputs.weekly == true }}
@@ -75,6 +75,9 @@ jobs:
           python runtime/analysis/jra_zai_version_forward_oos.py evaluate
           python runtime/analysis/jra_zai_version_forward_oos.py summary | tee runtime_zai_oos_summary.json
           mkdir -p runtime/jra_zai_forward_oos && cp runtime_zai_oos_summary.json runtime/jra_zai_forward_oos/summary.json
+          # KAG-JRA pre-start Red five-layer Shadow: reads frozen FINAL only, no RESULT access.
+          # It runs after a signed FINAL, never alters or delays Production FINAL / delivery.
+          python runtime/analysis/jra_kag_prerace_shadow.py freeze "$D" || echo "KAG_PRERACE_FREEZE_FAILED" >> "$GITHUB_STEP_SUMMARY"
           # Role candidates (W width / head-local P2): freeze before post, evaluate after RESULT.
           python runtime/analysis/jra_role_candidate_replay.py freeze "$D"
           mkdir -p runtime/jra_role_candidate_forward
@@ -95,6 +98,8 @@ jobs:
           if [ -d "runtime/jra_rev2_shadow/$D" ]; then python runtime/analysis/jra_rev2_shadow.py audit "$D" || echo "REV2_AUDIT_FAILED" >> "$GITHUB_STEP_SUMMARY"; fi
           # KAG-JRA post-result Blue/Red/Purple (Owner 2026-11-27 22:49), LEVEL-1, research only.
           python runtime/analysis/jra_governance_review.py day "$D" > /dev/null || echo "KAG_REVIEW_FAILED" >> "$GITHUB_STEP_SUMMARY"
+          # Link prior pre-start Shadow receipts with post-result KAG without rewriting them.
+          python runtime/analysis/jra_kag_prerace_shadow.py audit "$D" > /dev/null || echo "KAG_PRERACE_AUDIT_FAILED" >> "$GITHUB_STEP_SUMMARY"
           python runtime/analysis/jra_feature_challenger.py freeze "$D" | tee feature_freeze.txt
           python runtime/analysis/jra_feature_challenger.py coverage "$D" > /dev/null || true
           # PAPER / NO-BET classes and shadow tickets (Owner 2026-11-22 21:43), before post only.
